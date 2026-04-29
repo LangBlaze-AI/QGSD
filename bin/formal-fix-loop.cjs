@@ -74,7 +74,7 @@ function buildFixPrompt(buggySource, testFailureOutput, constraint, spec, bugExp
     '```',
     '',
     '## TEST FAILURE OUTPUT',
-    testFailureOutput.slice(0, 500)
+    String(testFailureOutput || '').slice(0, 500)
   );
 
   // Spec last — reference material, not the primary signal
