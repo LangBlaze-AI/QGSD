@@ -2,7 +2,6 @@ version: 2
 
 projectIgnorePaths:
   - "node_modules/**"
-  - ".next/**"
   - "dist/**"
   - "build/**"
   - ".planning/**"
