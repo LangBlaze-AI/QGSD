@@ -101,7 +101,9 @@ async function main() {
     : null;
 
   // ── Step 4: Loop 2 — Fix refinement ────────────────────────────────────────
-  log('Loop 2: refining fix...');
+  // Grant extra iterations when L1 converged with high confidence (1 iteration)
+  const l2MaxIterations = (modelResult.converged && modelResult.iterations === 1) ? 5 : 3;
+  log('Loop 2: refining fix (maxIterations=' + l2MaxIterations + ')...');
   const fixResult = await refineFix({
     buggySource: stubSource,
     testSource: testSource,
@@ -111,7 +113,7 @@ async function main() {
     constraint,
     spec: modelResult.spec,
     bugExplanation: modelResult.bugExplanation,
-    maxIterations: 3,
+    maxIterations: l2MaxIterations,
     callLlm,
     onLog: log
   });
