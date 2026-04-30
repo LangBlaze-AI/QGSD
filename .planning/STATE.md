@@ -36,14 +36,11 @@ See: .planning/PROJECT.md
 | 398 | Improve the benchmark to actually test nf:solve autonomy — add a real autonomy track with seeded defects and residual reduction scoring | 2026-04-15 | 4b311884 | Verified | [398-improve-the-benchmark-to-actually-test-n](.planning/quick/398-improve-the-benchmark-to-actually-test-n/) |
 | 399 | Add /nf:coderlm query skill | 2026-04-16 | 2cb11083 | Verified | [399-add-a-nf-coderlm-query-skill-that-lets-u](.planning/quick/399-add-a-nf-coderlm-query-skill-that-lets-u/) |
 | 400 | Add nf:harden adversarial hardening loop skill | 2026-04-16 | 8c12260b | Verified | [400-add-nf-harden-adversarial-skill](./quick/400-add-nf-harden-adversarial-skill/) |
-<<<<<<< HEAD
+| 401 | Fix nf-solve benchmark detection gaps (20.4% to 35%+) | 2026-04-16 | 5a9bafb8 | Pending | [401-fix-nf-solve-benchmark-detection-gaps-20](./quick/401-fix-nf-solve-benchmark-detection-gaps-20/) |
 | 402 | Build generic benchmark runner for nForma skills (issue #107) | 2026-04-17 | aa9c535c | Verified | [402-build-generic-benchmark-runner-for-nform](.planning/quick/402-build-generic-benchmark-runner-for-nform/) |
 | 403 | Add nf:debug benchmark track with TLA+ bug/fix models and TLC trace output | 2026-04-17 | 0748ec12 | Verified | [403-add-nf-debug-benchmark-track-with-generi](.planning/quick/403-add-nf-debug-benchmark-track-with-generi/) |
 | 404 | Build nf:debug autonomy benchmark with graded difficulty stubs, fix-cycle runner, and standalone scorer | 2026-04-17 | 27ad207d | Verified | [404-build-nf-debug-autonomy-benchmark-with-g](.planning/quick/404-build-nf-debug-autonomy-benchmark-with-g/) |
-| 405 | Implement PR merge-readiness autopilot script (issue #136) | 2026-04-30 | c86519ab | Pending | [405-work-on-issue-136](.planning/quick/405-work-on-issue-136/) |
-=======
-| 401 | Fix nf-solve benchmark detection gaps (20.4% to 35%+) | 2026-04-16 | 5a9bafb8 | Pending | [401-fix-nf-solve-benchmark-detection-gaps-20](./quick/401-fix-nf-solve-benchmark-detection-gaps-20/) |
->>>>>>> origin/main
+| 405 | Implement PR merge-readiness autopilot script (issue #136) | 2026-04-30 | c86519ab | Verified | [405-work-on-issue-136](./quick/405-work-on-issue-136/) |
 
 ## Session Log
 
