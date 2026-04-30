@@ -40,6 +40,7 @@ See: .planning/PROJECT.md
 | 402 | Build generic benchmark runner for nForma skills (issue #107) | 2026-04-17 | aa9c535c | Verified | [402-build-generic-benchmark-runner-for-nform](.planning/quick/402-build-generic-benchmark-runner-for-nform/) |
 | 403 | Add nf:debug benchmark track with TLA+ bug/fix models and TLC trace output | 2026-04-17 | 0748ec12 | Verified | [403-add-nf-debug-benchmark-track-with-generi](.planning/quick/403-add-nf-debug-benchmark-track-with-generi/) |
 | 404 | Build nf:debug autonomy benchmark with graded difficulty stubs, fix-cycle runner, and standalone scorer | 2026-04-17 | 27ad207d | Verified | [404-build-nf-debug-autonomy-benchmark-with-g](.planning/quick/404-build-nf-debug-autonomy-benchmark-with-g/) |
+| 405 | Implement PR merge-readiness autopilot script (issue #136) | 2026-04-30 | c86519ab | Pending | [405-work-on-issue-136](.planning/quick/405-work-on-issue-136/) |
 =======
 | 401 | Fix nf-solve benchmark detection gaps (20.4% to 35%+) | 2026-04-16 | 5a9bafb8 | Pending | [401-fix-nf-solve-benchmark-detection-gaps-20](./quick/401-fix-nf-solve-benchmark-detection-gaps-20/) |
 >>>>>>> origin/main
@@ -68,7 +69,7 @@ See: .planning/PROJECT.md
 - 2026-04-11 - Completed quick task 389: Fix shell-prompt-quorum-dedup.als Alloy assertion failure
 
 <<<<<<< HEAD
-Last activity: 2026-04-17 - Completed quick task 404: Build nf:debug autonomy benchmark with graded difficulty stubs, fix-cycle runner, and standalone scorer
+Last activity: 2026-04-30 - Completed quick task 405: Implement PR merge-readiness autopilot script (issue #136)
 =======
 Last activity: 2026-04-16 - Completed quick task 401: Fix nf-solve benchmark detection gaps
 >>>>>>> origin/main
