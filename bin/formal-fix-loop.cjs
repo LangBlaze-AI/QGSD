@@ -33,55 +33,65 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 
 function buildFixPrompt(buggySource, testFailureOutput, constraint, spec, bugExplanation, rejectionReason) {
-  const constraintBlock = constraint && constraint.english ? [
-    '',
-    '[FORMAL CONSTRAINT — HARD REQUIREMENT]',
-    'The following invariant was derived from formal analysis:',
-    constraint.english,
-    constraint.invariant ? ('Formal: ' + constraint.invariant) : '',
-    '',
-    'Your fix MUST satisfy this constraint. Fixes that violate it will be REJECTED.',
-    '[END FORMAL CONSTRAINT]',
-  ].join('\n') : '';
+  const parts = ['Fix the following buggy JavaScript function.'];
 
-  const specBlock = spec ? [
-    '',
-    '[FORMAL SPECIFICATION]',
-    spec,
-    '[END SPECIFICATION]',
-  ].join('\n') : '';
+  // Bug explanation front-and-center so the LLM understands the root cause first
+  if (bugExplanation) {
+    parts.push(
+      '',
+      '## ROOT CAUSE',
+      bugExplanation
+    );
+  }
 
-  const bugBlock = bugExplanation ? [
-    '',
-    '[BUG ANALYSIS]',
-    bugExplanation,
-    '[END BUG ANALYSIS]',
-  ].join('\n') : '';
+  // Formal constraint immediately after root cause — hard requirement
+  if (constraint && constraint.english) {
+    parts.push(
+      '',
+      '## FORMAL CONSTRAINT (HARD REQUIREMENT)',
+      'Your code MUST satisfy: ' + constraint.english,
+      constraint.invariant ? ('Formal expression: ' + constraint.invariant) : '',
+      'The buggy code violates this constraint. Any fix that violates it will be REJECTED.'
+    );
+  }
 
-  const rejectionBlock = rejectionReason ? [
-    '',
-    '[PREVIOUS FIX REJECTED]',
-    rejectionReason,
-    'Address this rejection in your new fix. Do NOT repeat the same mistake.',
-    '[END REJECTION]',
-  ].join('\n') : '';
+  // Rejection feedback from previous iteration
+  if (rejectionReason) {
+    parts.push(
+      '',
+      '## PREVIOUS FIX REJECTED',
+      rejectionReason,
+      'Address this rejection in your new fix. Do NOT repeat the same mistake.'
+    );
+  }
 
-  return [
-    'Fix the following buggy JavaScript function.',
-    'The test is failing with this output:',
-    testFailureOutput.slice(0, 500),
+  // Buggy source and test failure
+  parts.push(
     '',
-    'Buggy source (file: fn.cjs):',
+    '## BUGGY SOURCE (file: fn.cjs)',
     '```js',
     buggySource,
     '```',
-    constraintBlock,
-    specBlock,
-    bugBlock,
-    rejectionBlock,
     '',
-    'Return ONLY the fixed source code in a ```js ... ``` code block. Do not explain.',
-  ].join('\n');
+    '## TEST FAILURE OUTPUT',
+    String(testFailureOutput || '').slice(0, 500)
+  );
+
+  // Spec last — reference material, not the primary signal
+  if (spec) {
+    parts.push(
+      '',
+      '## FORMAL SPECIFICATION',
+      spec
+    );
+  }
+
+  parts.push(
+    '',
+    'Return ONLY the fixed source code in a ```js ... ``` code block. Do not explain.'
+  );
+
+  return parts.join('\n');
 }
 
 function buildInvariantValidationPrompt(fixedSource, constraint) {
