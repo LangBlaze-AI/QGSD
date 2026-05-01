@@ -14,19 +14,55 @@ const yellow = '\x1b[33m';
 const dim = '\x1b[2m';
 const reset = '\x1b[0m';
 
+// Parse args first to enable verbose logging
+const args = process.argv.slice(2);
+const hasVerbose = args.includes('--verbose') || args.includes('-v');
+
 // Verbose logging helper — gates per-item detail output behind --verbose flag
 function log(...args) {
   if (hasVerbose) console.log(...args);
 }
 
-// Install hints for external CLIs (shown when not detected)
-const CLI_INSTALL_HINTS = {
-  codex:    'npm i -g @openai/codex',
-  gemini:   'npm i -g @google/gemini-cli',
-  opencode: 'npm i -g opencode',
-  copilot:  'npm i -g @githubnext/github-copilot-cli',
-  ccr:      'npm install -g @musistudio/claude-code-router',
-};
+// Get providers.json at startup
+let providersData = null;
+let providers = [];
+
+// Initialize providers manifest at startup
+try {
+  const providersJsonPath = path.join(__dirname, 'providers.json');
+  providersData = require(providersJsonPath);
+  if (!providersData || !Array.isArray(providersData.providers)) {
+    console.error('ERROR: Invalid providers.json format. Expected { providers: [...] }');
+    process.exit(1);
+  }
+  if (providersData.providers.length === 0) {
+    console.error('ERROR: No providers found in providers.json. Cannot detect CLIs.');
+    process.exit(1);
+  }
+  providers = providersData.providers;
+  log(`Loaded manifest with ${providers.length} providers`);
+} catch (e) {
+  console.error('ERROR: providers.json not found at bin/providers.json. Cannot detect CLIs.');
+  console.error('Error details:', e.message);
+  console.error('Stack:', e.stack);
+  process.exit(1);
+}
+
+// Helper function to get install hint from manifest
+function getInstallHint(mainTool) {
+  const provider = providers.find(p => p.mainTool === mainTool);
+  if (provider && provider.cli && provider.cli.install_command) {
+    return provider.cli.install_command;
+  }
+  // Fallback hint based on provider name
+  const hints = {
+    codex:    'npm i -g @openai/codex',
+    gemini:   'npm i -g @google/gemini-cli',
+    opencode: 'npm i -g opencode',
+    copilot:  'npm i -g @githubnext/github-copilot-cli',
+  };
+  return hints[mainTool] || '';
+}
 
 // Lazy require: coderlm-lifecycle.cjs is an optional sibling module. Deferring
 // the require() prevents install.js from failing at startup if the module is
@@ -67,8 +103,6 @@ try {
   };
 }
 
-// Parse args
-const args = process.argv.slice(2);
 const hasGlobal = args.includes('--global') || args.includes('-g');
 const hasLocal = args.includes('--local') || args.includes('-l');
 const hasOpencode = args.includes('--opencode');
@@ -95,7 +129,6 @@ const hasFormal = args.includes('--formal');
 const hasUninstallFormal = args.includes('--uninstall-formal');
 const hasRescan = args.includes('--rescan');
 const hasAllProviders = args.includes('--all-providers');
-const hasVerbose = args.includes('--verbose') || args.includes('-v');
 
 // Provider slot filter: null = all (backward compat), array = filtered
 let selectedProviderSlots = null;
@@ -415,22 +448,19 @@ function buildActiveSlots() {
 }
 
 /**
- * Classify providers into tiers: ccr (Claude Code Router), api (direct HTTP),
- * externalPrimary (subprocess), dualSubscription (optional subprocess duplicates).
+ * Classify providers into tiers: api (direct HTTP), externalPrimary (subprocess),
+ * dualSubscription (optional subprocess duplicates).
  * @param {Array} providers - providers array from providers.json
- * @returns {{ ccr: Array, api: Array, externalPrimary: Array, dualSubscription: Array }}
+ * @returns {{ api: Array, externalPrimary: Array, dualSubscription: Array }}
  */
 function classifyProviders(providers) {
-  const ccr = [];
   const api = [];
   const externalPrimary = [];
   const dualSubscription = [];
 
   for (const p of providers) {
     const cliBase = path.basename(p.cli || '');
-    if (p.type === 'ccr') {
-      ccr.push({ ...p, bareCli: cliBase || p.mainTool });
-    } else if (p.type === 'http') {
+    if (p.type === 'http') {
       api.push({ ...p });
     } else if (p.dual_subscription === true) {
       const bareCli = cliBase || p.mainTool;
@@ -441,7 +471,7 @@ function classifyProviders(providers) {
     }
   }
 
-  return { ccr, api, externalPrimary, dualSubscription };
+  return { ccr: [], api, externalPrimary, dualSubscription };
 }
 
 /**
@@ -452,22 +482,12 @@ function classifyProviders(providers) {
 function detectExternalClis(externalPrimary) {
   const { resolveCli } = require('./resolve-cli.cjs');
   return externalPrimary.map(p => {
-    const result = resolveCli(p.bareCli);
-    const found = result !== p.bareCli;
+    const result = resolveCli(p.mainTool);
+    const found = result !== p.mainTool;
     return { ...p, found, resolvedPath: found ? result : null };
   });
 }
 
-/**
- * Detect whether the ccr (Claude Code Router) binary is available.
- * @returns {{ found: boolean, resolvedPath: string|null }}
- */
-function detectCcrCli() {
-  const { resolveCli } = require('./resolve-cli.cjs');
-  const result = resolveCli('ccr');
-  const found = result !== 'ccr';
-  return { found, resolvedPath: found ? result : null };
-}
 
 // Ensures all provider slots from providers.json have corresponding MCP entries in ~/.claude.json.
 // Only adds missing entries (never modifies existing ones).
@@ -619,7 +639,7 @@ function warnMissingMcpServers() {
   }
 }
 
-// INST-01: Detects whether any API/Claude/CCR quorum agents are configured.
+// INST-01: Detects whether any API/Claude quorum agents are configured.
 // Used in finishInstall() to nudge new users to run /nf:mcp-setup.
 // Fail-open: returns false on read errors (never blocks install).
 function hasClaudeMcpAgents() {
@@ -629,8 +649,8 @@ function hasClaudeMcpAgents() {
     const d = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8'));
     const mcpServers = d.mcpServers || {};
     return Object.entries(mcpServers).some(([name, cfg]) => {
-      // Match direct API slots, real Claude MCP slots, and CCR slots
-      if (/^(api|claude|ccr)-\d+$/.test(name)) return true;
+      // Match direct API slots and real Claude MCP slots
+      if (/^(api|claude)-\d+$/.test(name)) return true;
       // Fallback: detect claude-mcp-server in args path (handles new installs before migration)
       if ((cfg.args || []).some(a => String(a).includes('claude-mcp-server'))) return true;
       return false;
@@ -3010,20 +3030,6 @@ function install(isGlobal, runtime = 'claude') {
     // This ensures codex-2, gemini-2, and all other provider slots have MCP entries before quorum_active discovery.
     ensureMcpSlotsFromProviders();
 
-    // Sync CCR presets from providers.json (keeps ~/.claude-code-router/presets/ in sync)
-    try {
-      // binDir should point to the source bin/ directory. If it's not defined,
-      // derive it relative to the repo root (src variable above points to repo root).
-      const binDirResolved = (typeof binDir !== 'undefined') ? binDir : path.join(src, 'bin');
-      const syncScript = path.join(binDirResolved, 'sync-ccr-presets.cjs');
-      if (fs.existsSync(syncScript)) {
-        const { execFileSync } = require('child_process');
-        execFileSync(process.execPath, [syncScript], { stdio: 'inherit' });
-      }
-    } catch (e) {
-      console.warn(`  ${yellow}⚠${reset} CCR preset sync skipped: ${e.message}`);
-    }
-
     // Write nForma config — skip if exists unless --redetect-mcps flag set
     const nfConfigPath = path.join(targetDir, 'nf.json');
 
@@ -3456,54 +3462,42 @@ function promptRuntime(callback) {
 
 /**
  * Interactive provider selection: detect CLIs, prompt user to enable external providers.
- * Always includes CCR slots. Chains to callback when selection is complete.
+ * Chains to callback when selection is complete.
  */
 function promptProviders(callback) {
-  const provs = require('./providers.json').providers;
+  const provs = providers;
   const classified = classifyProviders(provs);
 
-  // Detect CCR binary separately — ccr-* slots live in externalPrimary (type: 'subprocess')
-  const ccrStatus = detectCcrCli();
-  const ccrSlots = classified.externalPrimary.filter(p => p.display_type === 'claude-code-router');
-  const ccrSlotNames = ccrSlots.map(p => p.name);
+  // Detect external CLIs from manifest
+  const externalPrimary = classified.externalPrimary;
+  const detected = detectExternalClis(externalPrimary);
 
-  // Detect non-CCR external CLIs
-  const nonCcrExternal = classified.externalPrimary.filter(p => p.display_type !== 'claude-code-router');
-  const detected = detectExternalClis(nonCcrExternal);
-
-  // CCR slots: auto-include all when binary found
-  const selected = [];
-  if (ccrStatus.found && ccrSlotNames.length > 0) {
-    for (const name of ccrSlotNames) selected.push(name);
-  }
+  // Initialize confirmed CLIs array
+  const confirmedClis = [];
 
   console.log(`\n  ${yellow}Quorum agent setup:${reset}`);
-  console.log(`  Run /nf:mcp-setup after install to configure quorum slots (api-*, claude-*, ccr-*).\n`);
+  console.log(`  Run /nf:mcp-setup after install to configure quorum slots (api-*, claude-*).\n`);
 
-  // Print detection results for non-CCR CLIs
+  // Print detection results
   for (const d of detected) {
     if (d.found) {
       console.log(`  ${green}\u2713${reset} ${d.name} \u2014 ${d.resolvedPath}`);
     } else {
-      const hint = CLI_INSTALL_HINTS[d.bareCli] || '';
+      const hint = getInstallHint(d.mainTool);
       console.log(`  ${yellow}\u2717${reset} ${d.name} \u2014 not found${hint ? ` (${hint})` : ''}`);
     }
   }
 
-  // Print CCR status
-  if (ccrStatus.found && ccrSlotNames.length > 0) {
-    console.log(`  ${green}\u2713${reset} ccr binary found \u2014 auto-including ${ccrSlotNames.length} CCR slots (${ccrSlotNames[0]}..${ccrSlotNames[ccrSlotNames.length - 1]})`);
-  } else if (ccrSlotNames.length > 0) {
-    const hint = CLI_INSTALL_HINTS.ccr || 'npm i -g @musistudio/claude-code-router';
-    console.log(`  ${yellow}\u2717${reset} ccr not found \u2014 CCR slots skipped. Install: ${hint}`);
-  }
   console.log('');
 
   const foundClis = detected.filter(d => d.found);
 
+  // Check if we're in auto mode or explicit flags are present
+  const autoMode = hasAllProviders || explicitFlagsPresent();
+
   if (foundClis.length === 0) {
     console.log(`  No external CLIs detected. Run /nf:mcp-setup to configure quorum agents.\n`);
-    selectedProviderSlots = selected;
+    selectedProviderSlots = confirmedClis;
     callback();
     return;
   }
@@ -3523,56 +3517,111 @@ function promptProviders(callback) {
     }
   });
 
-  const foundNames = foundClis.map(d => d.name).join(', ');
-  console.log(`  ${yellow}Enable detected CLIs as quorum agents?${reset}\n`);
-  console.log(`  ${cyan}1${reset}) Yes, enable all detected (${foundNames})  ${dim}[default]${reset}`);
-  console.log(`  ${cyan}2${reset}) Let me choose`);
-  console.log(`  ${cyan}3${reset}) Skip -- Claude slots only\n`);
+  // Per-CLI confirmation (unless --auto or explicit flags used)
+  if (!autoMode && foundClis.length > 0) {
+    const foundNames = foundClis.map(d => d.name).join(', ');
+    console.log(`  ${yellow}Enable detected CLIs as quorum agents?${reset}\n`);
+    console.log(`  ${cyan}1${reset}) Yes, enable all detected (${foundNames})  ${dim}[default]${reset}`);
+    console.log(`  ${cyan}2${reset}) Let me choose\n`);
 
-  rl.question(`  Choice ${dim}[1]${reset}: `, (answer) => {
-    const choice = answer.trim() || '1';
+    rl.question(`  Choice ${dim}[1]${reset}: `, (answer) => {
+      const choice = answer.trim() || '1';
 
-    if (choice === '3') {
-      // Skip all external
-      answered = true;
-      rl.close();
-      selectedProviderSlots = selected;
-      callback();
-    } else if (choice === '2') {
-      // Per-CLI selection
-      let idx = 0;
-      function askNext() {
-        if (idx >= foundClis.length) {
-          // Dual-subscription slots skipped — most users have 1 sub per CLI.
-          answered = true;
-          rl.close();
-          selectedProviderSlots = selected;
-          callback();
-          return;
-        }
-        const cli = foundClis[idx];
-        rl.question(`  Enable ${cli.name}? [Y/n]: `, (ans) => {
-          const a = ans.trim().toLowerCase();
-          if (a === '' || a === 'y' || a === 'yes') {
-            selected.push(cli.name);
+      if (choice === '2') {
+        // Per-CLI selection
+        let idx = 0;
+        function askNext() {
+          if (idx >= foundClis.length) {
+            // Dual-subscription prompt will follow
+            promptDualSubscriptionOrContinue();
+            return;
           }
-          idx++;
-          askNext();
-        });
+          const cli = foundClis[idx];
+          rl.question(`  Register ${cli.name}? [Y/n]: `, (ans) => {
+            const a = ans.trim().toLowerCase();
+            if (a === '' || a === 'y' || a === 'yes') {
+              confirmedClis.push(cli.name);
+            }
+            idx++;
+            askNext();
+          });
+        }
+        askNext();
+      } else {
+        // Choice 1: enable all detected
+        for (const cli of foundClis) {
+          confirmedClis.push(cli.name);
+        }
+        selectedProviderSlots = confirmedClis;
+        callback();
       }
-      askNext();
-    } else {
-      // Choice 1: enable all detected
-      for (const cli of foundClis) {
-        selected.push(cli.name);
-      }
-      // Dual-subscription slots skipped by default (most users have 1 sub).
-      answered = true;
-      rl.close();
-      selectedProviderSlots = selected;
-      callback();
+    });
+  } else if (autoMode && foundClis.length > 0) {
+    // Auto mode - auto-enable all found CLIs
+    for (const cli of foundClis) {
+      confirmedClis.push(cli.name);
+      console.log(`  ${cyan}Auto-enabled${reset} ${cli.name} (--${cli.mainTool} or --all-providers)`);
     }
-  });
+    // Skip dual-subscription prompt in auto mode
+    selectedProviderSlots = confirmedClis;
+    callback();
+  } else {
+    // No CLIs found
+    selectedProviderSlots = confirmedClis;
+    callback();
+  }
+
+  function promptDualSubscriptionOrContinue() {
+    if (!process.stdin.isTTY || confirmedClis.length === 0) {
+      selectedProviderSlots = confirmedClis;
+      callback();
+      return;
+    }
+
+    const rl2 = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    let answered = false;
+
+    rl2.on('close', () => {
+      if (!answered) {
+        answered = true;
+        console.log(`\n  ${yellow}Installation cancelled${reset}\n`);
+        process.exit(0);
+      }
+    });
+
+    if (confirmedClis.length === 0) {
+      console.log(`  No external CLIs detected. Run /nf:mcp-setup to configure quorum agents.\n`);
+      selectedProviderSlots = confirmedClis;
+      rl2.close();
+      callback();
+      return;
+    }
+
+    const foundNames = confirmedClis.join(', ');
+    console.log(`  ${yellow}Enable detected CLIs as quorum agents?${reset}\n`);
+    console.log(`  ${cyan}1${reset}) Yes, enable all detected (${foundNames})  ${dim}[default]${reset}`);
+    console.log(`  ${cyan}2${reset}) Skip -- Claude slots only\n`);
+
+    rl2.question(`  Choice ${dim}[1]${reset}: `, (answer) => {
+      const choice = answer.trim() || '1';
+
+      if (choice === '2') {
+        // Skip all external
+        selectedProviderSlots = confirmedClis;
+        rl2.close();
+        callback();
+      } else {
+        // Choice 1: enable all confirmed
+        selectedProviderSlots = confirmedClis;
+        rl2.close();
+        callback();
+      }
+    });
+  }
 }
 
 /**
@@ -3597,6 +3646,13 @@ function askDualSlots(rl, selected, dualSubscription, done) {
     });
   }
   askNext();
+}
+
+/**
+ * Check if explicit flags are present that should skip interactive prompts
+ */
+function explicitFlagsPresent() {
+  return hasCodex || hasGemini || hasOpencode || hasCopilot || hasAllProviders;
 }
 
 /**
@@ -3870,21 +3926,15 @@ if (hasUninstallFormal) {
 // RESCAN-01: --rescan re-detects installed CLIs and syncs missing MCP slots to ~/.claude.json
 if (hasRescan) {
   console.log(`\n  ${cyan}Rescanning for CLI providers...${reset}\n`);
-  const provs = require('./providers.json').providers;
+  const provs = providers;
   const classified = classifyProviders(provs);
 
-  // Detect CCR separately: if ccr binary found, include all ccr-* slots
-  const ccrStatus = detectCcrCli();
-  const ccrNames = ccrStatus.found ? classified.externalPrimary
-    .filter(p => p.display_type === 'claude-code-router')
-    .map(p => p.name) : [];
-
-  // Detect non-CCR external primaries
-  const nonCcrExternal = classified.externalPrimary.filter(p => p.display_type !== 'claude-code-router');
-  const detected = detectExternalClis(nonCcrExternal);
+  // Detect external CLIs from manifest
+  const externalPrimary = classified.externalPrimary;
+  const detected = detectExternalClis(externalPrimary);
   const foundNames = detected.filter(d => d.found).map(d => d.name);
 
-  selectedProviderSlots = [...foundNames, ...ccrNames];
+  selectedProviderSlots = foundNames;
 
   if (selectedProviderSlots.length === 0) {
     console.log(`  ${yellow}No external CLIs detected. Install CLIs first, then run --rescan.${reset}\n`);
@@ -3896,9 +3946,6 @@ if (hasRescan) {
     if (d.found) {
       console.log(`  ${green}\u2713${reset} ${d.name} \u2014 ${d.resolvedPath}`);
     }
-  }
-  if (ccrStatus.found && ccrNames.length > 0) {
-    console.log(`  ${green}\u2713${reset} ccr binary found (${ccrStatus.resolvedPath}) \u2014 ${ccrNames.length} CCR slots`);
   }
   console.log('');
 
@@ -3935,7 +3982,7 @@ if (hasGlobal && hasLocal) {
   } else {
     // Non-interactive flag-based path (e.g. --claude --global)
     if (!hasAllProviders && selectedRuntimes.includes('claude')) {
-      const provs = require('./providers.json').providers;
+      const provs = providers;
       const classified = classifyProviders(provs);
       const detected = detectExternalClis(classified.externalPrimary);
       const foundNames = detected.filter(d => d.found).map(d => d.name);
@@ -3949,19 +3996,11 @@ if (hasGlobal && hasLocal) {
 } else if (hasGlobal || hasLocal) {
   // Default to all runtimes if no runtime specified but location is
   if (!hasAllProviders) {
-    const provs = require('./providers.json').providers;
+    const provs = providers;
     const classified = classifyProviders(provs);
-    selectedProviderSlots = classified.ccr.map(p => p.name);
-    if (selectedProviderSlots.length > 0) {
-      const ccrStatus = detectCcrCli();
-      if (!ccrStatus.found) {
-        const hint = CLI_INSTALL_HINTS['ccr'] || '';
-        console.log(`  ${yellow}⚠${reset} ccr not found — only future ccr-* slots require it${hint ? `. Install: ${hint}` : ''}`);
-      }
-    }
     const detected = detectExternalClis(classified.externalPrimary);
     const foundNames = detected.filter(d => d.found).map(d => d.name);
-    selectedProviderSlots = [...selectedProviderSlots, ...foundNames];
+    selectedProviderSlots = foundNames;
     if (foundNames.length > 0) {
       console.log(`  ${green}✓${reset} Auto-including detected CLIs: ${foundNames.join(', ')}`);
     }
@@ -3972,7 +4011,7 @@ if (hasGlobal && hasLocal) {
   if (!process.stdin.isTTY) {
     console.log(`  ${yellow}Non-interactive terminal detected, defaulting to all runtimes global install${reset}\n`);
     if (!hasAllProviders) {
-      const provs = require('./providers.json').providers;
+      const provs = providers;
       const classified = classifyProviders(provs);
       const detected = detectExternalClis(classified.externalPrimary);
       const foundNames = detected.filter(d => d.found).map(d => d.name);
