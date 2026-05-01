@@ -1,7 +1,4 @@
 {
-  "aggregated_at": "2026-04-17T04:37:59.710Z",
-  "content_hash": "cc8c06dea75836cdb69342890f822e12c0c44d5f80b71e07a2e3660ea69ad288",
-  "frozen_at": "2026-04-17T10:29:51.191Z",
   "aggregated_at": "2026-04-17T07:02:36.329Z",
   "content_hash": "7a0683c94eb64c97",
   "frozen_at": "2026-04-17T07:02:36.333Z",
@@ -27,7 +24,7 @@
     },
     {
       "id": "ACT-02",
-      "text": "Activity schema: `{ activity, sub_activity, phase?, plan?, wave?, debug_round?, checkpoint?, quorum_round?, updated }` — all fields except `activity` and `updated` are optional; unknown fields are preserved",
+      "text": "Activity schema: `{ activity, sub_activity, phase?, plan?, wave?, debug_round?, checkpoint?, quorum_round?, updated }` \u2014 all fields except `activity` and `updated` are optional; unknown fields are preserved",
       "category": "Planning & Tracking",
       "tier": "user",
       "phase": "unknown",
@@ -59,7 +56,7 @@
     },
     {
       "id": "ACT-04",
-      "text": "`resume-work` reads current-activity.json and routes to the exact recovery point — displaying the interrupted state before resuming execution",
+      "text": "`resume-work` reads current-activity.json and routes to the exact recovery point \u2014 displaying the interrupted state before resuming execution",
       "category": "Planning & Tracking",
       "tier": "user",
       "phase": "unknown",
@@ -347,7 +344,6 @@
       "milestone": "quick-404"
     },
     {
-      "id": "BENCH-FAKE-03",
       "id": "BENCH-DETECT-04",
       "text": "nf-solve detects cross-layer mutations, formal model changes, and documentation claim violations in fast mode with active layer sweeps for l1_to_l3, l3_to_tc, formal_lint, and ghost-command scanning for /nf: slash-command references in doc files.",
       "category": "Benchmark Detection",
@@ -375,7 +371,7 @@
     },
     {
       "id": "BLD-01",
-      "text": "`hooks/dist/` rebuilt from current source — includes all circuit breaker hook code from Phases 6–8 and GUARD 5 code from Phase 5",
+      "text": "`hooks/dist/` rebuilt from current source \u2014 includes all circuit breaker hook code from Phases 6\u20138 and GUARD 5 code from Phase 5",
       "category": "Testing & Quality",
       "tier": "user",
       "phase": "unknown",
@@ -645,7 +641,7 @@
     },
     {
       "id": "CLASS-01",
-      "text": "D→C classification cache uses content-hash keys (SHA-256 of claim text) instead of line-number keys — cached verdicts invalidate when doc content changes at the same line",
+      "text": "D\u2192C classification cache uses content-hash keys (SHA-256 of claim text) instead of line-number keys \u2014 cached verdicts invalidate when doc content changes at the same line",
       "category": "Classification",
       "tier": "user",
       "phase": "v0.36-02",
@@ -657,7 +653,7 @@
     },
     {
       "id": "CLINK-01",
-      "text": "C→R scanner queries proximity-index.json for code file→requirement edges before flagging; score >= 0.6 auto-suppresses",
+      "text": "C\u2192R scanner queries proximity-index.json for code file\u2192requirement edges before flagging; score >= 0.6 auto-suppresses",
       "category": "Code Back-Linking",
       "tier": "user",
       "phase": "v0.37-01",
@@ -745,7 +741,7 @@
     },
     {
       "id": "CONF-01",
-      "text": "Global config at `~/.claude/qgsd.json` — installed once, applies to all projects",
+      "text": "Global config at `~/.claude/qgsd.json` \u2014 installed once, applies to all projects",
       "category": "Configuration",
       "tier": "user",
       "phase": "unknown",
@@ -758,7 +754,7 @@
     },
     {
       "id": "CONF-02",
-      "text": "Per-project override at `.claude/qgsd.json` — merged with global, project values take precedence",
+      "text": "Per-project override at `.claude/qgsd.json` \u2014 merged with global, project values take precedence",
       "category": "Configuration",
       "tier": "user",
       "phase": "unknown",
@@ -797,7 +793,7 @@
     },
     {
       "id": "CONF-05",
-      "text": "Config validates on read — malformed config falls back to hardcoded defaults with warning",
+      "text": "Config validates on read \u2014 malformed config falls back to hardcoded defaults with warning",
       "category": "Configuration",
       "tier": "user",
       "phase": "unknown",
@@ -810,7 +806,7 @@
     },
     {
       "id": "CONF-06",
-      "text": "qgsd.json schema extended with `circuit_breaker.oscillation_depth` (integer, default: 3) — minimum commits touching same file set to trigger breaker",
+      "text": "qgsd.json schema extended with `circuit_breaker.oscillation_depth` (integer, default: 3) \u2014 minimum commits touching same file set to trigger breaker",
       "category": "Configuration",
       "tier": "user",
       "phase": "unknown",
@@ -826,7 +822,7 @@
     },
     {
       "id": "CONF-07",
-      "text": "qgsd.json schema extended with `circuit_breaker.commit_window` (integer, default: 6) — number of recent commits to analyze",
+      "text": "qgsd.json schema extended with `circuit_breaker.commit_window` (integer, default: 6) \u2014 number of recent commits to analyze",
       "category": "Configuration",
       "tier": "user",
       "phase": "unknown",
@@ -881,7 +877,7 @@
     },
     {
       "id": "CONST-01",
-      "text": "When Claude receives a prompt that appears to involve editing existing code or files, nForma injects an edit-in-place constraint into `additionalContext` — defaulting Claude to editing existing files rather than creating new ones",
+      "text": "When Claude receives a prompt that appears to involve editing existing code or files, nForma injects an edit-in-place constraint into `additionalContext` \u2014 defaulting Claude to editing existing files rather than creating new ones",
       "category": "Constraint Injection",
       "tier": "user",
       "phase": "unknown",
@@ -893,7 +889,7 @@
     },
     {
       "id": "CONST-02",
-      "text": "Constraint injection is fail-open and pattern-matched — prompts that are clearly new-feature requests (not edits) do not receive the constraint injection",
+      "text": "Constraint injection is fail-open and pattern-matched \u2014 prompts that are clearly new-feature requests (not edits) do not receive the constraint injection",
       "category": "Constraint Injection",
       "tier": "user",
       "phase": "unknown",
@@ -905,7 +901,7 @@
     },
     {
       "id": "CONV-01",
-      "text": "Solve loop tracks per-layer residual history across iterations and detects oscillation cycles (A-B-A-B pattern across 4+ iterations) — oscillating layers are reported and excluded from further dispatch",
+      "text": "Solve loop tracks per-layer residual history across iterations and detects oscillation cycles (A-B-A-B pattern across 4+ iterations) \u2014 oscillating layers are reported and excluded from further dispatch",
       "category": "Convergence",
       "tier": "user",
       "phase": "v0.36-03",
@@ -917,7 +913,7 @@
     },
     {
       "id": "CONV-02",
-      "text": "Solve output reports residual in three distinct buckets: `automatable` (forward + gates), `manual` (d_to_c + reverse discovery), `informational` (git_heatmap + lint + hazard) — never mixed into a single total",
+      "text": "Solve output reports residual in three distinct buckets: `automatable` (forward + gates), `manual` (d_to_c + reverse discovery), `informational` (git_heatmap + lint + hazard) \u2014 never mixed into a single total",
       "category": "Convergence",
       "tier": "user",
       "phase": "v0.36-03",
@@ -929,7 +925,7 @@
     },
     {
       "id": "CONV-03",
-      "text": "Solve output JSON includes `capped_layers` array when any gate dispatch hits the max-3-per-cycle limit — users can distinguish \"residual remains because capped\" from \"residual remains because unfixable\"",
+      "text": "Solve output JSON includes `capped_layers` array when any gate dispatch hits the max-3-per-cycle limit \u2014 users can distinguish \"residual remains because capped\" from \"residual remains because unfixable\"",
       "category": "Convergence",
       "tier": "user",
       "phase": "v0.36-03",
@@ -944,7 +940,7 @@
     },
     {
       "id": "CONV-04",
-      "text": "Solve report re-snapshots baseline at report time and flags drift >10% from session-start baseline — preventing misleading before/after deltas caused by mid-session external edits",
+      "text": "Solve report re-snapshots baseline at report time and flags drift >10% from session-start baseline \u2014 preventing misleading before/after deltas caused by mid-session external edits",
       "category": "Convergence",
       "tier": "user",
       "phase": "v0.36-03",
@@ -1139,7 +1135,7 @@
     },
     {
       "id": "DEBT-02",
-      "text": "Debt entries are deduplicated by fingerprint — new observations with matching fingerprints increment occurrence count and update last_seen instead of creating duplicates",
+      "text": "Debt entries are deduplicated by fingerprint \u2014 new observations with matching fingerprints increment occurrence count and update last_seen instead of creating duplicates",
       "category": "Debt Ledger",
       "tier": "user",
       "phase": "v0.27-03",
@@ -1151,7 +1147,7 @@
     },
     {
       "id": "DEBT-03",
-      "text": "Debt status follows a state machine: `open` → `acknowledged` → `resolving` → `resolved`, with only forward transitions allowed (no reopening resolved debt)",
+      "text": "Debt status follows a state machine: `open` \u2192 `acknowledged` \u2192 `resolving` \u2192 `resolved`, with only forward transitions allowed (no reopening resolved debt)",
       "category": "Debt Ledger",
       "tier": "user",
       "phase": "v0.27-01",
@@ -1389,7 +1385,7 @@
     },
     {
       "id": "DECOMP-05",
-      "text": "`analyze-state-space.cjs` identifies model pairs sharing source files or requirement prefixes, estimates the merged state space, and recommends merge when combined TLC runtime < 5 minutes — or flags the interface contract needed when merge would exceed the time budget",
+      "text": "`analyze-state-space.cjs` identifies model pairs sharing source files or requirement prefixes, estimates the merged state space, and recommends merge when combined TLC runtime < 5 minutes \u2014 or flags the interface contract needed when merge would exceed the time budget",
       "category": "Planning & Tracking",
       "tier": "user",
       "phase": "v0.26-06",
@@ -1404,7 +1400,7 @@
     },
     {
       "id": "DEPR-01",
-      "text": "/nf:model-driven-fix deprecated — invocation prints deprecation notice routing to /nf:debug",
+      "text": "/nf:model-driven-fix deprecated \u2014 invocation prints deprecation notice routing to /nf:debug",
       "category": "Skill Deprecation",
       "tier": "user",
       "phase": "unknown",
@@ -1472,7 +1468,7 @@
     },
     {
       "id": "DETECT-03",
-      "text": "Hook identifies oscillation when the exact same file set (strict set equality, not intersection) appears in ≥ oscillation_depth of the last commit_window commits — strict equality prevents false positives during TDD cycles where different files are touched per commit",
+      "text": "Hook identifies oscillation when the exact same file set (strict set equality, not intersection) appears in \u2265 oscillation_depth of the last commit_window commits \u2014 strict equality prevents false positives during TDD cycles where different files are touched per commit",
       "category": "Hooks & Enforcement",
       "tier": "user",
       "phase": "unknown",
@@ -1520,7 +1516,7 @@
     },
     {
       "id": "DIAG-01",
-      "text": "Solve diagnostic engine propagates `--focus` filter to all 19 layers, not just R→F and R→D — reverse discovery, alignment, and informational layers must filter or clearly mark results as unscoped",
+      "text": "Solve diagnostic engine propagates `--focus` filter to all 19 layers, not just R\u2192F and R\u2192D \u2014 reverse discovery, alignment, and informational layers must filter or clearly mark results as unscoped",
       "category": "Observability & Diagnostics",
       "tier": "user",
       "phase": "v0.36-02",
@@ -1533,7 +1529,7 @@
     },
     {
       "id": "DIAG-02",
-      "text": "Solve diagnostic engine returns residual=-1 (unknown) instead of 0 when formal artifact files are missing (check-results.ndjson, requirements.json) — preventing false convergence when files are absent",
+      "text": "Solve diagnostic engine returns residual=-1 (unknown) instead of 0 when formal artifact files are missing (check-results.ndjson, requirements.json) \u2014 preventing false convergence when files are absent",
       "category": "Observability & Diagnostics",
       "tier": "user",
       "phase": "v0.36-02",
@@ -1866,7 +1862,7 @@
     },
     {
       "id": "FND-01",
-      "text": "Verification mode tagging — each model checker invocation is tagged as 'diagnostic' (Cycle 1, inverted semantics) or 'validation' (Cycle 2, normal semantics) to prevent mode contradiction",
+      "text": "Verification mode tagging \u2014 each model checker invocation is tagged as 'diagnostic' (Cycle 1, inverted semantics) or 'validation' (Cycle 2, normal semantics) to prevent mode contradiction",
       "category": "Foundation",
       "tier": "user",
       "phase": "unknown",
@@ -1878,7 +1874,7 @@
     },
     {
       "id": "FND-02",
-      "text": "Trace comparison infrastructure — TLC counterexample traces parsed into structured JSON (ITF format) with state-by-state field extraction for diff generation",
+      "text": "Trace comparison infrastructure \u2014 TLC counterexample traces parsed into structured JSON (ITF format) with state-by-state field extraction for diff generation",
       "category": "Foundation",
       "tier": "user",
       "phase": "unknown",
@@ -1890,7 +1886,7 @@
     },
     {
       "id": "FND-03",
-      "text": "Configurable iteration limit — --max-iterations flag (default 3) controls both diagnostic refinement (Cycle 1) and simulation loop (Cycle 2), persisted in .planning/config.json",
+      "text": "Configurable iteration limit \u2014 --max-iterations flag (default 3) controls both diagnostic refinement (Cycle 1) and simulation loop (Cycle 2), persisted in .planning/config.json",
       "category": "Foundation",
       "tier": "user",
       "phase": "unknown",
@@ -1902,7 +1898,7 @@
     },
     {
       "id": "FP-01",
-      "text": "Issues are fingerprinted using a hierarchical strategy: exception type → function name → message pattern hash, producing a stable fingerprint string",
+      "text": "Issues are fingerprinted using a hierarchical strategy: exception type \u2192 function name \u2192 message pattern hash, producing a stable fingerprint string",
       "category": "Fingerprinting",
       "tier": "user",
       "phase": "v0.27-01",
@@ -1914,7 +1910,7 @@
     },
     {
       "id": "FP-02",
-      "text": "Drifts are fingerprinted by formal parameter key (e.g., `MCsafety.cfg:MaxDeliberation`) — identical parameter keys always map to the same fingerprint",
+      "text": "Drifts are fingerprinted by formal parameter key (e.g., `MCsafety.cfg:MaxDeliberation`) \u2014 identical parameter keys always map to the same fingerprint",
       "category": "Fingerprinting",
       "tier": "user",
       "phase": "v0.27-01",
@@ -2025,7 +2021,7 @@
     },
     {
       "id": "FV-04",
-      "text": "The invariant gate treats CI/CD pipelines, build artifacts, and Infrastructure-as-Code (IaC) as first-class system components — properties of CI/CD and IaC (e.g., \"tests pass\", \"dist/ reflects source\", \"infra matches declared state\") are classified as invariants, not as acceptance criteria or one-time tasks",
+      "text": "The invariant gate treats CI/CD pipelines, build artifacts, and Infrastructure-as-Code (IaC) as first-class system components \u2014 properties of CI/CD and IaC (e.g., \"tests pass\", \"dist/ reflects source\", \"infra matches declared state\") are classified as invariants, not as acceptance criteria or one-time tasks",
       "category": "Formal Verification",
       "status": "Complete",
       "background": "The system is an ensemble of source code, CI/CD, and IaC. The build_ci_gate regex rule was removed from validate-invariant.cjs.",
@@ -2329,7 +2325,7 @@
     },
     {
       "id": "INST-03",
-      "text": "Installer writes hooks to `~/.claude/settings.json` directly (not plugin.json hooks — stdout is silently discarded per GitHub #10225)",
+      "text": "Installer writes hooks to `~/.claude/settings.json` directly (not plugin.json hooks \u2014 stdout is silently discarded per GitHub #10225)",
       "category": "Installer & CLI",
       "tier": "user",
       "phase": "unknown",
@@ -2377,7 +2373,7 @@
     },
     {
       "id": "INST-06",
-      "text": "Installer is idempotent — running `npx qgsd@latest` again updates hooks and config without duplicating entries",
+      "text": "Installer is idempotent \u2014 running `npx qgsd@latest` again updates hooks and config without duplicating entries",
       "category": "Installer & CLI",
       "tier": "user",
       "phase": "unknown",
@@ -2481,7 +2477,7 @@
     },
     {
       "id": "INTENT-03",
-      "text": "The APPROACH block is non-modal — it is derived automatically from the task description text, not via a user dialog or confirmation step",
+      "text": "The APPROACH block is non-modal \u2014 it is derived automatically from the task description text, not via a user dialog or confirmation step",
       "category": "Intent Declaration",
       "tier": "user",
       "phase": "unknown",
@@ -2727,7 +2723,7 @@
     },
     {
       "id": "LRNG-01",
-      "text": "Auto error extraction at session end — install.js must register nf-session-end.js as SessionEnd hook so re-install does not silently drop it",
+      "text": "Auto error extraction at session end \u2014 install.js must register nf-session-end.js as SessionEnd hook so re-install does not silently drop it",
       "category": "Governance & DX",
       "tier": "user",
       "phase": "unknown",
@@ -2739,7 +2735,7 @@
     },
     {
       "id": "LRNG-02",
-      "text": "User correction capture — SessionEnd hook persists user corrections to memory store on session close",
+      "text": "User correction capture \u2014 SessionEnd hook persists user corrections to memory store on session close",
       "category": "Governance & DX",
       "tier": "user",
       "phase": "unknown",
@@ -2751,7 +2747,7 @@
     },
     {
       "id": "LRNG-03",
-      "text": "Quorum-validated skill extraction — skill-extractor.cjs is invoked automatically by nf-session-end.js (not orphaned)",
+      "text": "Quorum-validated skill extraction \u2014 skill-extractor.cjs is invoked automatically by nf-session-end.js (not orphaned)",
       "category": "Governance & DX",
       "tier": "user",
       "phase": "unknown",
@@ -2763,7 +2759,7 @@
     },
     {
       "id": "LRNG-04",
-      "text": "Failure catalog with confidence — failure entries persist across sessions via SessionEnd hook pipeline",
+      "text": "Failure catalog with confidence \u2014 failure entries persist across sessions via SessionEnd hook pipeline",
       "category": "Governance & DX",
       "tier": "user",
       "phase": "unknown",
@@ -2933,7 +2929,7 @@
     },
     {
       "id": "MEMP-01",
-      "text": "Decisions persist across compaction — memory-store.cjs JSONL append for decisions category injected by PreCompact hook",
+      "text": "Decisions persist across compaction \u2014 memory-store.cjs JSONL append for decisions category injected by PreCompact hook",
       "category": "Memory Persistence",
       "tier": "user",
       "phase": "v0.30-03",
@@ -2945,7 +2941,7 @@
     },
     {
       "id": "MEMP-02",
-      "text": "Proactive session reminders — SessionStart hook generates memory reminder from recent entries across all categories",
+      "text": "Proactive session reminders \u2014 SessionStart hook generates memory reminder from recent entries across all categories",
       "category": "Memory Persistence",
       "tier": "user",
       "phase": "v0.30-03",
@@ -2957,7 +2953,7 @@
     },
     {
       "id": "MEMP-03",
-      "text": "Error resolution memory — error patterns persist to JSONL with queryable interface",
+      "text": "Error resolution memory \u2014 error patterns persist to JSONL with queryable interface",
       "category": "Memory Persistence",
       "tier": "user",
       "phase": "v0.30-03",
@@ -2969,7 +2965,7 @@
     },
     {
       "id": "MEMP-04",
-      "text": "Quorum decision memory — quorum verdicts persist to JSONL for cross-session learning",
+      "text": "Quorum decision memory \u2014 quorum verdicts persist to JSONL for cross-session learning",
       "category": "Memory Persistence",
       "tier": "user",
       "phase": "v0.30-03",
@@ -3137,7 +3133,7 @@
     },
     {
       "id": "NAME-04",
-      "text": "Backward-compatible migration — old field names still readable during transition, new fields written on next compute",
+      "text": "Backward-compatible migration \u2014 old field names still readable during transition, new fields written on next compute",
       "category": "Gate Naming",
       "tier": "user",
       "phase": "v0.34-01",
@@ -3165,7 +3161,7 @@
     },
     {
       "id": "OBS-02",
-      "text": "Source types are pluggable — adding a new source type requires only a new fetch handler function and config entry, not changes to the observe orchestrator",
+      "text": "Source types are pluggable \u2014 adding a new source type requires only a new fetch handler function and config entry, not changes to the observe orchestrator",
       "category": "Observe Skill",
       "tier": "user",
       "phase": "v0.27-02",
@@ -3225,7 +3221,7 @@
     },
     {
       "id": "OBS-06",
-      "text": "`/qgsd:observe` presents two output tables: **Issues** (discrete events — errors, bugs, feedback) and **Drifts** (quantitative divergences — formal parameter vs production measurement)",
+      "text": "`/qgsd:observe` presents two output tables: **Issues** (discrete events \u2014 errors, bugs, feedback) and **Drifts** (quantitative divergences \u2014 formal parameter vs production measurement)",
       "category": "Observe Skill",
       "tier": "user",
       "phase": "v0.27-02",
@@ -3255,7 +3251,7 @@
     },
     {
       "id": "OBS-08",
-      "text": "Each source fetch handler has a configurable timeout and fail-open behavior — one failing source does not block the others",
+      "text": "Each source fetch handler has a configurable timeout and fail-open behavior \u2014 one failing source does not block the others",
       "category": "Observe Skill",
       "tier": "user",
       "phase": "v0.27-02",
@@ -3270,7 +3266,7 @@
     },
     {
       "id": "ORCH-01",
-      "text": "Domain-specific context retrieval — context-retriever.cjs analyzes task domain and fetches relevant context artifacts",
+      "text": "Domain-specific context retrieval \u2014 context-retriever.cjs analyzes task domain and fetches relevant context artifacts",
       "category": "Subagent Orchestration",
       "tier": "user",
       "phase": "v0.30-06",
@@ -3282,7 +3278,7 @@
     },
     {
       "id": "ORCH-02",
-      "text": "Phase-to-phase context accumulation — context-stack.cjs maintains JSONL phase index for cross-phase context injection",
+      "text": "Phase-to-phase context accumulation \u2014 context-stack.cjs maintains JSONL phase index for cross-phase context injection",
       "category": "Subagent Orchestration",
       "tier": "user",
       "phase": "v0.30-06",
@@ -3294,7 +3290,7 @@
     },
     {
       "id": "ORCH-03",
-      "text": "Specialized retrieval agents — quorum dispatch enriches prompts with domain-relevant context via enrichPromptWithRetrieval",
+      "text": "Specialized retrieval agents \u2014 quorum dispatch enriches prompts with domain-relevant context via enrichPromptWithRetrieval",
       "category": "Subagent Orchestration",
       "tier": "user",
       "phase": "v0.30-06",
@@ -3338,7 +3334,7 @@
     },
     {
       "id": "ORES-03",
-      "text": "Quorum deliberates (R3.3, up to 4 rounds) and may only approve unified solutions — partial/incremental fixes are rejected",
+      "text": "Quorum deliberates (R3.3, up to 4 rounds) and may only approve unified solutions \u2014 partial/incremental fixes are rejected",
       "category": "Hooks & Enforcement",
       "tier": "user",
       "phase": "unknown",
@@ -3386,7 +3382,7 @@
     },
     {
       "id": "OSC-01",
-      "text": "Layer oscillation breaker enforces Option C — if a layer's residual increases after a prior decrease within tracked history, one oscillation credit is consumed; second oscillation blocks automated remediation for that layer and triggers human escalation",
+      "text": "Layer oscillation breaker enforces Option C \u2014 if a layer's residual increases after a prior decrease within tracked history, one oscillation credit is consumed; second oscillation blocks automated remediation for that layer and triggers human escalation",
       "category": "Oscillation Detection",
       "tier": "user",
       "phase": "v0.33-02",
@@ -3398,7 +3394,7 @@
     },
     {
       "id": "OSC-02",
-      "text": "Cascade-aware grace period allows temporary residual increases in downstream layers when an upstream layer was remediated in the same or prior session (e.g., fixing R→F may increase F→T)",
+      "text": "Cascade-aware grace period allows temporary residual increases in downstream layers when an upstream layer was remediated in the same or prior session (e.g., fixing R\u2192F may increase F\u2192T)",
       "category": "Oscillation Detection",
       "tier": "user",
       "phase": "v0.33-02",
@@ -3470,7 +3466,7 @@
     },
     {
       "id": "PARA-01",
-      "text": "Worktree-isolated executor subagents — nf-worktree-executor agent runs plans in isolated git worktrees",
+      "text": "Worktree-isolated executor subagents \u2014 nf-worktree-executor agent runs plans in isolated git worktrees",
       "category": "Parallel Execution",
       "tier": "user",
       "phase": "v0.30-07",
@@ -3482,7 +3478,7 @@
     },
     {
       "id": "PARA-02",
-      "text": "Parallel plan execution with merge orchestration — Pattern D in execute-plan.md dispatches independent plans to worktrees with merge queue coordination",
+      "text": "Parallel plan execution with merge orchestration \u2014 Pattern D in execute-plan.md dispatches independent plans to worktrees with merge queue coordination",
       "category": "Parallel Execution",
       "tier": "user",
       "phase": "v0.30-07",
@@ -3494,7 +3490,7 @@
     },
     {
       "id": "PERF-01",
-      "text": "Solve remediation dispatches layers in dependency-ordered waves (max 6 waves) instead of 13 sequential steps — independent layers (R→F, R→D, T→C) run in parallel within the same wave",
+      "text": "Solve remediation dispatches layers in dependency-ordered waves (max 6 waves) instead of 13 sequential steps \u2014 independent layers (R\u2192F, R\u2192D, T\u2192C) run in parallel within the same wave",
       "category": "Performance",
       "tier": "user",
       "phase": "v0.36-04",
@@ -3506,7 +3502,7 @@
     },
     {
       "id": "PERF-02",
-      "text": "Diagnostic engine clears `_aggregateCache` after `per_model_gates` writes per-model gate files — preventing stale aggregate data in subsequent alignment layer reads",
+      "text": "Diagnostic engine clears `_aggregateCache` after `per_model_gates` writes per-model gate files \u2014 preventing stale aggregate data in subsequent alignment layer reads",
       "category": "Performance",
       "tier": "user",
       "phase": "v0.36-01",
@@ -3542,7 +3538,7 @@
     },
     {
       "id": "PF-03",
-      "text": "Solve operates only on debt entries with status `acknowledged` — `open` entries are ignored until a human triages them",
+      "text": "Solve operates only on debt entries with status `acknowledged` \u2014 `open` entries are ignored until a human triages them",
       "category": "Solve P->F Integration",
       "tier": "user",
       "phase": "v0.27-05",
@@ -3554,7 +3550,7 @@
     },
     {
       "id": "PF-04",
-      "text": "During a solve cycle, observations are frozen — new observe runs do not modify debt entries that are in `resolving` status",
+      "text": "During a solve cycle, observations are frozen \u2014 new observe runs do not modify debt entries that are in `resolving` status",
       "category": "Solve P->F Integration",
       "tier": "user",
       "phase": "v0.27-05",
@@ -3626,7 +3622,7 @@
     },
     {
       "id": "PLCY-01",
-      "text": "User can set quorum timeout (ms) per slot from a dedicated menu shortcut — not buried inside editAgent",
+      "text": "User can set quorum timeout (ms) per slot from a dedicated menu shortcut \u2014 not buried inside editAgent",
       "category": "Configuration",
       "tier": "user",
       "phase": "v0.26-01",
@@ -3662,7 +3658,7 @@
     },
     {
       "id": "PORT-01",
-      "text": "User can export full roster config to a portable JSON file — all API key values replaced with `__redacted__` placeholders",
+      "text": "User can export full roster config to a portable JSON file \u2014 all API key values replaced with `__redacted__` placeholders",
       "category": "Installer & CLI",
       "tier": "user",
       "phase": "v0.26-03",
@@ -3677,7 +3673,7 @@
     },
     {
       "id": "PORT-02",
-      "text": "User can import roster config from JSON file — validates schema, prompts to re-enter any redacted key, confirms before applying",
+      "text": "User can import roster config from JSON file \u2014 validates schema, prompts to re-enter any redacted key, confirms before applying",
       "category": "Installer & CLI",
       "tier": "user",
       "phase": "v0.26-03",
@@ -3755,7 +3751,7 @@
     },
     {
       "id": "PROMO-02",
-      "text": "consecutive_clean_sessions counter tracked in solve-state.json — incremented when wiring >= 1.0 AND semantic >= 0.8 AND all formal checks pass; reset to 0 on regression",
+      "text": "consecutive_clean_sessions counter tracked in solve-state.json \u2014 incremented when wiring >= 1.0 AND semantic >= 0.8 AND all formal checks pass; reset to 0 on regression",
       "category": "Auto-Promotion",
       "tier": "user",
       "phase": "v0.34-05",
@@ -3860,7 +3856,7 @@
     },
     {
       "id": "PRST-02",
-      "text": "User can clone an existing slot — copies provider URL and model config, prompts for new slot name",
+      "text": "User can clone an existing slot \u2014 copies provider URL and model config, prompts for new slot name",
       "category": "Installer & CLI",
       "tier": "user",
       "phase": "v0.26-03",
@@ -4006,7 +4002,7 @@
     },
     {
       "id": "RDME-05",
-      "text": "Architecture/quorum flow diagram added to \"How It Works\" intro showing prompt → dispatch → consensus → execute flow",
+      "text": "Architecture/quorum flow diagram added to \"How It Works\" intro showing prompt \u2192 dispatch \u2192 consensus \u2192 execute flow",
       "category": "README Structure",
       "tier": "user",
       "phase": "v0.32-02",
@@ -4054,7 +4050,7 @@
     },
     {
       "id": "RDME-09",
-      "text": "Getting Started collapsible sections rebalanced — critical path (install → quorum setup → first command) visible by default, advanced options collapsed",
+      "text": "Getting Started collapsible sections rebalanced \u2014 critical path (install \u2192 quorum setup \u2192 first command) visible by default, advanced options collapsed",
       "category": "README Structure",
       "tier": "user",
       "phase": "v0.32-02",
@@ -4078,7 +4074,7 @@
     },
     {
       "id": "RECV-01",
-      "text": "`npx qgsd --reset-breaker` CLI flag clears `.claude/circuit-breaker-state.json` and logs confirmation — enables manual recovery when circuit breaker deadlocks due to blocked git commit",
+      "text": "`npx qgsd --reset-breaker` CLI flag clears `.claude/circuit-breaker-state.json` and logs confirmation \u2014 enables manual recovery when circuit breaker deadlocks due to blocked git commit",
       "category": "Testing & Quality",
       "tier": "user",
       "phase": "unknown",
@@ -4178,7 +4174,7 @@
     },
     {
       "id": "REL-01",
-      "text": "Failures in external services (APIs, databases, third-party SDKs) are caught and handled gracefully — the application degrades functionality rather than crashing",
+      "text": "Failures in external services (APIs, databases, third-party SDKs) are caught and handled gracefully \u2014 the application degrades functionality rather than crashing",
       "category": "Reliability",
       "tier": "user",
       "phase": "unknown",
@@ -4208,7 +4204,7 @@
     },
     {
       "id": "REN-02",
-      "text": "`bin/install.js` updated to read from `qgsd-core/` instead of `get-shit-done/` — `node bin/install.js --claude --global` succeeds",
+      "text": "`bin/install.js` updated to read from `qgsd-core/` instead of `get-shit-done/` \u2014 `node bin/install.js --claude --global` succeeds",
       "category": "Installer & CLI",
       "tier": "user",
       "phase": "v0.9-05",
@@ -4248,7 +4244,7 @@
     },
     {
       "id": "ROOT-02",
-      "text": "In `solve-diagnose`, after the existing Step 0e hypothesis synthesis, a quorum vote is dispatched on the root cause diagnosis before proceeding — requiring multi-model consensus on the causal chain",
+      "text": "In `solve-diagnose`, after the existing Step 0e hypothesis synthesis, a quorum vote is dispatched on the root cause diagnosis before proceeding \u2014 requiring multi-model consensus on the causal chain",
       "category": "Root Cause Enforcement",
       "tier": "user",
       "phase": "unknown",
@@ -4260,7 +4256,7 @@
     },
     {
       "id": "ROOT-03",
-      "text": "Root cause template injection is fail-open and pattern-matched — non-debug/fix prompts do not receive the template injection",
+      "text": "Root cause template injection is fail-open and pattern-matched \u2014 non-debug/fix prompts do not receive the template injection",
       "category": "Root Cause Enforcement",
       "tier": "user",
       "phase": "unknown",
@@ -4353,7 +4349,7 @@
     },
     {
       "id": "ROUTE-07",
-      "text": "E2E learning loop test validates full River ML pipeline (rewards recorded → Q-table updated → learned preference → shadow recommendation) and nf-statusline displays shadow recommendations with confidence",
+      "text": "E2E learning loop test validates full River ML pipeline (rewards recorded \u2192 Q-table updated \u2192 learned preference \u2192 shadow recommendation) and nf-statusline displays shadow recommendations with confidence",
       "category": "Token Optimization & Model Routing",
       "phase": "unknown",
       "status": "Complete",
@@ -4453,7 +4449,7 @@
     },
     {
       "id": "SCBD-01",
-      "text": "Scoreboard tracks performance by slot name (`claude-1`, `copilot-1`) — slot is the stable key",
+      "text": "Scoreboard tracks performance by slot name (`claude-1`, `copilot-1`) \u2014 slot is the stable key",
       "category": "Observability & Diagnostics",
       "tier": "user",
       "phase": "unknown",
@@ -4574,7 +4570,7 @@
     },
     {
       "id": "SCOPE-02",
-      "text": "When a file edit targets a path outside the declared scope, the scope guard emits a warning advisory via `additionalContext` (non-blocking, exits 0) — it does not deny the tool call",
+      "text": "When a file edit targets a path outside the declared scope, the scope guard emits a warning advisory via `additionalContext` (non-blocking, exits 0) \u2014 it does not deny the tool call",
       "category": "Scope Guard",
       "tier": "user",
       "phase": "unknown",
@@ -4586,7 +4582,7 @@
     },
     {
       "id": "SCOPE-03",
-      "text": "The scope guard is a no-op when no scope contract exists for the current session — the hook exits immediately without any output or overhead",
+      "text": "The scope guard is a no-op when no scope contract exists for the current session \u2014 the hook exits immediately without any output or overhead",
       "category": "Scope Guard",
       "tier": "user",
       "phase": "unknown",
@@ -4670,7 +4666,7 @@
     },
     {
       "id": "SEM-02",
-      "text": "Strong candidates (score > threshold) evaluated by Haiku for semantic match — returns yes/no/maybe per candidate",
+      "text": "Strong candidates (score > threshold) evaluated by Haiku for semantic match \u2014 returns yes/no/maybe per candidate",
       "category": "Semantic Scoring",
       "tier": "user",
       "phase": "v0.34-02",
@@ -4706,7 +4702,7 @@
     },
     {
       "id": "SEM-05",
-      "text": "Semantic scoring is idempotent — re-running produces same results given same graph state and model text",
+      "text": "Semantic scoring is idempotent \u2014 re-running produces same results given same graph state and model text",
       "category": "Semantic Scoring",
       "tier": "user",
       "phase": "v0.34-02",
@@ -4718,7 +4714,7 @@
     },
     {
       "id": "SENS-01",
-      "text": "`bin/run-sensitivity-sweep.cjs` varies key model parameters (at minimum: quorum size N across its full range, timeout threshold T across low/medium/high values) across ≥3 values each, running TLA+/PRISM checks for each configuration, and records outcome deltas (pass→fail, pass→inconclusive transitions) in `.formal/sensitivity-report.ndjson` using v2.1 schema — each record annotated with which parameter value caused the transition.",
+      "text": "`bin/run-sensitivity-sweep.cjs` varies key model parameters (at minimum: quorum size N across its full range, timeout threshold T across low/medium/high values) across \u22653 values each, running TLA+/PRISM checks for each configuration, and records outcome deltas (pass\u2192fail, pass\u2192inconclusive transitions) in `.formal/sensitivity-report.ndjson` using v2.1 schema \u2014 each record annotated with which parameter value caused the transition.",
       "category": "Formal Verification",
       "tier": "user",
       "phase": "v0.20-08",
@@ -4750,7 +4746,7 @@
     },
     {
       "id": "SENS-03",
-      "text": "`bin/sensitivity-report.cjs` generates `.formal/sensitivity-report.md` — a human-readable ranked list of sensitive parameters by outcome-flip count, each annotated with (a) the code path or configuration variable that controls it, (b) recommended unit/integration test cases for boundary values, (c) recommended monitoring metrics to track in production.",
+      "text": "`bin/sensitivity-report.cjs` generates `.formal/sensitivity-report.md` \u2014 a human-readable ranked list of sensitive parameters by outcome-flip count, each annotated with (a) the code path or configuration variable that controls it, (b) recommended unit/integration test cases for boundary values, (c) recommended monitoring metrics to track in production.",
       "category": "Formal Verification",
       "tier": "user",
       "phase": "v0.20-08",
@@ -4778,7 +4774,7 @@
     },
     {
       "id": "SESSION-02",
-      "text": "Session state injection fires exactly once per session (idempotent) — subsequent messages in the same session do not re-inject STATE.md content",
+      "text": "Session state injection fires exactly once per session (idempotent) \u2014 subsequent messages in the same session do not re-inject STATE.md content",
       "category": "Session State",
       "tier": "user",
       "phase": "unknown",
@@ -4790,7 +4786,7 @@
     },
     {
       "id": "SESSION-03",
-      "text": "Session state injection is fail-open — if STATE.md is missing or unreadable, injection is silently skipped and no error is surfaced to the user",
+      "text": "Session state injection is fail-open \u2014 if STATE.md is missing or unreadable, injection is silently skipped and no error is surfaced to the user",
       "category": "Session State",
       "tier": "user",
       "phase": "unknown",
@@ -4899,7 +4895,7 @@
     },
     {
       "id": "SIM-01",
-      "text": "Fix intent normalization — accept fix ideas as natural language, constraint sets, or code sketches and normalize internally to formal model mutations",
+      "text": "Fix intent normalization \u2014 accept fix ideas as natural language, constraint sets, or code sketches and normalize internally to formal model mutations",
       "category": "Cycle 2",
       "tier": "user",
       "phase": "unknown",
@@ -4911,7 +4907,7 @@
     },
     {
       "id": "SIM-02",
-      "text": "Consequence model generation — given a reproducing model + normalized fix intent, generate a consequence model representing the system after the proposed fix is applied",
+      "text": "Consequence model generation \u2014 given a reproducing model + normalized fix intent, generate a consequence model representing the system after the proposed fix is applied",
       "category": "Cycle 2",
       "tier": "user",
       "phase": "unknown",
@@ -4923,7 +4919,7 @@
     },
     {
       "id": "SIM-03",
-      "text": "Three-gate convergence — automated convergence check: (1) original invariants still hold, (2) bug no longer triggered (inverted check passes), (3) no 2-hop neighbor regressions",
+      "text": "Three-gate convergence \u2014 automated convergence check: (1) original invariants still hold, (2) bug no longer triggered (inverted check passes), (3) no 2-hop neighbor regressions",
       "category": "Cycle 2",
       "tier": "user",
       "phase": "unknown",
@@ -4935,7 +4931,7 @@
     },
     {
       "id": "SIM-04",
-      "text": "Simulation loop UX — Phase 4.5 in model-driven-fix.md with iteration display, per-gate pass/fail status, convergence progress, and escalation to user after max iterations",
+      "text": "Simulation loop UX \u2014 Phase 4.5 in model-driven-fix.md with iteration display, per-gate pass/fail status, convergence progress, and escalation to user after max iterations",
       "category": "Cycle 2",
       "tier": "user",
       "phase": "unknown",
@@ -5148,7 +5144,7 @@
     },
     {
       "id": "SPEC-03",
-      "text": "Quorum composition verified in `quorum-composition.als` — 3 composition rules hold",
+      "text": "Quorum composition verified in `quorum-composition.als` \u2014 3 composition rules hold",
       "category": "Formal Verification",
       "tier": "user",
       "phase": "v0.21-04",
@@ -5180,7 +5176,7 @@
     },
     {
       "id": "STAB-01",
-      "text": "Flip-flop detection scans promotion-changelog.json for models with ≥3 direction changes (promote/demote alternations) and flags them as UNSTABLE in per-model-gates.json",
+      "text": "Flip-flop detection scans promotion-changelog.json for models with \u22653 direction changes (promote/demote alternations) and flags them as UNSTABLE in per-model-gates.json",
       "category": "Gate Stabilization",
       "tier": "user",
       "phase": "v0.33-03",
@@ -5192,7 +5188,7 @@
     },
     {
       "id": "STAB-02",
-      "text": "Cooldown enforcement requires a configurable stabilization window (default: 3 consecutive solve sessions AND ≥1 hour wall time) of sustained gate score before re-promotion is allowed",
+      "text": "Cooldown enforcement requires a configurable stabilization window (default: 3 consecutive solve sessions AND \u22651 hour wall time) of sustained gate score before re-promotion is allowed",
       "category": "Gate Stabilization",
       "tier": "user",
       "phase": "v0.33-03",
@@ -5232,7 +5228,7 @@
     },
     {
       "id": "STATE-02",
-      "text": "State schema: `{ active, file_set[], activated_at, commit_window_snapshot[] }` — captures what triggered the breaker",
+      "text": "State schema: `{ active, file_set[], activated_at, commit_window_snapshot[] }` \u2014 captures what triggered the breaker",
       "category": "Planning & Tracking",
       "tier": "user",
       "phase": "unknown",
@@ -5248,7 +5244,7 @@
     },
     {
       "id": "STATE-03",
-      "text": "Hook reads existing state first — if active, applies enforcement immediately without re-running git log detection",
+      "text": "Hook reads existing state first \u2014 if active, applies enforcement immediately without re-running git log detection",
       "category": "Planning & Tracking",
       "tier": "user",
       "phase": "unknown",
@@ -5293,7 +5289,7 @@
     },
     {
       "id": "STD-10",
-      "text": "gemini-mcp-server npm package name is unscoped (`gemini-mcp-server`, not `@tuannvm/gemini-mcp-server`) — `~/.claude.json` mcpServers[\"gemini-cli\"].args reflects the unscoped name",
+      "text": "gemini-mcp-server npm package name is unscoped (`gemini-mcp-server`, not `@tuannvm/gemini-mcp-server`) \u2014 `~/.claude.json` mcpServers[\"gemini-cli\"].args reflects the unscoped name",
       "category": "Testing & Quality",
       "tier": "user",
       "phase": "unknown",
@@ -5325,7 +5321,7 @@
     },
     {
       "id": "STOP-02",
-      "text": "Stop hook checks `stop_hook_active` flag first — if true, exits 0 immediately (infinite loop prevention)",
+      "text": "Stop hook checks `stop_hook_active` flag first \u2014 if true, exits 0 immediately (infinite loop prevention)",
       "category": "Hooks & Enforcement",
       "tier": "user",
       "phase": "unknown",
@@ -5341,7 +5337,7 @@
     },
     {
       "id": "STOP-03",
-      "text": "Stop hook checks `hook_event_name` — if `SubagentStop`, exits 0 immediately (subagent exclusion)",
+      "text": "Stop hook checks `hook_event_name` \u2014 if `SubagentStop`, exits 0 immediately (subagent exclusion)",
       "category": "Hooks & Enforcement",
       "tier": "user",
       "phase": "unknown",
@@ -5357,7 +5353,7 @@
     },
     {
       "id": "STOP-04",
-      "text": "Stop hook scopes transcript search to current turn only (lines since last user message boundary) — survives context compaction",
+      "text": "Stop hook scopes transcript search to current turn only (lines since last user message boundary) \u2014 survives context compaction",
       "category": "Hooks & Enforcement",
       "tier": "user",
       "phase": "unknown",
@@ -5373,7 +5369,7 @@
     },
     {
       "id": "STOP-05",
-      "text": "Stop hook reads transcript JSONL as the authoritative source of quorum evidence — no fast-path pre-check (design decision: last_assistant_message substring matching is not a reliable signal; JSONL parse is synchronous and correct for all transcript sizes)",
+      "text": "Stop hook reads transcript JSONL as the authoritative source of quorum evidence \u2014 no fast-path pre-check (design decision: last_assistant_message substring matching is not a reliable signal; JSONL parse is synchronous and correct for all transcript sizes)",
       "category": "Hooks & Enforcement",
       "tier": "user",
       "phase": "unknown",
@@ -5405,7 +5401,7 @@
     },
     {
       "id": "STOP-07",
-      "text": "Stop hook blocks with `{\"decision\": \"block\", \"reason\": \"...\"}` when quorum is missing — reason includes exact tool names and instructions",
+      "text": "Stop hook blocks with `{\"decision\": \"block\", \"reason\": \"...\"}` when quorum is missing \u2014 reason includes exact tool names and instructions",
       "category": "Hooks & Enforcement",
       "tier": "user",
       "phase": "unknown",
@@ -5453,7 +5449,7 @@
     },
     {
       "id": "STRUCT-01",
-      "text": "L2 (Semantics) layer is either populated with at least 3 semantic models OR collapsed to a 2-layer architecture with Gate A evaluating L1→L3 directly — unblocking Gate B from permanent zero score",
+      "text": "L2 (Semantics) layer is either populated with at least 3 semantic models OR collapsed to a 2-layer architecture with Gate A evaluating L1\u2192L3 directly \u2014 unblocking Gate B from permanent zero score",
       "category": "Structure",
       "tier": "user",
       "phase": "v0.36-04",
@@ -5465,7 +5461,7 @@
     },
     {
       "id": "STRUCT-02",
-      "text": "LAYER_KEYS extracted to a shared `bin/layer-constants.cjs` module imported by solve-trend-helpers, oscillation-detector, and convergence-report — single source of truth for the 19-layer key set",
+      "text": "LAYER_KEYS extracted to a shared `bin/layer-constants.cjs` module imported by solve-trend-helpers, oscillation-detector, and convergence-report \u2014 single source of truth for the 19-layer key set",
       "category": "Structure",
       "tier": "user",
       "phase": "v0.36-01",
@@ -5477,7 +5473,7 @@
     },
     {
       "id": "STRUCT-03",
-      "text": "Gate score field resolution extracted to shared `resolveGateScore(gateData)` utility used by nf-solve.cjs, solve-trend-helpers.cjs, and cross-layer-dashboard.cjs — eliminating duplicated v1/v2 fallback chains",
+      "text": "Gate score field resolution extracted to shared `resolveGateScore(gateData)` utility used by nf-solve.cjs, solve-trend-helpers.cjs, and cross-layer-dashboard.cjs \u2014 eliminating duplicated v1/v2 fallback chains",
       "category": "Structure",
       "tier": "user",
       "phase": "v0.36-01",
@@ -5489,7 +5485,7 @@
     },
     {
       "id": "STRUCT-04",
-      "text": "Haiku model version for classification reads from `nf.json` config with fallback to `claude-haiku-4-5-20251001` — no more hardcoded model ID in solve-tui.cjs",
+      "text": "Haiku model version for classification reads from `nf.json` config with fallback to `claude-haiku-4-5-20251001` \u2014 no more hardcoded model ID in solve-tui.cjs",
       "category": "Structure",
       "tier": "user",
       "phase": "v0.36-01",
@@ -5546,7 +5542,7 @@
     },
     {
       "id": "SYNC-04",
-      "text": "No QGSD code modifies any GSD source files — all additions are in separate files (`hooks/qgsd-stop.js`, `hooks/qgsd-prompt.js`, `bin/qgsd-install.js`)",
+      "text": "No QGSD code modifies any GSD source files \u2014 all additions are in separate files (`hooks/qgsd-stop.js`, `hooks/qgsd-prompt.js`, `bin/qgsd-install.js`)",
       "category": "Planning & Tracking",
       "tier": "user",
       "phase": "unknown",
@@ -5574,7 +5570,7 @@
     },
     {
       "id": "TEST-02",
-      "text": "Cascade effect unit tests verify that R→F remediation creating new formal models increases F→T residual, and the convergence check correctly identifies this as progress (not regression)",
+      "text": "Cascade effect unit tests verify that R\u2192F remediation creating new formal models increases F\u2192T residual, and the convergence check correctly identifies this as progress (not regression)",
       "category": "Testing",
       "tier": "user",
       "phase": "v0.36-05",
@@ -5610,7 +5606,7 @@
     },
     {
       "id": "TLINK-01",
-      "text": "Test files containing `@requirement REQ-ID` annotations are excluded from T→R scanner flagging for those requirement IDs",
+      "text": "Test files containing `@requirement REQ-ID` annotations are excluded from T\u2192R scanner flagging for those requirement IDs",
       "category": "Test Back-Linking",
       "tier": "user",
       "phase": "v0.37-01",
@@ -5634,7 +5630,7 @@
     },
     {
       "id": "TLINK-03",
-      "text": "T→R scanner reports annotation coverage percentage alongside orphan test count",
+      "text": "T\u2192R scanner reports annotation coverage percentage alongside orphan test count",
       "category": "Test Back-Linking",
       "tier": "user",
       "phase": "v0.37-01",
@@ -5646,7 +5642,7 @@
     },
     {
       "id": "TOKN-01",
-      "text": "Auto-compaction at clean boundaries — PreCompact hook preserves execution state and memory across compaction events",
+      "text": "Auto-compaction at clean boundaries \u2014 PreCompact hook preserves execution state and memory across compaction events",
       "category": "Token Optimization & Model Routing",
       "tier": "user",
       "phase": "v0.30-01",
@@ -5658,7 +5654,7 @@
     },
     {
       "id": "TOKN-02",
-      "text": "Thinking budget scaling per task type — task complexity classifier adjusts thinking budget directive based on plan vs research vs quick task",
+      "text": "Thinking budget scaling per task type \u2014 task complexity classifier adjusts thinking budget directive based on plan vs research vs quick task",
       "category": "Token Optimization & Model Routing",
       "tier": "user",
       "phase": "v0.30-01",
@@ -5670,7 +5666,7 @@
     },
     {
       "id": "TOKN-03",
-      "text": "Token usage dashboard — `/nf:tokens` displays per-slot and per-session token consumption from telemetry JSONL",
+      "text": "Token usage dashboard \u2014 `/nf:tokens` displays per-slot and per-session token consumption from telemetry JSONL",
       "category": "Token Optimization & Model Routing",
       "tier": "user",
       "phase": "v0.30-01",
@@ -5682,7 +5678,7 @@
     },
     {
       "id": "TOKN-04",
-      "text": "Task-complexity model routing — TIER_SLOT_MAP filters quorum slots by task complexity tier (T1/T2/T3)",
+      "text": "Task-complexity model routing \u2014 TIER_SLOT_MAP filters quorum slots by task complexity tier (T1/T2/T3)",
       "category": "Token Optimization & Model Routing",
       "tier": "user",
       "phase": "v0.30-01",
@@ -5698,7 +5694,7 @@
       "category": "Tool Features",
       "phase": "unknown",
       "status": "Complete",
-      "background": "The coderlm symbol server indexes source code symbols and call graphs, but accessing its query capabilities previously required direct curl requests or raw Node invocations. The query subcommands expose this API through a first-class skill interface, enabling developers to interactively look up callers of a symbol, find where symbols are defined, discover associated tests, and preview source code—making code navigation and understanding accessible from within nForma.",
+      "background": "The coderlm symbol server indexes source code symbols and call graphs, but accessing its query capabilities previously required direct curl requests or raw Node invocations. The query subcommands expose this API through a first-class skill interface, enabling developers to interactively look up callers of a symbol, find where symbols are defined, discover associated tests, and preview source code\u2014making code navigation and understanding accessible from within nForma.",
       "provenance": {
         "source_file": ".planning/quick/399-add-a-nf-coderlm-query-skill-that-lets-u/399-PLAN.md",
         "milestone": "quick-399"
@@ -5706,7 +5702,7 @@
     },
     {
       "id": "TOOL-02",
-      "text": "The /nf:harden skill runs an adversarial hardening loop—iteratively generating edge-case tests, fixing failures, and converging after 2 consecutive zero-change iterations or exhausting the iteration cap (max 10).",
+      "text": "The /nf:harden skill runs an adversarial hardening loop\u2014iteratively generating edge-case tests, fixing failures, and converging after 2 consecutive zero-change iterations or exhausting the iteration cap (max 10).",
       "category": "Tool Features",
       "phase": "unknown",
       "status": "Complete",
@@ -5802,7 +5798,7 @@
     },
     {
       "id": "TRACK-02",
-      "text": "Per-layer trend detection runs Mann-Kendall non-parametric test on the last 20 entries and reports each layer as DECREASING, STABLE, INCREASING, or OSCILLATING (requires ≥5 data points before reporting)",
+      "text": "Per-layer trend detection runs Mann-Kendall non-parametric test on the last 20 entries and reports each layer as DECREASING, STABLE, INCREASING, or OSCILLATING (requires \u22655 data points before reporting)",
       "category": "Cross-Session Tracking",
       "tier": "user",
       "phase": "v0.33-02",
@@ -5814,7 +5810,7 @@
     },
     {
       "id": "TRACK-03",
-      "text": "Convergence velocity estimation fits exponential decay to per-layer residual time series and reports estimated sessions-to-convergence (requires ≥10 data points)",
+      "text": "Convergence velocity estimation fits exponential decay to per-layer residual time series and reports estimated sessions-to-convergence (requires \u226510 data points)",
       "category": "Cross-Session Tracking",
       "tier": "user",
       "phase": "v0.33-04",
@@ -5826,7 +5822,7 @@
     },
     {
       "id": "TRACK-04",
-      "text": "Scope-growth detection distinguishes new-requirement residual increases from regression by tracking requirement count alongside residuals — a residual increase concurrent with requirement count increase is flagged as SCOPE_GROWTH, not regression",
+      "text": "Scope-growth detection distinguishes new-requirement residual increases from regression by tracking requirement count alongside residuals \u2014 a residual increase concurrent with requirement count increase is flagged as SCOPE_GROWTH, not regression",
       "category": "Cross-Session Tracking",
       "tier": "user",
       "phase": "v0.33-01",
@@ -5894,7 +5890,7 @@
       "text": "The consensus gate (nf-stop.js) MUST distinguish between a genuine verdict (APPROVE/REJECT/FLAG from complete output) and a default verdict (FLAG from missing verdict: line due to truncation or malformed output). Truncation-derived verdicts MUST NOT count toward quorum consensus without explicit acknowledgment.",
       "category": "Hooks & Enforcement",
       "priority": "must",
-      "background": "nf-stop.js validates verdicts via regex /verdict:\\s*UNAVAIL/i but does not check whether the verdict was extracted from complete output. A slot whose verbose response was truncated at 50KB, losing the verdict: line, silently becomes FLAG — which may break or distort consensus.",
+      "background": "nf-stop.js validates verdicts via regex /verdict:\\s*UNAVAIL/i but does not check whether the verdict was extracted from complete output. A slot whose verbose response was truncated at 50KB, losing the verdict: line, silently becomes FLAG \u2014 which may break or distort consensus.",
       "provenance": {
         "source_file": "hooks/nf-stop.js",
         "source_line": "494-496"
@@ -5906,7 +5902,7 @@
       "text": "Quorum telemetry (quorum-rounds JSONL) MUST record per-slot truncation metadata: whether truncation occurred, which layer triggered it (L1/L2/L3), original output size, and whether the verdict was extracted from complete or truncated data.",
       "category": "Observability & Diagnostics",
       "priority": "must",
-      "background": "recordTelemetry() in call-quorum-slot.cjs records slot, round, verdict, latency, provider, error_type — but has no fields for truncation state. The truncated boolean in quorum-slot-dispatch.cjs exists locally but never propagates to telemetry.",
+      "background": "recordTelemetry() in call-quorum-slot.cjs records slot, round, verdict, latency, provider, error_type \u2014 but has no fields for truncation state. The truncated boolean in quorum-slot-dispatch.cjs exists locally but never propagates to telemetry.",
       "provenance": {
         "source_file": "bin/call-quorum-slot.cjs",
         "source_line": "57-80"
@@ -5918,7 +5914,7 @@
       "text": "The emitResultBlock raw field truncation (5KB cap) MUST append a machine-readable truncation suffix and MUST NOT destroy structured verdict/reasoning/citations lines if they appear within the raw output.",
       "category": "Quorum & Dispatch",
       "priority": "should",
-      "background": "emitResultBlock truncates rawOutput to 5000 chars for the YAML raw: field (line 1033) without any marker. Since verdict/reasoning are extracted separately before this truncation, this primarily affects debugging — but if raw is used downstream for re-parsing or audit, the silent truncation creates integrity gaps.",
+      "background": "emitResultBlock truncates rawOutput to 5000 chars for the YAML raw: field (line 1033) without any marker. Since verdict/reasoning are extracted separately before this truncation, this primarily affects debugging \u2014 but if raw is used downstream for re-parsing or audit, the silent truncation creates integrity gaps.",
       "provenance": {
         "source_file": "bin/quorum-slot-dispatch.cjs",
         "source_line": "1032-1037"
@@ -5927,7 +5923,7 @@
     },
     {
       "id": "TUI-01",
-      "text": "TUI \"Add Agent → CLI Agent\" generates a working MCP entry that correctly specifies the CLI binary path and args for Codex/Gemini/OpenCode/Copilot slots",
+      "text": "TUI \"Add Agent \u2192 CLI Agent\" generates a working MCP entry that correctly specifies the CLI binary path and args for Codex/Gemini/OpenCode/Copilot slots",
       "category": "TUI",
       "tier": "user",
       "phase": "v0.35-04",
@@ -5951,7 +5947,7 @@
     },
     {
       "id": "UNIF-01",
-      "text": "All FV checkers append normalized JSON to `check-results.ndjson` — `{ tool, check_id, result, detail, ts }`",
+      "text": "All FV checkers append normalized JSON to `check-results.ndjson` \u2014 `{ tool, check_id, result, detail, ts }`",
       "category": "Quorum & Dispatch",
       "tier": "user",
       "phase": "v0.19-01",
@@ -6012,7 +6008,7 @@
     },
     {
       "id": "UPPAAL-01",
-      "text": "A UPPAAL timed automaton model (`.formal/uppaal/quorum-races.xml`) captures the concurrency structure of the quorum protocol — specifically when concurrent slot responses and timeout expirations fire relative to each other. The model uses `runtime_ms` bounds from `check-results.ndjson` as empirical timing constraints (clock guards and invariants), not hardcoded constants.",
+      "text": "A UPPAAL timed automaton model (`.formal/uppaal/quorum-races.xml`) captures the concurrency structure of the quorum protocol \u2014 specifically when concurrent slot responses and timeout expirations fire relative to each other. The model uses `runtime_ms` bounds from `check-results.ndjson` as empirical timing constraints (clock guards and invariants), not hardcoded constants.",
       "category": "UPPAAL Timed Race Modeling",
       "tier": "user",
       "phase": "v0.20-07",
@@ -6080,7 +6076,7 @@
     },
     {
       "id": "UPS-03",
-      "text": "UserPromptSubmit hook injects quorum instructions via `hookSpecificOutput.additionalContext` (not systemMessage — goes into Claude's context window)",
+      "text": "UserPromptSubmit hook injects quorum instructions via `hookSpecificOutput.additionalContext` (not systemMessage \u2014 goes into Claude's context window)",
       "category": "Hooks & Enforcement",
       "tier": "user",
       "phase": "unknown",
@@ -6185,7 +6181,7 @@
     },
     {
       "id": "VERF-01",
-      "text": "File-based execution state — execution-progress.cjs tracks plan/task completion state to disk, survives compaction",
+      "text": "File-based execution state \u2014 execution-progress.cjs tracks plan/task completion state to disk, survives compaction",
       "category": "Verification & Execution State",
       "tier": "user",
       "phase": "v0.30-02",
@@ -6197,7 +6193,7 @@
     },
     {
       "id": "VERF-02",
-      "text": "Continuous test verification — PostToolUse hook triggers boundary-detection checks during execution with budget cap",
+      "text": "Continuous test verification \u2014 PostToolUse hook triggers boundary-detection checks during execution with budget cap",
       "category": "Verification & Execution State",
       "tier": "user",
       "phase": "v0.30-05",
@@ -6209,7 +6205,7 @@
     },
     {
       "id": "VERF-03",
-      "text": "Machine-verifiable completion — done_conditions in task schema enable automated evaluateAllConditions check",
+      "text": "Machine-verifiable completion \u2014 done_conditions in task schema enable automated evaluateAllConditions check",
       "category": "Verification & Execution State",
       "tier": "user",
       "phase": "v0.30-05",
@@ -6439,6 +6435,19 @@
         "source_file": ".planning/milestones/v0.35-REQUIREMENTS.md",
         "milestone": "unknown"
       }
+    },
+    {
+      "id": "AGENT-04",
+      "text": "nForma skills use AGENT_SKILLS_DIR env var for skills discovery, not hardcoded Claude Code paths \u2014 enabling agent-agnostic skill discovery across all coding agents",
+      "category": "MCP & Agents",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": "scripts/pr-merge-autopilot.sh",
+        "milestone": "unknown"
+      },
+      "category_raw": "Agent Roster"
     }
   ]
 }
