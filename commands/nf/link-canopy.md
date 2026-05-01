@@ -28,22 +28,38 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// ── Daintree-first path resolver with canopy-app fallback (issue 138) ──
+// Daintree is the renamed product; legacy installs may still use canopy-app paths.
 const platform = process.platform;
-let configPath;
-if (platform === 'darwin') {
-  configPath = path.join(os.homedir(), 'Library', 'Application Support', 'canopy-app', 'config.json');
-} else if (platform === 'win32') {
-  configPath = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'canopy-app', 'config.json');
-} else {
-  configPath = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'canopy-app', 'config.json');
+function resolvePath(productName) {
+  if (platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', productName, 'config.json');
+  if (platform === 'win32') return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), productName, 'config.json');
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), productName, 'config.json');
 }
+const daintreeConfigPath = resolvePath('Daintree');
+const canopyConfigPath = resolvePath('canopy-app');
+let configPath = null;
+let productName = null;
+if (fs.existsSync(daintreeConfigPath)) { configPath = daintreeConfigPath; productName = 'Daintree'; }
+else if (fs.existsSync(canopyConfigPath)) { configPath = canopyConfigPath; productName = 'canopy-app'; }
+else { configPath = daintreeConfigPath; productName = 'Daintree'; } // for the not-found banner
 
-const mcpPath = path.join(os.homedir(), '.canopy', 'mcp.json');
-const pluginsDir = path.join(os.homedir(), '.canopy', 'plugins');
+// MCP and plugins dir: Daintree-first (~/.daintree/...), canopy-app fallback (~/.canopy/...)
+const daintreeMcpPath = path.join(os.homedir(), '.daintree', 'mcp.json');
+const canopyMcpPath = path.join(os.homedir(), '.canopy', 'mcp.json');
+const mcpPath = fs.existsSync(daintreeMcpPath) ? daintreeMcpPath : canopyMcpPath;
+
+const daintreePluginsDir = path.join(os.homedir(), '.daintree', 'plugins');
+const canopyPluginsDir = path.join(os.homedir(), '.canopy', 'plugins');
+let pluginsDir = canopyPluginsDir;
+try { if (fs.statSync(daintreePluginsDir).isDirectory()) pluginsDir = daintreePluginsDir; } catch (e) {}
 
 const result = {
   platform,
+  productName,
   configPath,
+  daintreeConfigPath,
+  canopyConfigPath,
   configExists: false,
   mcpPath,
   mcpExists: false,
@@ -52,7 +68,10 @@ const result = {
   mcp: null,
   agents: [],
   userAgents: [],
-  agentSettings: {}
+  agentSettings: {},
+  customPresets: {},
+  globalEnv: {},
+  providerTemplates: {}
 };
 
 // Check config.json
@@ -70,6 +89,13 @@ try {
   if (config.userAgentRegistry) {
     result.userAgents = Object.keys(config.userAgentRegistry);
   }
+
+  // Extract Daintree extended agent settings (issue 138 AC1)
+  if (config.agentSettings) {
+    result.customPresets = config.agentSettings.customPresets || {};
+    result.globalEnv = config.agentSettings.globalEnv || {};
+    result.providerTemplates = config.agentSettings.providerTemplates || {};
+  }
 } catch (e) {
   // config.json not found or unreadable
 }
@@ -78,8 +104,9 @@ try {
 try {
   const mcp = JSON.parse(fs.readFileSync(mcpPath, 'utf8'));
   result.mcpExists = true;
-  if (mcp.mcpServers && mcp.mcpServers.canopy) {
-    result.mcp = mcp.mcpServers.canopy;
+  // Look up under "daintree" key first, fall back to legacy "canopy"
+  if (mcp.mcpServers && (mcp.mcpServers.daintree || mcp.mcpServers.canopy)) {
+    result.mcp = mcp.mcpServers.daintree || mcp.mcpServers.canopy;
   }
 } catch (e) {
   // mcp.json not found
@@ -106,11 +133,15 @@ Display:
  nForma ► LINK CANOPY — NOT FOUND
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Canopy config not found at:
-  {configPath}
+Daintree (or legacy Canopy) config not found at:
+  {daintreeConfigPath}
 
-Install Canopy IDE and run it once to generate config,
-then re-run /nf:link-canopy.
+Also tried legacy path:
+  {canopyConfigPath}
+
+Install Daintree IDE and run it once to generate config,
+then re-run /nf:link-canopy. Legacy canopy-app installs are
+also detected automatically.
 ```
 
 Stop.
@@ -124,6 +155,7 @@ Display discovery banner:
  nForma ► LINK CANOPY — DISCOVERED
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+  Product:       {productName}     (Daintree, or canopy-app on legacy installs)
   Platform:      {platform}
   Config:        {configPath}
   MCP Server:    {mcp.url or "not configured"}
@@ -137,6 +169,15 @@ Display discovery banner:
 
   User Agents ({userAgents.length}):
     {comma-separated list or "none"}
+
+  Custom Presets ({Object.keys(customPresets).length}):
+    {comma-separated list of customPresets keys, or "none"}
+
+  Global Env Keys ({Object.keys(globalEnv).length}):
+    {comma-separated list of globalEnv keys, or "none"}
+
+  Provider Templates ({Object.keys(providerTemplates).length}):
+    {comma-separated list of providerTemplates keys, or "none"}
 ```
 
 Continue to Step 2.
