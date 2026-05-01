@@ -149,16 +149,21 @@ test('providers.json: provider field values are canonical kebab-case (lowercase-
   }
 });
 
-test('providers.json: at least one provider maps to 2+ slots (verifying grouping)', () => {
-  assert.ok(providers.length > 0, 'providers.json is empty or unreadable');
-
-  const groupedByProvider = groupByProvider(providers);
-  const multiSlotProvider = Object.entries(groupedByProvider).find(([, slots]) => slots.length >= 2);
-
-  assert.ok(
-    multiSlotProvider,
-    'No provider maps to 2+ slots — Plan 03 must ensure at least one provider has multiple slots for testing provider-skip logic'
-  );
+test('groupByProvider: groups multi-slot fixture into one entry (provider-skip prerequisite)', () => {
+  // Plan 03 needs provider-skip logic to work when 2+ slots share a provider. The shipped
+  // providers.json no longer has any multi-slot provider (the ccr-1..ccr-6 fleet was removed),
+  // so this assertion now uses a synthetic fixture to verify grouping works correctly.
+  // The production providers.json keeping a 1:1 slot:provider mapping is fine — the runtime
+  // behavior is exercised when users add their own ccr-* or other multi-slot configurations.
+  const fixture = [
+    { name: 'ccr-1', provider: 'together' },
+    { name: 'ccr-2', provider: 'together' },
+    { name: 'codex-1', provider: 'openai' },
+  ];
+  const grouped = groupByProvider(fixture);
+  assert.equal(Object.keys(grouped).length, 2, 'must produce 2 provider buckets');
+  assert.equal(grouped.together.length, 2, 'together must have 2 slots');
+  assert.equal(grouped.openai.length, 1, 'openai must have 1 slot');
 });
 
 const NF_PROMPT_PATH = path.resolve(__dirname, '../hooks/nf-prompt.js');

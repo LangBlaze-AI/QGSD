@@ -52,7 +52,7 @@ NF_EVAL
 )
 ```
 
-`$SLOT_NAMES` is now a JSON array string. Example: `["codex-1","gemini-1","opencode-1","copilot-1","claude-1","ccr-1","ccr-2","ccr-3","ccr-4","ccr-5","ccr-6"]`
+`$SLOT_NAMES` is now a JSON array string. Example with the default fleet: `["codex-1","gemini-1","opencode-1","copilot-1","claude-1"]`. With user-added Claude Code Router slots, the array also includes entries like `"ccr-1"`, `"ccr-2"`, etc. — those are no longer pre-installed.
 
 Parse the slot count from `$SLOT_NAMES` (array length) for the banner. Store as `$SLOT_COUNT`.
 
@@ -352,7 +352,7 @@ If no repairs were attempted, skip this step.
 
   Repaired:
     claude-1: SERVICE_DOWN → INFERENCE_OK
-    ccr-3: SERVICE_DOWN → INFERENCE_OK
+    codex-1: SERVICE_DOWN → INFERENCE_OK
 
   Still broken (manual action needed):
     gemini-1: QUOTA_EXCEEDED — wait ~30min
