@@ -8,6 +8,17 @@ formal_check:
   failed: 0
   skipped: 0
   counterexamples: []
+implementation_evolution:
+  status: "This static-only verification was based on the ORIGINAL plan, which assumed a different Daintree schema and a merge-style import. Live runtime testing surfaced both schema and design errors, leading to a redesign. The 7/7 truths below were verified against the original code paths but those paths have since been replaced. The redesigned implementation has been runtime-verified separately:"
+  runtime_verification:
+    - "Discovery against live Daintree v20 install: banner correctly reports 2 presets (Z.AI, MiniMax) under the claude agent — confirms per-agent array schema is read correctly"
+    - "Fan-out import produces claude-z-ai and claude-minimax provider entries cloned from claude-1, with Z.AI/MiniMax env overlaid; vanilla claude-1 untouched"
+    - "All 7 resulting slots respond to MCP initialize handshake (~95-220ms each) per the SessionStart slot-health probe (#141)"
+    - "MCP server entries get UNIFIED_PROVIDERS_CONFIG override pointing at the installed providers.json (otherwise unified-mcp-server.mjs reads the repo source by default and exits 'Unknown PROVIDER_SLOT' for the new entries)"
+    - "Backups created for providers.json, ~/.claude.json, ~/.claude/nf.json before any change"
+  stale_assertions:
+    - "Step 1/2d don't surface or use providerTemplates (does not exist in Daintree v20) or globalEnv (real key: globalEnvironmentVariables)"
+    - "Step 2d is fan-out, not merge. Vanilla slots are never overwritten. Preset-linked slots (matched by daintree_preset_id) are REPLACED-IN-PLACE on re-import — not non-overwrite-merged"
 human_verification:
   - test: "Run /nf:link-canopy on a system with Daintree installed locally"
     expected: "DISCOVERED banner shows Product: Daintree, Custom Presets count, Global Env Keys count, Provider Templates count; Step 2d offers preset->provider env merge with allowlist banner; Step 3d/3e writes customPresets to Daintree config.json with brand colors"

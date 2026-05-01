@@ -343,9 +343,9 @@ If everything is aligned (all installed CLIs are wired up, all MCP servers have 
 
 **Daintree IDE bridge (issue 138):** if `result.daintree.installed` is true AND `result.nforma.commands_synced` is true, mention to the user:
 
-> I see Daintree (or legacy Canopy) is installed at `{result.daintree.config_path}` with {result.daintree.custom_preset_count} custom preset(s). Run `/nf:link-canopy` to import preset env overrides into nForma's providers and export nForma's quorum agents back as Daintree customPresets.
+> I see Daintree (or legacy Canopy) is installed at `{result.daintree.config_path}` with {result.daintree.custom_preset_count} custom preset(s). Run `/nf:link-canopy` to fan out each preset into its own nForma quorum slot (cloned from the matching vanilla provider) and export nForma's quorum agents back as Daintree customPresets.
 
-This bridge is bidirectional — Daintree presets flow into `providers.json` and nForma quorum slots flow into Daintree's `agentSettings.customPresets`. Re-running `/nf:link-canopy` is idempotent (existing entries are never overwritten).
+This bridge is bidirectional — Daintree presets fan out into new entries in `providers.json` (each preset becomes its own slot named `{agent}-{slug(preset.name)}`, e.g. `claude-z-ai`), and nForma quorum slots flow into Daintree's per-agent `agentSettings.agents.<agent>.customPresets[]` arrays. Re-running `/nf:link-canopy` is idempotent: vanilla nForma slots are untouched, preset-linked slots are updated in place by `daintree_preset_id`, and exported customPresets are never overwritten on re-export.
 
 Then continue to the next step.
 

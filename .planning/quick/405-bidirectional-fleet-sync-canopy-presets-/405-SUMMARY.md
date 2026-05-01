@@ -2,14 +2,21 @@
 phase: 405-bidirectional-fleet-sync-canopy-presets
 plan: 01
 subsystem: link-canopy
-tags: [issue-138, daintree, canopy, providers, customPresets, idempotency, brand-colors]
+tags: [issue-138, daintree, canopy, providers, customPresets, idempotency, brand-colors, fan-out, schema-correction]
 dependency-graph:
   requires: [commands/nf/link-canopy.md, onboard.md, bin/providers.json]
   provides: [bidirectional-fleet-sync]
   affects: [link-canopy slash command, onboard documentation]
 tech-stack:
   added: []
-  patterns: [allowlist-gated-globalEnv-merge, BRAND_COLORS-lookup-table, Daintree-first-with-canopy-app-fallback, idempotent-merge-with-non-overwrite-guard]
+  patterns: [allowlist-gated-globalEnv-merge, BRAND_COLORS-lookup-table, Daintree-first-with-canopy-app-fallback, fan-out-import-per-preset, family-gated-vanilla-match, daintree-preset-id-idempotency]
+implementation_evolution:
+  status: "Body below describes the ORIGINAL plan-time design. Shipped implementation diverges (see 405-PLAN.md implementation_evolution block for full list). Body retained for historical reference."
+  key_corrections:
+    - "Step 1 result object: customPresetsByAgent (per-agent map of arrays) + globalEnvironmentVariables (top-level), NOT customPresets/globalEnv/providerTemplates"
+    - "Step 2d: fan-out (each preset → new slot {agentName}-{slug}), NOT merge into vanilla provider env"
+    - "Step 3e: writes to agentSettings.agents.<agent>.customPresets[] arrays, NOT to a flat agentSettings.customPresets[id] object map"
+    - "Manual checklist references like agentSettings.customPresets['nf-<slot>'] are stale — actual writes are array .push under the per-agent bucket"
 key-files:
   created:
     - .planning/quick/405-bidirectional-fleet-sync-canopy-presets-/405-SUMMARY.md

@@ -332,7 +332,7 @@ This writes to three live files (each backed up first):
 - collapse runs of `-`
 - trim leading/trailing `-`
 
-The new slot name is `{vanillaSlotName}-{slug}` (e.g., `claude-z-ai`). On collision (two presets slugifying to the same value), append `-2`, `-3`, etc.
+The new slot name is `{agentName}-{slug}` — using the **Daintree agent name** as the prefix (NOT the vanilla slot's full name). With vanilla `claude-1` and preset `Z.AI`, the result is `claude-z-ai`, not `claude-1-z-ai`. On collision (two presets slugifying to the same value within one agent), append `-2`, `-3`, etc.
 
 **Family gate.** A preset is matched to the *vanilla* slot whose `mainTool === agentName` AND `provider === inferredFamily(preset.env)`. Family is inferred from the preset's allowlisted env-key prefixes:
 
@@ -350,8 +350,11 @@ The new slot name is `{vanillaSlotName}-{slug}` (e.g., `claude-z-ai`). On collis
 If no family can be inferred (e.g., preset only has generic `MODEL` / `*_BASE_URL` / `*_API_KEY`), the family check is bypassed and any provider with `mainTool === agentName` is acceptable as the vanilla. If multiple vanilla candidates exist after both gates, prefer the one with no `daintree_preset_id` field (the original) and the lowest numeric suffix (`claude-1` over `claude-2`).
 
 **Idempotency (AC5).** Each new slot carries a `daintree_preset_id` field equal to `preset.id`. On re-import:
-- An existing provider with the same `daintree_preset_id` is updated in place (`description`, `env`, `model` overlay refreshed) but its `name` is kept stable — even if the preset name changed in Daintree.
-- A provider whose `daintree_preset_id` references a preset Daintree no longer has is **preserved by default** (option b — the user removes it manually). This avoids silently destroying slots already referenced in user prompts/scripts.
+- A **vanilla** slot (no `daintree_preset_id`) is never touched. Its env, model, and description survive every re-import.
+- A **preset-linked** slot (matched by `daintree_preset_id`) is updated in place: the allowlisted preset env keys overlay the slot's existing env (preset values win on collision; non-allowlisted env the user added by hand is preserved), and `model` / `description` / `daintree_preset_name` / `daintree_preset_family` are refreshed. The slot's `name` is kept stable even if the preset name changed in Daintree.
+- A preset-linked slot whose `daintree_preset_id` references a preset Daintree no longer has is **preserved by default** (option b — the user removes it manually). This avoids silently destroying slots already referenced in user prompts/scripts.
+
+The export direction (Step 3e) is also idempotent but with **no-overwrite** semantics: existing `customPresets[]` entries with a matching `id` are left untouched (status `unchanged`). To force a re-export, delete the preset in Daintree first.
 
 **Allowlist (AC5 safety guardrail).** Preset env keys must match this regex before being copied into the new slot's env:
 
@@ -517,7 +520,11 @@ for (const [agentName, presets] of Object.entries(customPresetsByAgent)) {
     // Build the new slot name. Format: {agentName}-{slug(preset.name)} — e.g., "claude-z-ai".
     // Use the Daintree agent name as prefix (NOT the vanilla slot's full name) so a vanilla
     // "claude-1" and a preset "Z.AI" produce "claude-z-ai", not "claude-1-z-ai".
-    const baseSlug = slugify(preset.name) || ('preset-' + Math.abs([...preset.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 0)).toString(36));
+    // String() coercion makes the id-hash fallback safe for non-string ids (numbers, etc).
+    const baseSlug = slugify(preset.name) || (
+      'preset-' +
+      Math.abs([...String(preset.id)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 0)).toString(36)
+    );
     let candidate = agentName + '-' + baseSlug;
     if (!SLOT_NAME_RE.test(candidate)) candidate = agentName + '-preset'; // last resort
     let n = 2;
@@ -543,7 +550,16 @@ for (const item of plan) {
     const v = item.vanilla;
     const newProvider = JSON.parse(JSON.stringify(v));
     newProvider.name = item.newName;
-    newProvider.env = item.env;
+    // Overlay allowlisted preset env onto the vanilla provider's env (rather than wholesale
+    // replacement) so the vanilla's runtime-required env fields are preserved alongside the
+    // preset overrides. Preset values win on collision.
+    newProvider.env = { ...(v.env || {}), ...item.env };
+    // If the preset carries a MODEL override, propagate it to provider.model. This keeps Step 3d
+    // export round-trip-correct: the export reads providerEntry.model when building the Daintree
+    // customPreset, so failing to update model here would later export the vanilla model.
+    if (typeof item.env?.MODEL === 'string' && item.env.MODEL.length > 0) {
+      newProvider.model = item.env.MODEL;
+    }
     newProvider.description = (v.description || '') + ' — Daintree preset: ' + item.preset.name;
     newProvider.daintree_preset_id = item.preset.id;
     newProvider.daintree_preset_name = item.preset.name;
@@ -552,7 +568,17 @@ for (const item of plan) {
     written.providers.added.push({ name: item.newName, presetName: item.preset.name, presetId: item.preset.id, vanilla: v.name, envKeys: Object.keys(item.env) });
   } else if (item.kind === 'update') {
     const existing = providersData.providers.find(p => p.daintree_preset_id === item.preset.id);
-    existing.env = item.env;
+    // Same overlay rule on update — preserve any non-allowlisted runtime env the user may have
+    // hand-added on the slot, replacing only the keys the preset actually carries.
+    existing.env = { ...(existing.env || {}), ...item.env };
+    if (typeof item.env?.MODEL === 'string' && item.env.MODEL.length > 0) {
+      existing.model = item.env.MODEL;
+    }
+    // Refresh description so a renamed preset shows the new name on the slot, matching the
+    // documented update-in-place semantics in the Step 2d preamble.
+    if (item.vanilla) {
+      existing.description = (item.vanilla.description || '') + ' — Daintree preset: ' + item.preset.name;
+    }
     existing.daintree_preset_name = item.preset.name;
     if (item.family) existing.daintree_preset_family = item.family;
     written.providers.updated.push({ name: existing.name, presetName: item.preset.name, presetId: item.preset.id, envKeys: Object.keys(item.env) });
@@ -855,10 +881,11 @@ config.agentSettings.agents = config.agentSettings.agents || {};
 
 // Pick the Daintree agent that should host this preset. We prefer providerEntry.mainTool
 // (which is the CLI binary name and matches Daintree's agent keys: claude, codex, gemini, opencode).
-// Fall back to slot.cli, then to 'claude' as a last resort. If the chosen agent doesn't exist
-// in Daintree's agents map, the preset export is skipped for that slot (logged with status).
+// Treat slot.cli === 'unknown' as missing — Step 3a fills that literal when provider.cli is null,
+// and we don't want it written into the registry as a real command name.
 function targetAgentFor(slot, providerEntry) {
-  return providerEntry.mainTool || slot.cli || 'claude';
+  const fromSlotCli = slot.cli && slot.cli !== 'unknown' ? slot.cli : null;
+  return providerEntry.mainTool || fromSlotCli || 'claude';
 }
 
 const registered = [];
@@ -870,10 +897,15 @@ for (const slot of selectedSlots) {
   if (config.userAgentRegistry[agentId]) {
     registered.push({ id: agentId, kind: 'userAgent', status: 'skipped (already exists)' });
   } else {
+    // Pick a real command name. Step 3a sets slot.cli to the literal 'unknown' when
+    // provider.cli is null, so prefer providerEntry.mainTool (the CLI binary) over that
+    // sentinel — falling back to the literal only if mainTool is also missing, then 'node'.
+    const cliFromSlot = slot.cli && slot.cli !== 'unknown' ? slot.cli : null;
+    const command = (cliFromSlot || providerEntry.mainTool || 'node').split('/').pop();
     config.userAgentRegistry[agentId] = {
       id: agentId,
       name: 'nForma: ' + slot.name,
-      command: (slot.cli || providerEntry.mainTool || 'node').split('/').pop(),
+      command,
       color: colorFor(providerEntry.provider || slot.display_provider),
       iconId: 'brain-circuit',
       supportsContextInjection: true,
@@ -887,24 +919,38 @@ for (const slot of selectedSlots) {
   // Each entry shape: {id, name, description, env, color, fallbacks: [], dangerousEnabled}.
   // Idempotency by id: existing entries with the same id show 'unchanged' and are NEVER overwritten.
   const presetId = 'nf-' + slot.name;
-  const targetAgent = targetAgentFor(slot, providerEntry);
-  const agentBucket = config.agentSettings.agents[targetAgent];
+  let targetAgent = targetAgentFor(slot, providerEntry);
+  let agentBucket = config.agentSettings.agents[targetAgent];
+
+  // Wrapper/router slots (e.g. CCR pointing at provider.mainTool not in Daintree's agent set)
+  // would otherwise be silently dropped from export. Fall back to the 'claude' bucket if Daintree
+  // has it — covers the common case where the user runs the slot via the claude CLI even though
+  // the upstream provider differs (Together.xyz, OpenRouter, etc.).
+  const targetAgentRequested = targetAgent;
+  let usedFallback = false;
+  if (!agentBucket && config.agentSettings.agents.claude) {
+    targetAgent = 'claude';
+    agentBucket = config.agentSettings.agents.claude;
+    usedFallback = true;
+  }
 
   if (!agentBucket) {
-    registered.push({ id: presetId, kind: 'customPreset', status: 'skipped (Daintree has no agent: ' + targetAgent + ')', targetAgent });
+    registered.push({ id: presetId, kind: 'customPreset', status: 'skipped (Daintree has no agent: ' + targetAgentRequested + ')', targetAgent: targetAgentRequested });
   } else {
     if (!Array.isArray(agentBucket.customPresets)) agentBucket.customPresets = [];
     const existing = agentBucket.customPresets.find(p => p && p.id === presetId);
     if (existing) {
       registered.push({ id: presetId, kind: 'customPreset', status: 'unchanged', targetAgent });
     } else {
-      // Derive env from providers.json. We emit ${ENV_VAR} placeholders for *_API_KEY so Daintree
-      // resolves secrets from the user's runtime env at preset-launch time (never embed secrets here).
+      // Derive env from providers.json. *_API_KEY keys are emitted as ${KEY} placeholders so
+      // Daintree resolves secrets from the user's runtime env at preset-launch time (no embedded
+      // secrets in the config). *_BASE_URL keys are copied verbatim — they're endpoints, not
+      // secrets, and per-provider overrides need to round-trip into Daintree.
       const env = {};
       if (providerEntry.model) env.MODEL = providerEntry.model;
-      if (providerEntry.env && providerEntry.env.ANTHROPIC_BASE_URL) env.ANTHROPIC_BASE_URL = providerEntry.env.ANTHROPIC_BASE_URL;
-      for (const k of Object.keys(providerEntry.env || {})) {
+      for (const [k, v] of Object.entries(providerEntry.env || {})) {
         if (/_API_KEY$/.test(k)) env[k] = '${' + k + '}';
+        else if (/_BASE_URL$/.test(k)) env[k] = v;
       }
 
       agentBucket.customPresets.push({
@@ -916,7 +962,7 @@ for (const slot of selectedSlots) {
         fallbacks: [],
         dangerousEnabled: false
       });
-      registered.push({ id: presetId, kind: 'customPreset', status: 'added', targetAgent });
+      registered.push({ id: presetId, kind: 'customPreset', status: usedFallback ? 'added (fallback to claude)' : 'added', targetAgent, ...(usedFallback ? { targetAgentRequested } : {}) });
     }
   }
 }
@@ -948,8 +994,8 @@ Re-running this command shows `unchanged` for any customPresets that already exi
 Step 3e is implemented as part of Step 3d's atomic write above (one config read, one config write — avoids dual-backup risk). What it does:
 
 1. **Builds a `customPresets` entry per selected quorum slot** (id = `nf-{slot.name}`, mirroring the userAgentRegistry id).
-2. **Routes the entry to the correct Daintree agent bucket** — Daintree v20 stores `customPresets` as a per-agent **array** at `agentSettings.agents.<agent>.customPresets[]`. The target agent is `providerEntry.mainTool` (the CLI binary the slot drives), falling back to `slot.cli`, then `claude`. If Daintree has no matching agent, the preset is skipped for that slot with a clear status row.
-3. **Derives env from `providers.json`** — MODEL is copied verbatim, ANTHROPIC_BASE_URL is copied if set, and any `*_API_KEY` keys are emitted as Daintree placeholder strings `${KEY_NAME}` so Daintree resolves them from the user's runtime env (no secrets embedded in config).
+2. **Routes the entry to the correct Daintree agent bucket** — Daintree v20 stores `customPresets` as a per-agent **array** at `agentSettings.agents.<agent>.customPresets[]`. The target agent is `providerEntry.mainTool` (the CLI binary the slot drives), falling back to `slot.cli` (treating the literal `'unknown'` as missing), then `claude`. If the resolved target agent doesn't exist in Daintree's agent map, we fall back to the `claude` bucket (covers wrapper/router slots like CCR that drive the claude CLI but route to a non-anthropic provider) — and if even that's missing, the preset is skipped for that slot with a clear status row.
+3. **Derives env from `providers.json`** — MODEL is copied verbatim, every `*_BASE_URL` (e.g. ANTHROPIC_BASE_URL, OPENAI_BASE_URL) is copied verbatim so endpoint overrides round-trip back to Daintree, and any `*_API_KEY` keys are emitted as Daintree placeholder strings `${KEY_NAME}` so Daintree resolves them from the user's runtime env (no secrets embedded in config).
 4. **Picks brand color from `BRAND_COLORS`** — keyed by `providerEntry.provider` (lowercased), e.g., `openai → #10a37f`, `anthropic → #d97757`, `together.xyz → #0f6fff`. Unknown providers fall back to `#6366f1` (indigo).
 5. **Idempotency (AC5):** existing entries (matched by `id` inside the per-agent array) are left untouched and emit `status: 'unchanged'`. The user must manually delete a preset in Daintree to force re-export.
 
@@ -974,8 +1020,12 @@ Display:
   Register userAgents:     {registered ? "✓ " + userAgentsAddedCount + " added, " + userAgentsSkippedCount + " skipped" : "○ Skipped"}
   Custom presets exported: {customPresetsAddedCount > 0 || customPresetsUnchangedCount > 0 ? "✓ " + customPresetsAddedCount + " added, " + customPresetsUnchangedCount + " unchanged" : "○ Skipped"}
 
-Re-run /nf:link-canopy any time to refresh the link.
-Existing customPresets and providers.json env values are NEVER overwritten (idempotent — issue 138 AC5).
+Re-run /nf:link-canopy any time to refresh the link. Idempotency rules:
+  • Vanilla nForma slots (no daintree_preset_id) are never touched.
+  • Preset-linked slots (matched by daintree_preset_id) are updated in place — env is overlaid
+    with the latest preset values, name is kept stable.
+  • Daintree customPresets exported by nForma (id = nf-{slot}) are never overwritten — re-runs
+    show 'unchanged'. Delete the preset in Daintree first to force a re-export.
 ```
 
 </process>
@@ -987,7 +1037,7 @@ Existing customPresets and providers.json env values are NEVER overwritten (idem
 - Not-found case handled gracefully with install instructions for both Daintree and legacy canopy-app paths
 - Import writes `canopy` section to ~/.claude/nf.json with MCP URL and agent list
 - nf.json backup created before any write
-- Import path merges per-agent preset env (matched to providers via provider.mainTool === agentName) and top-level globalEnvironmentVariables into providers.json without overwriting non-empty values (issue 138 AC2 + AC5)
+- Import path fans out per-agent presets into new provider entries (matched via provider.mainTool === agentName + family inferred from preset env), overlaying allowlisted env onto the cloned vanilla. Vanilla slots are untouched; preset-linked slots are replaced in place on re-import. (issue 138 AC2 + AC5)
 - providers.json backup created before any env merge write
 - Both preset env and globalEnvironmentVariables merges are gated by allowlist `^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)` — covers all BRAND_COLORS providers
 - Registration writes to Canopy's userAgentRegistry with `nf-` prefixed agent IDs

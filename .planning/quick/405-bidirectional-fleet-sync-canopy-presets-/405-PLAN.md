@@ -15,6 +15,19 @@ requirements:
   - ISSUE-138-AC4
   - ISSUE-138-AC5
 formal_artifacts: none
+implementation_evolution:
+  status: "Plan body below documents the ORIGINAL design. Live testing against a real Daintree v20 install surfaced schema and design errors; the shipped implementation diverges from this plan as follows. The body is left intact for historical reference."
+  schema_corrections:
+    - "customPresets is a per-agent ARRAY at agentSettings.agents.<agent>.customPresets[], not an object map at agentSettings.customPresets"
+    - "globalEnv → globalEnvironmentVariables, lives at the config root (not under agentSettings)"
+    - "providerTemplates does not exist in Daintree v20 — entirely removed from the command"
+  design_changes:
+    - "Step 2d switched from 'merge preset env into vanilla provider' to 'fan-out: each preset becomes its own new slot named {agentName}-{slug(preset.name)}, cloned from the matching vanilla'. Original active-preset merge would have given Together-routed ccr-* slots Anthropic env (verified broken via runtime test)."
+    - "Family gate added on Step 2d match: provider.mainTool === agentName AND provider.provider === inferredFamily(preset.env). Without this gate, fan-out would still spread Anthropic env into Together-routed slots."
+    - "Step 2d writes to THREE files now (not just providers.json): providers.json + ~/.claude.json mcpServers (cloned MCP entry per new slot) + ~/.claude/nf.json quorum_active. UNIFIED_PROVIDERS_CONFIG must be set on the cloned MCP entry so unified-mcp-server.mjs sees the new slot."
+    - "Idempotency on re-import is REPLACE-IN-PLACE for preset-linked slots (matched by daintree_preset_id), not non-overwrite. Vanilla slots are still never touched. Plan's 'never overwrite' wording applies only to vanilla and to the export side."
+    - "Step 3e routes presets to the per-agent customPresets array (push, not object key set). Daintree-agent fallback to 'claude' added for wrapper/router slots."
+    - "Slot-name slug uses {agentName}-{slug}, NOT {vanillaSlotName}-{slug}. With vanilla 'claude-1' + preset 'Z.AI' → 'claude-z-ai', not 'claude-1-z-ai'."
 must_haves:
   truths:
     - "Running /nf:link-canopy on a system with Daintree installed (productName Daintree, paths under ~/Library/Application Support/Daintree on macOS / %APPDATA%/Daintree on Windows / ~/.config/Daintree on Linux) detects the install and reads its config.json"
