@@ -195,11 +195,13 @@ Display discovery banner:
 
   Custom Presets ({presetCount} across {Object.keys(customPresetsByAgent).length} agent(s)):
     {for each [agent, presets] in customPresetsByAgent:
-       activeId = activePresetIdByAgent[agent]
+       activeId = String(activePresetIdByAgent[agent] ?? "")
        slugify = name => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-       "{agent} (active = {presets.find(p => p.id === activeId)?.name ?? "(none)"}):"
+       // String() coercion on both sides — Daintree may emit presetId/preset.id as a number or
+       // a string; without normalization the active marker would silently show "(none)".
+       "{agent} (active = {presets.find(p => String(p.id) === activeId)?.name ?? "(none)"}):"
        for each preset in presets:
-         marker = preset.id === activeId ? "★" : " "
+         marker = String(preset.id) === activeId ? "★" : " "
          "  {marker} {preset.name}  →  would create slot: {agent}-{slugify(preset.name)}"}
     {if presetCount === 0: "none"}
 
@@ -664,7 +666,7 @@ The environment variables are:
 
 Parse IMPORT_RESULT. Display the result:
 
-```
+```text
 ✓ Fan-out import complete
 
 providers.json:
@@ -998,7 +1000,7 @@ NF_EVAL
 
 Parse REGISTER_RESULT. If `written: true`, display two columns — userAgentRegistry entries on the left, customPresets entries on the right — so the user sees both export channels:
 
-```
+```text
 ✓ Agents registered in Canopy
 
   userAgentRegistry                       customPresets (Daintree IDE preset palette)
