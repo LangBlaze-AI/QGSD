@@ -42,7 +42,7 @@ See: .planning/PROJECT.md
 | 404 | Build nf:debug autonomy benchmark with graded difficulty stubs, fix-cycle runner, and standalone scorer | 2026-04-17 | 27ad207d | Verified | [404-build-nf-debug-autonomy-benchmark-with-g](.planning/quick/404-build-nf-debug-autonomy-benchmark-with-g/) |
 | 405 | Implement PR merge-readiness autopilot script (issue #136) | 2026-04-30 | c86519ab | Verified | [405-work-on-issue-136](./quick/405-work-on-issue-136/) |
 | 405 | Bidirectional fleet sync: Canopy presets <-> nForma providers (issue 138) | 2026-05-01 | fc2a0e25 | Needs Review | [405-bidirectional-fleet-sync-canopy-presets-](./quick/405-bidirectional-fleet-sync-canopy-presets-/) |
-| 407 | Cleanup manifest-driven CLI detection (issue 149) | 2026-05-01 | 3f19b4c7 | Pending | [407-issue-149](./quick/407-issue-149/) |
+| 407 | Cleanup manifest-driven CLI detection (issue 149) | 2026-05-01 | 3f19b4c7 | Verified | [407-issue-149](./quick/407-issue-149/) |
 
 ## Session Log
 
