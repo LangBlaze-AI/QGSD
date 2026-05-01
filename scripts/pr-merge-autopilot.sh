@@ -11,7 +11,7 @@ set -euo pipefail
 #
 # Features:
 #   - Poll CI check runs until all pass or a failure is detected
-#   - Resolve review threads from known bots (Copilot, CodeRabbit, Gitar)
+#   - Resolve review threads from known bots (Copilot, CodeRabbit, Gitar) — in parallel with check polling
 #   - Auto-merge via squash when all checks pass and threads are resolved
 #   - Dry-run mode shows what would happen without mutations
 #   - Configurable poll interval (--interval) and timeout (--timeout)
@@ -19,7 +19,7 @@ set -euo pipefail
 #
 # Environment:
 #   NO_COLOR=1 to disable color output
-#   Requires: gh CLI, jq
+#   Requires: gh CLI, jq, awk
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -124,9 +124,7 @@ fi
 
 # ── Determine PR number ──
 if $LATEST; then
-  # Get current branch name
   CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-  # Find PR associated with current branch
   PR_INFO=$(gh pr list --head "$CURRENT_BRANCH" --json number --jq '.[0]')
   if [[ -z "$PR_INFO" ]] || [[ "$PR_INFO" == "null" ]]; then
     echo -e "${RED}ERROR: No open PR found for branch '$CURRENT_BRANCH'${RESET}" >&2
@@ -160,22 +158,216 @@ fi
 
 # ── Helpers ──
 
-# Log with timestamp
 log() {
   echo "[$(date '+%H:%M:%S')] $*"
 }
 
-# Color status output
 status_green() { echo -e "${GREEN}✓ $*${RESET}"; }
 status_yellow() { echo -e "${YELLOW}⊙ $*${RESET}"; }
 status_red() { echo -e "${RED}✗ $*${RESET}"; }
 
-# ── TASK 1: Poll check runs ──
+# ── Known bot usernames ──
+BOT_LOGINS=(
+  "copilot-pull-request-reviewer[bot]"
+  "coderabbitai"
+  "gitar-bot[bot]"
+)
+
+# ── Thread state file (shared between background resolver and polling loop) ──
+THREAD_STATE_FILE="/tmp/pr-${PR_NUMBER}-thread-state.json"
+
+# ── TASK 1 + TASK 2: Poll checks AND resolve threads in parallel ──
+
+log "Starting parallel check polling and thread resolution..."
+echo ""
+
+# Start thread resolution in background
+resolve_threads_bg() {
+  local owner="$1"
+  local repo="$2"
+  local pr_number="$3"
+  local dry_run="$4"
+  local state_file="$5"
+
+  local THREAD_QUERY='
+query($owner:String!, $repo:String!, $number:Int!) {
+  repository(owner:$owner, name:$repo) {
+    pullRequest(number:$number) {
+      reviewThreads(first:100) {
+        nodes {
+          id
+          isResolved
+          comments(first:1) {
+            nodes { author { login } body }
+          }
+        }
+      }
+      comments(first:100) {
+        nodes {
+          id
+          author { login }
+          isMinimized
+        }
+      }
+    }
+  }
+}
+'
+
+  local RESULT
+  RESULT=$(gh api graphql \
+    -f query="$THREAD_QUERY" \
+    -f owner="$owner" \
+    -f repo="$repo" \
+    -F number="$pr_number" \
+    2>/dev/null) || RESULT='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]},"comments":{"nodes":[]}}}}}'
+
+  local THREAD_NODES
+  THREAD_NODES=$(echo "$RESULT" | jq '.data.repository.pullRequest.reviewThreads.nodes // []')
+  local COMMENT_NODES
+  COMMENT_NODES=$(echo "$RESULT" | jq '.data.repository.pullRequest.comments.nodes // []')
+
+  local THREAD_COUNT
+  THREAD_COUNT=$(echo "$THREAD_NODES" | jq 'length')
+  local COMMENT_COUNT
+  COMMENT_COUNT=$(echo "$COMMENT_NODES" | jq 'length')
+
+  # Count unresolved threads by type
+  local unresolved_coderabbitai=0
+  local unresolved_copilot=0
+  local unresolved_human=0
+  local resolved_count=0
+
+  # First pass: categorize unresolved threads
+  while IFS= read -r thread_json; do
+    [[ -z "$thread_json" || "$thread_json" == "null" ]] && continue
+    [[ "$(echo "$thread_json" | jq -r '.isResolved')" == "true" ]] && continue
+
+    local author
+    author=$(echo "$thread_json" | jq -r '.comments.nodes[0].author.login // "unknown"')
+    local author_base="${author%\[bot\]}"
+
+    local is_bot=false
+    for bot_login in "${BOT_LOGINS[@]}"; do
+      local bot_base="${bot_login%\[bot\]}"
+      [[ "$author_base" == "$bot_base" ]] && is_bot=true && break
+    done
+
+    if [[ "$is_bot" == "true" ]]; then
+      case "$author_base" in
+        coderabbitai) unresolved_coderabbitai=$((unresolved_coderabbitai + 1)) ;;
+        copilot-pull-request-reviewer) unresolved_copilot=$((unresolved_copilot + 1)) ;;
+      esac
+    else
+      unresolved_human=$((unresolved_human + 1))
+    fi
+  done <<< "$(echo "$THREAD_NODES" | jq -c '.[]')"
+
+  # Minimize standalone bot comments
+  while IFS= read -r comment_json; do
+    [[ -z "$comment_json" || "$comment_json" == "null" ]] && continue
+    [[ "$(echo "$comment_json" | jq -r '.isMinimized')" == "true" ]] && continue
+
+    local author
+    author=$(echo "$comment_json" | jq -r '.author.login // "unknown"')
+    local author_base="${author%\[bot\]}"
+
+    local is_bot=false
+    for bot_login in "${BOT_LOGINS[@]}"; do
+      local bot_base="${bot_login%\[bot\]}"
+      [[ "$author_base" == "$bot_base" ]] && is_bot=true && break
+    done
+
+    if [[ "$is_bot" == "true" ]]; then
+      local comment_id
+      comment_id=$(echo "$comment_json" | jq -r '.id')
+      if [[ "$dry_run" == "false" ]]; then
+        gh api --method PATCH \
+          "repos/${owner}/${repo}/pulls/comments/${comment_id}" \
+          -f body=" " -f minimized=true >/dev/null 2>&1 || true
+      fi
+    fi
+  done <<< "$(echo "$COMMENT_NODES" | jq -c '.[]')"
+
+  # Write initial scanning state
+  cat > "$state_file" << EOF
+{
+  "status": "scanning",
+  "unresolved_coderabbitai": ${unresolved_coderabbitai},
+  "unresolved_copilot": ${unresolved_copilot},
+  "unresolved_human": ${unresolved_human},
+  "resolved_count": 0,
+  "done": false,
+  "blocked": $([[ $unresolved_human -gt 0 ]] && echo "true" || echo "false")
+}
+EOF
+
+  # Second pass: resolve bot threads
+  while IFS= read -r thread_json; do
+    [[ -z "$thread_json" || "$thread_json" == "null" ]] && continue
+    [[ "$(echo "$thread_json" | jq -r '.isResolved')" == "true" ]] && continue
+
+    local author
+    author=$(echo "$thread_json" | jq -r '.comments.nodes[0].author.login // "unknown"')
+    local author_base="${author%\[bot\]}"
+
+    local is_bot=false
+    for bot_login in "${BOT_LOGINS[@]}"; do
+      local bot_base="${bot_login%\[bot\]}"
+      [[ "$author_base" == "$bot_base" ]] && is_bot=true && break
+    done
+
+    [[ "$is_bot" != "true" ]] && continue
+
+    local thread_id
+    thread_id=$(echo "$thread_json" | jq -r '.id')
+
+    if [[ "$dry_run" == "false" ]]; then
+      gh api graphql -f query='mutation($threadId:ID!, $body:String!) { addPullRequestReviewComment(input:{pullRequestReviewThreadId:$threadId, body:$body}) { comment { id } } }' \
+        -f threadId="$thread_id" -f body="Acknowledged — addressed or accepted as advisory." >/dev/null 2>&1 || true
+      gh api graphql -f query='mutation($threadId:ID!) { resolveReviewThread(input:{threadId:$threadId}) { thread { isResolved } } }' \
+        -f threadId="$thread_id" >/dev/null 2>&1 || true
+    fi
+
+    resolved_count=$((resolved_count + 1))
+
+    # Update state after each resolution
+    cat > "$state_file" << EOF
+{
+  "status": "resolving",
+  "unresolved_coderabbitai": ${unresolved_coderabbitai},
+  "unresolved_copilot": ${unresolved_copilot},
+  "unresolved_human": ${unresolved_human},
+  "resolved_count": ${resolved_count},
+  "done": false,
+  "blocked": $([[ $unresolved_human -gt 0 ]] && echo "true" || echo "false")
+}
+EOF
+  done <<< "$(echo "$THREAD_NODES" | jq -c '.[]')"
+
+  # Write done state
+  cat > "$state_file" << EOF
+{
+  "status": "done",
+  "unresolved_coderabbitai": ${unresolved_coderabbitai},
+  "unresolved_copilot": ${unresolved_copilot},
+  "unresolved_human": ${unresolved_human},
+  "resolved_count": ${resolved_count},
+  "done": true,
+  "blocked": $([[ $unresolved_human -gt 0 ]] && echo "true" || echo "false")
+}
+EOF
+}
+
+# Launch background thread resolver
+resolve_threads_bg "$OWNER" "$REPO" "$PR_NUMBER" "$DRY_RUN" "$THREAD_STATE_FILE" &
+THREAD_BG_PID=$!
+
+# ── Poll check runs (Task 1) ──
 
 log "Task 1: Polling check runs..."
 echo ""
 
-# Poll loop for check runs using `gh pr checks`
 CHECKS_PASSED=0
 CHECKS_FAILED=0
 CHECKS_PENDING=0
@@ -183,19 +375,21 @@ START_TIME=$(date +%s)
 FAILED_CHECKS=""
 
 while true; do
-  # Reset counters
   CHECKS_PASSED=0
   CHECKS_FAILED=0
   CHECKS_PENDING=0
   FAILED_CHECKS=""
 
-  # Use `gh pr checks` — tab-separated output: name, state, elapsed, url
-  # Exit code 0 = all pass, non-zero = some fail or pending
-  # Capture output first to avoid pipefail issues with set -euo pipefail
   CHECKS_OUTPUT=$(gh pr checks "$PR_NUMBER" 2>/dev/null || true)
-  while IFS=$'\t' read -r name state elapsed url; do
-    # Skip empty lines
-    [[ -z "$name" ]] && continue
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+
+    name=$(echo "$line" | awk -F'\t' '{print $1}')
+    state=$(echo "$line" | awk -F'\t' '{print $2}')
+    elapsed=$(echo "$line" | awk -F'\t' '{print $3}')
+
+    [[ -z "$name" || -z "$state" ]] && continue
 
     case "$state" in
       pass|skipping)
@@ -217,7 +411,16 @@ while true; do
 
   TOTAL=$((CHECKS_PASSED + CHECKS_FAILED + CHECKS_PENDING))
 
-  # If no checks found at all, wait and retry
+  # Check thread resolution progress
+  thread_status=""
+  if [[ -f "$THREAD_STATE_FILE" ]]; then
+    thread_resolved=$(jq -r '.resolved_count // 0' "$THREAD_STATE_FILE" 2>/dev/null || echo "0")
+    thread_total=$(jq -r '.unresolved_coderabbitai + unresolved_copilot + unresolved_human + .resolved_count // 0' "$THREAD_STATE_FILE" 2>/dev/null || echo "0")
+    thread_blocked=$(jq -r '.blocked // false' "$THREAD_STATE_FILE" 2>/dev/null || echo "false")
+    thread_done=$(jq -r '.done // false' "$THREAD_STATE_FILE" 2>/dev/null || echo "false")
+    thread_status=" [threads: ${thread_resolved}/${thread_total} resolved]"
+  fi
+
   if [[ $TOTAL -eq 0 ]]; then
     CURRENT_TIME=$(date +%s)
     ELAPSED=$((CURRENT_TIME - START_TIME))
@@ -225,9 +428,10 @@ while true; do
       echo ""
       log "Timeout reached (${TIMEOUT}s) — no checks detected"
       echo -e "${RED}Cannot merge: no CI checks found after ${TIMEOUT}s${RESET}"
+      kill $THREAD_BG_PID 2>/dev/null || true
       exit 1
     fi
-    log "No checks detected yet... (${ELAPSED}s/${TIMEOUT}s)"
+    log "No checks detected yet... (${ELAPSED}s/${TIMEOUT}s)${thread_status}"
     if [[ "$DRY_RUN" == "false" ]]; then
       sleep "$INTERVAL"
     else
@@ -238,23 +442,21 @@ while true; do
     continue
   fi
 
-  # If any check failed, stop immediately
   if [[ $CHECKS_FAILED -gt 0 ]]; then
     echo ""
     log "Check failure detected — halting"
     echo -e "${RED}Failed checks:${FAILED_CHECKS}${RESET}"
     echo ""
     echo "Summary: ${CHECKS_PASSED} passed, ${CHECKS_FAILED} failed, ${CHECKS_PENDING} pending"
+    kill $THREAD_BG_PID 2>/dev/null || true
     exit 1
   fi
 
-  # If all checks completed successfully
   if [[ $CHECKS_PENDING -eq 0 ]] && [[ $CHECKS_FAILED -eq 0 ]]; then
-    log "All checks passed"
+    log "All checks passed${thread_status}"
     break
   fi
 
-  # Check timeout
   CURRENT_TIME=$(date +%s)
   ELAPSED=$((CURRENT_TIME - START_TIME))
 
@@ -262,164 +464,44 @@ while true; do
     echo ""
     log "Timeout reached (${TIMEOUT}s) — checks still pending"
     echo -e "${RED}Cannot merge: ${CHECKS_PENDING} checks still pending after ${TIMEOUT}s${RESET}"
+    kill $THREAD_BG_PID 2>/dev/null || true
     exit 1
   fi
 
   REMAINING=$((TIMEOUT - ELAPSED))
-  log "Waiting for checks... (${ELAPSED}s/${TIMEOUT}s, ${CHECKS_PENDING} pending)"
+  log "Waiting for checks... (${ELAPSED}s/${TIMEOUT}s, ${CHECKS_PENDING} pending)${thread_status}"
 
   if [[ "$DRY_RUN" == "false" ]]; then
     sleep "$INTERVAL"
   else
-    # In dry-run mode, exit the loop after first check
     break
   fi
 done
 
 echo ""
 
-# ── TASK 2: Bot thread detection and resolution ──
+# ── Wait for thread resolver to complete ──
 
-log "Task 2: Detecting and resolving bot threads..."
-echo ""
+log "Task 2: Waiting for thread resolution to complete..."
+wait $THREAD_BG_PID 2>/dev/null || true
 
-# Known bot usernames
-BOT_LOGINS=(
-  "copilot-pull-request-reviewer[bot]"
-  "coderabbitai[bot]"
-  "gitar-bot[bot]"
-)
-
-# Fetch review threads via GraphQL
-THREAD_QUERY='
-query($owner:String!, $repo:String!, $number:Int!) {
-  repository(owner:$owner, name:$repo) {
-    pullRequest(number:$number) {
-      reviewThreads(first:100) {
-        nodes {
-          id
-          isResolved
-          comments(first:1) {
-            nodes {
-              author {
-                login
-              }
-              body
-            }
-          }
-        }
-      }
-    }
-  }
-}
-'
-
-THREADS=$(gh api graphql \
-  -f query="$THREAD_QUERY" \
-  -f owner="$OWNER" \
-  -f repo="$REPO" \
-  -F number="$PR_NUMBER" \
-  2>/dev/null || echo '{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}')
-
-THREAD_NODES=$(echo "$THREADS" | jq '.repository.pullRequest.reviewThreads.nodes // []')
-THREAD_COUNT=$(echo "$THREAD_NODES" | jq 'length')
-
-if [[ $THREAD_COUNT -eq 0 ]]; then
-  log "No review threads found"
+# Read final thread state
+if [[ -f "$THREAD_STATE_FILE" ]]; then
+  THREAD_RESOLVED=$(jq -r '.resolved_count // 0' "$THREAD_STATE_FILE" 2>/dev/null || echo "0")
+  THREAD_BLOCKED=$(jq -r '.blocked // false' "$THREAD_STATE_FILE" 2>/dev/null || echo "false")
+  UNRESOLVED_HUMAN=$(jq -r '.unresolved_human // 0' "$THREAD_STATE_FILE" 2>/dev/null || echo "0")
+  STATUS_MSG=$(jq -r '.status // "unknown"' "$THREAD_STATE_FILE" 2>/dev/null || echo "unknown")
 else
-  log "Found $THREAD_COUNT review thread(s)"
+  THREAD_RESOLVED=0
+  THREAD_BLOCKED=false
+  UNRESOLVED_HUMAN=0
+  STATUS_MSG="not_started"
 fi
 
-BOT_THREADS_RESOLVED=0
-NON_BOT_THREADS_UNRESOLVED=0
-MERGE_BLOCKED=false
+log "Thread resolution ${STATUS_MSG}: ${THREAD_RESOLVED} bot threads resolved${thread_status}"
 
-while IFS= read -r thread_json; do
-  if [[ -z "$thread_json" || "$thread_json" == "null" ]]; then
-    continue
-  fi
-
-  THREAD_ID=$(echo "$thread_json" | jq -r '.id')
-  IS_RESOLVED=$(echo "$thread_json" | jq -r '.isResolved')
-  AUTHOR=$(echo "$thread_json" | jq -r '.comments.nodes[0].author.login // "unknown"')
-
-  # Skip already resolved threads
-  if [[ "$IS_RESOLVED" == "true" ]]; then
-    continue
-  fi
-
-  # Check if author is a known bot
-  IS_BOT=false
-  for bot_login in "${BOT_LOGINS[@]}"; do
-    if [[ "$AUTHOR" == "$bot_login" ]]; then
-      IS_BOT=true
-      break
-    fi
-  done
-
-  if [[ "$IS_BOT" == "true" ]]; then
-    log "Resolving bot thread from $AUTHOR..."
-
-    if [[ "$DRY_RUN" == "false" ]]; then
-      # Post reply via GraphQL
-      REPLY_BODY="Acknowledged — addressed or accepted as advisory."
-      REPLY_MUTATION='
-mutation($threadId:ID!, $body:String!) {
-  addPullRequestReviewComment(input:{pullRequestReviewThreadId:$threadId, body:$body}) {
-    comment {
-      id
-    }
-  }
-}
-'
-
-      # Try GraphQL mutation first
-      if gh api graphql \
-        -f query="$REPLY_MUTATION" \
-        -f threadId="$THREAD_ID" \
-        -f body="$REPLY_BODY" \
-        >/dev/null 2>&1; then
-        # Successfully posted reply
-        true
-      else
-        # Fall back to REST API (not needed in most cases but kept for compatibility)
-        log "GraphQL reply failed, attempting REST fallback..."
-        # REST fallback would go here if needed
-        true
-      fi
-
-      # Resolve the thread
-      RESOLVE_MUTATION='
-mutation($threadId:ID!) {
-  resolveReviewThread(input:{threadId:$threadId}) {
-    thread {
-      isResolved
-    }
-  }
-}
-'
-
-      if gh api graphql \
-        -f query="$RESOLVE_MUTATION" \
-        -f threadId="$THREAD_ID" \
-        >/dev/null 2>&1; then
-        status_green "Resolved bot thread from $AUTHOR"
-        BOT_THREADS_RESOLVED=$((BOT_THREADS_RESOLVED + 1))
-      else
-        status_red "Failed to resolve bot thread from $AUTHOR"
-      fi
-    else
-      # Dry-run: just log what would happen
-      status_yellow "Would resolve bot thread from $AUTHOR"
-      BOT_THREADS_RESOLVED=$((BOT_THREADS_RESOLVED + 1))
-    fi
-  else
-    # Non-bot thread — block merge
-    status_red "Unresolved thread from $AUTHOR (human review required)"
-    NON_BOT_THREADS_UNRESOLVED=$((NON_BOT_THREADS_UNRESOLVED + 1))
-    MERGE_BLOCKED=true
-  fi
-done <<< "$(echo "$THREAD_NODES" | jq -c '.[]')"
+# Cleanup state file
+rm -f "$THREAD_STATE_FILE"
 
 echo ""
 
@@ -430,15 +512,14 @@ echo ""
 
 MERGE_READY=true
 
-# Check conditions for merge
 if [[ $CHECKS_FAILED -gt 0 ]]; then
   MERGE_READY=false
   status_red "Cannot merge: checks have failed"
 fi
 
-if [[ "$MERGE_BLOCKED" == "true" ]]; then
+if [[ "$THREAD_BLOCKED" == "true" ]]; then
   MERGE_READY=false
-  status_red "Cannot merge: non-bot threads require human review"
+  status_red "Cannot merge: non-bot threads require human review (${UNRESOLVED_HUMAN} unresolved)"
 fi
 
 if [[ "$NO_MERGE" == "true" ]]; then
@@ -473,8 +554,8 @@ echo ""
 log "Summary"
 echo ""
 echo "Checks: $CHECKS_PASSED passed, $CHECKS_FAILED failed, $CHECKS_PENDING pending"
-echo "Bot threads resolved: $BOT_THREADS_RESOLVED"
-echo "Non-bot threads remaining: $NON_BOT_THREADS_UNRESOLVED"
+echo "Bot threads resolved: $THREAD_RESOLVED"
+echo "Non-bot threads remaining: $UNRESOLVED_HUMAN"
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "Merge status: dry-run (no mutations made)"
 elif [[ "$MERGE_READY" == "true" ]]; then
