@@ -175,29 +175,7 @@ status_red() { echo -e "${RED}✗ $*${RESET}"; }
 log "Task 1: Polling check runs..."
 echo ""
 
-# Get check runs
-get_check_runs() {
-  gh api repos/"$OWNER"/"$REPO"/commits/refs/pull/"$PR_NUMBER"/merge/check-runs \
-    --jq '.check_runs[] | {name: .name, status: .status, conclusion: .conclusion}' 2>/dev/null || echo "[]"
-}
-
-# Format check status with color
-format_check_status() {
-  local status=$1
-  local conclusion=$2
-
-  if [[ "$status" == "completed" ]]; then
-    if [[ "$conclusion" == "success" ]]; then
-      echo -e "${GREEN}pass${RESET}"
-    else
-      echo -e "${RED}fail${RESET}"
-    fi
-  else
-    echo -e "${YELLOW}pending${RESET}"
-  fi
-}
-
-# Poll loop for check runs
+# Poll loop for check runs using `gh pr checks`
 CHECKS_PASSED=0
 CHECKS_FAILED=0
 CHECKS_PENDING=0
@@ -205,42 +183,58 @@ START_TIME=$(date +%s)
 FAILED_CHECKS=""
 
 while true; do
-  # Fetch current check run status
-  CHECKS=$(gh api repos/"$OWNER"/"$REPO"/commits/refs/pull/"$PR_NUMBER"/merge/check-runs --jq '.check_runs[] | {name: .name, status: .status, conclusion: .conclusion}' 2>/dev/null || echo "[]")
-
-  if [[ "$CHECKS" == "[]" || -z "$CHECKS" ]]; then
-    # No required checks — treat as all passing
-    log "No required check runs found — treating as all passing"
-    CHECKS_PASSED=1
-    break
-  fi
-
-  # Parse check runs
+  # Reset counters
   CHECKS_PASSED=0
   CHECKS_FAILED=0
   CHECKS_PENDING=0
   FAILED_CHECKS=""
 
-  while IFS= read -r line; do
-    local name=$(echo "$line" | jq -r '.name')
-    local status=$(echo "$line" | jq -r '.status')
-    local conclusion=$(echo "$line" | jq -r '.conclusion')
+  # Use `gh pr checks` — tab-separated output: name, state, elapsed, url
+  # Exit code 0 = all pass, non-zero = some fail or pending
+  while IFS=$'\t' read -r name state elapsed url; do
+    # Skip empty lines
+    [[ -z "$name" ]] && continue
 
-    if [[ "$status" == "completed" ]]; then
-      if [[ "$conclusion" == "success" ]]; then
+    case "$state" in
+      pass)
         ((CHECKS_PASSED++))
         status_green "$name"
-      else
+        ;;
+      fail)
         ((CHECKS_FAILED++))
         FAILED_CHECKS="${FAILED_CHECKS}
-  - $name (${conclusion})"
-        status_red "$name (${conclusion})"
-      fi
-    else
-      ((CHECKS_PENDING++))
-      status_yellow "$name"
+  - $name"
+        status_red "$name"
+        ;;
+      pending|*)
+        ((CHECKS_PENDING++))
+        status_yellow "$name"
+        ;;
+    esac
+  done < <(gh pr checks "$PR_NUMBER" 2>/dev/null | grep -v '^$' || true)
+
+  TOTAL=$((CHECKS_PASSED + CHECKS_FAILED + CHECKS_PENDING))
+
+  # If no checks found at all, wait and retry
+  if [[ $TOTAL -eq 0 ]]; then
+    CURRENT_TIME=$(date +%s)
+    ELAPSED=$((CURRENT_TIME - START_TIME))
+    if [[ $ELAPSED -ge $TIMEOUT ]]; then
+      echo ""
+      log "Timeout reached (${TIMEOUT}s) — no checks detected"
+      echo -e "${RED}Cannot merge: no CI checks found after ${TIMEOUT}s${RESET}"
+      exit 1
     fi
-  done <<< "$(echo "$CHECKS" | jq -c '.')"
+    log "No checks detected yet... (${ELAPSED}s/${TIMEOUT}s)"
+    if [[ "$DRY_RUN" == "false" ]]; then
+      sleep "$INTERVAL"
+    else
+      log "Dry run: treating as all passing"
+      CHECKS_PASSED=1
+      break
+    fi
+    continue
+  fi
 
   # If any check failed, stop immediately
   if [[ $CHECKS_FAILED -gt 0 ]]; then
