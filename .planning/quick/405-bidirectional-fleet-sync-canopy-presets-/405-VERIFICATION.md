@@ -21,10 +21,10 @@ implementation_evolution:
     - "Step 2d is fan-out, not merge. Vanilla slots are never overwritten. Preset-linked slots (matched by daintree_preset_id) are REPLACED-IN-PLACE on re-import — not non-overwrite-merged"
 human_verification:
   - test: "Run /nf:link-canopy on a system with Daintree installed locally"
-    expected: "DISCOVERED banner shows Product: Daintree, Custom Presets count, Global Env Keys count, Provider Templates count; Step 2d offers preset->provider env merge with allowlist banner; Step 3d/3e writes customPresets to Daintree config.json with brand colors"
+    expected: "DISCOVERED banner shows Product: Daintree, per-agent customPresets breakdown (e.g., 'claude: active = Z.AI | also available: MiniMax'), Global Environment Variables count, and the new-slot preview line per preset (would create slot: claude-z-ai). Step 2d offers fan-out import (one new slot per preset, cloned from the matching vanilla, env composed as globalEnv → vanilla → preset). Step 3d/3e writes per-agent customPresets[] arrays to Daintree config.json with brand colors and *_BASE_URL pass-through."
     why_human: "Cannot programmatically execute the slash command runtime; behavior depends on Claude Code's interactive AskUserQuestion dispatch and a real Daintree config on disk"
   - test: "Re-run /nf:link-canopy after presets are exported"
-    expected: "Result block shows 'unchanged' for every existing customPresets entry; providers.json env keys that were already non-empty appear in 'skipped (already set)' list"
+    expected: "Vanilla slots in providers.json untouched. Preset-linked slots (matched by daintree_preset_id, normalized to String at lookup) updated in place — env composition refreshed, model overlaid if preset.env.MODEL is set, description rebuilt only when a fresh non-cloned vanilla is found (so the suffix never compounds). Daintree customPresets[] entries with id 'nf-{slot}' show 'unchanged' — exports never overwrite by default."
     why_human: "Runtime idempotency confirmation requires interactive replay (AC5)"
   - test: "Test backwards compatibility — temporarily move ~/Library/Application Support/Daintree to .Daintree-bak"
     expected: "If a legacy ~/Library/Application Support/canopy-app/config.json exists, Product line shows 'canopy-app'; if neither exists, NOT-FOUND banner lists both paths"

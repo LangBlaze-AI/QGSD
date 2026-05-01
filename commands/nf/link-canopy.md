@@ -72,8 +72,10 @@ const result = {
   // Per-agent customPresets — keyed by Daintree agent name (claude, codex, gemini, ...)
   // each value is an array of preset objects {id, name, description, env, color, fallbacks, dangerousEnabled}
   customPresetsByAgent: {},
-  // Per-agent active preset id (agentSettings.agents.<agent>.presetId) — the preset the user has selected.
-  // When set, Step 2d imports ONLY that preset's env to avoid silently merging conflicting alternatives.
+  // Per-agent active preset id (agentSettings.agents.<agent>.presetId) — the preset the user
+  // currently has selected in Daintree. Used by the discovery banner to mark which preset is
+  // active. NOTE: Step 2d uses fan-out semantics (every preset becomes its own slot), so this
+  // field is informational only — not a gate on which presets get imported.
   activePresetIdByAgent: {},
   presetCount: 0,
   // Top-level Daintree key — flat object of env-key → env-value
@@ -362,7 +364,7 @@ The export direction (Step 3e) is also idempotent but with **no-overwrite** sema
 **Allowlist (AC5 safety guardrail).** Preset env keys must match this regex before being copied into the new slot's env:
 
 ```
-^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)
+^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$)
 ```
 
 Top-level `globalEnvironmentVariables` keys, after the same filter, are merged into every newly-created slot's env (non-overwrite — preset values win over global).
@@ -377,7 +379,7 @@ Display the REVIEW FAN-OUT IMPORT banner:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Allowlist (preset env keys must match):
-  ^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)
+  ^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$)
 
 New slots (one per Daintree preset):
   ◆ {agentName}: vanilla = {vanillaSlotName} (preserved unchanged)
@@ -449,7 +451,7 @@ const SLOT_NAME_RE = /^[a-z][a-z0-9-]*$/;
 function slugify(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
-const ALLOWLIST = /^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)/;
+const ALLOWLIST = /^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$)/;
 function filterAllowlisted(envObj) {
   const out = {};
   for (const [k, v] of Object.entries(envObj || {})) if (ALLOWLIST.test(k)) out[k] = v;
@@ -517,11 +519,15 @@ for (const [agentName, presets] of Object.entries(customPresetsByAgent)) {
       continue;
     }
 
-    // Compose final env: globalEnv first, preset overlays (preset wins)
-    const env = { ...allowedGlobalEnv, ...allowedEnv };
-
+    // Carry both env layers separately so apply-time can compose with the documented precedence:
+    //   globalEnv (base) → vanilla → preset (top). vanilla wins over globalEnv (so globalEnv is
+    //   non-overwrite from the slot's perspective), preset wins over both.
     if (existing) {
-      plan.push({ kind: 'update', preset, agentName, family, vanilla: vanilla || existing, existingName: existing.name, env });
+      // Pass `vanilla` as-is (may be null if the matching vanilla disappeared between runs).
+      // The apply branch only refreshes `description` when a fresh vanilla is available — using
+      // the existing preset-linked slot's description as a base would compound the
+      // " — Daintree preset: ..." suffix on every re-run.
+      plan.push({ kind: 'update', preset, agentName, family, vanilla, existingName: existing.name, presetEnv: allowedEnv, globalEnv: allowedGlobalEnv });
       continue;
     }
 
@@ -542,7 +548,7 @@ for (const [agentName, presets] of Object.entries(customPresetsByAgent)) {
     }
     usedNames.add(candidate);
 
-    plan.push({ kind: 'add', preset, agentName, family, vanilla, newName: candidate, env });
+    plan.push({ kind: 'add', preset, agentName, family, vanilla, newName: candidate, presetEnv: allowedEnv, globalEnv: allowedGlobalEnv });
   }
 }
 
@@ -558,39 +564,43 @@ for (const item of plan) {
     const v = item.vanilla;
     const newProvider = JSON.parse(JSON.stringify(v));
     newProvider.name = item.newName;
-    // Overlay allowlisted preset env onto the vanilla provider's env (rather than wholesale
-    // replacement) so the vanilla's runtime-required env fields are preserved alongside the
-    // preset overrides. Preset values win on collision.
-    newProvider.env = { ...(v.env || {}), ...item.env };
-    // If the preset carries a MODEL override, propagate it to provider.model. This keeps Step 3d
-    // export round-trip-correct: the export reads providerEntry.model when building the Daintree
-    // customPreset, so failing to update model here would later export the vanilla model.
-    if (typeof item.env?.MODEL === 'string' && item.env.MODEL.length > 0) {
-      newProvider.model = item.env.MODEL;
+    // Three-layer env composition (low → high precedence):
+    //   1. globalEnv  — allowlisted Daintree globalEnvironmentVariables; non-overwrite from
+    //                   the slot's perspective (vanilla wins where it has a key).
+    //   2. vanilla    — the cloned vanilla provider's existing env.
+    //   3. presetEnv  — allowlisted preset env; preset wins over vanilla and globalEnv.
+    newProvider.env = { ...(item.globalEnv || {}), ...(v.env || {}), ...(item.presetEnv || {}) };
+    // If the preset carries a MODEL override, propagate it to provider.model. Keeps Step 3d
+    // export round-trip-correct.
+    if (typeof item.presetEnv?.MODEL === 'string' && item.presetEnv.MODEL.length > 0) {
+      newProvider.model = item.presetEnv.MODEL;
     }
     newProvider.description = (v.description || '') + ' — Daintree preset: ' + item.preset.name;
     newProvider.daintree_preset_id = String(item.preset.id);
     newProvider.daintree_preset_name = item.preset.name;
     if (item.family) newProvider.daintree_preset_family = item.family;
     providersData.providers.push(newProvider);
-    written.providers.added.push({ name: item.newName, presetName: item.preset.name, presetId: String(item.preset.id), vanilla: v.name, envKeys: Object.keys(item.env) });
+    const envKeys = [...new Set([...Object.keys(item.globalEnv || {}), ...Object.keys(item.presetEnv || {})])];
+    written.providers.added.push({ name: item.newName, presetName: item.preset.name, presetId: String(item.preset.id), vanilla: v.name, envKeys });
   } else if (item.kind === 'update') {
     const existingId = String(item.preset.id);
     const existing = providersData.providers.find(p => String(p.daintree_preset_id) === existingId);
-    // Same overlay rule on update — preserve any non-allowlisted runtime env the user may have
-    // hand-added on the slot, replacing only the keys the preset actually carries.
-    existing.env = { ...(existing.env || {}), ...item.env };
-    if (typeof item.env?.MODEL === 'string' && item.env.MODEL.length > 0) {
-      existing.model = item.env.MODEL;
+    // On update, we layer onto the slot's CURRENT env (not the vanilla's) so any non-allowlisted
+    // runtime env the user added by hand survives. globalEnv stays non-overwrite, preset wins.
+    existing.env = { ...(item.globalEnv || {}), ...(existing.env || {}), ...(item.presetEnv || {}) };
+    if (typeof item.presetEnv?.MODEL === 'string' && item.presetEnv.MODEL.length > 0) {
+      existing.model = item.presetEnv.MODEL;
     }
-    // Refresh description so a renamed preset shows the new name on the slot, matching the
-    // documented update-in-place semantics in the Step 2d preamble.
-    if (item.vanilla) {
+    // Only refresh description when a fresh, un-suffixed vanilla is available. If we were to
+    // base the description on `existing` (or on a previously-cloned slot used as a fallback
+    // vanilla), the " — Daintree preset: X" suffix would compound on every re-import.
+    if (item.vanilla && !item.vanilla.daintree_preset_id) {
       existing.description = (item.vanilla.description || '') + ' — Daintree preset: ' + item.preset.name;
     }
     existing.daintree_preset_name = item.preset.name;
     if (item.family) existing.daintree_preset_family = item.family;
-    written.providers.updated.push({ name: existing.name, presetName: item.preset.name, presetId: existingId, envKeys: Object.keys(item.env) });
+    const envKeys = [...new Set([...Object.keys(item.globalEnv || {}), ...Object.keys(item.presetEnv || {})])];
+    written.providers.updated.push({ name: existing.name, presetName: item.preset.name, presetId: existingId, envKeys });
   }
 }
 
@@ -1052,7 +1062,7 @@ Re-run /nf:link-canopy any time to refresh the link. Idempotency rules:
 - nf.json backup created before any write
 - Import path fans out per-agent presets into new provider entries (matched via provider.mainTool === agentName + family inferred from preset env), overlaying allowlisted env onto the cloned vanilla. Vanilla slots are untouched; preset-linked slots are replaced in place on re-import. (issue 138 AC2 + AC5)
 - providers.json backup created before any env merge write
-- Both preset env and globalEnvironmentVariables merges are gated by allowlist `^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)` — covers all BRAND_COLORS providers
+- Both preset env and globalEnvironmentVariables merges are gated by allowlist `^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$)` — covers all BRAND_COLORS providers
 - Registration writes to Canopy's userAgentRegistry with `nf-` prefixed agent IDs
 - Export path writes nForma quorum slots to per-agent Daintree customPresets arrays (agentSettings.agents.<agent>.customPresets[]) with provider-specific brand colors from BRAND_COLORS mapping (issue 138 AC3 + AC4)
 - Canopy config.json backup created before any write
