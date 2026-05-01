@@ -199,17 +199,17 @@ while true; do
 
     case "$state" in
       pass|skipping)
-        ((CHECKS_PASSED++))
+        CHECKS_PASSED=$((CHECKS_PASSED + 1))
         [[ "$state" == "skipping" ]] && status_yellow "$name (skipped)" || status_green "$name"
         ;;
       fail)
-        ((CHECKS_FAILED++))
+        CHECKS_FAILED=$((CHECKS_FAILED + 1))
         FAILED_CHECKS="${FAILED_CHECKS}
   - $name"
         status_red "$name"
         ;;
       pending|*)
-        ((CHECKS_PENDING++))
+        CHECKS_PENDING=$((CHECKS_PENDING + 1))
         status_yellow "$name"
         ;;
     esac
@@ -404,19 +404,19 @@ mutation($threadId:ID!) {
         -f threadId="$THREAD_ID" \
         >/dev/null 2>&1; then
         status_green "Resolved bot thread from $AUTHOR"
-        ((BOT_THREADS_RESOLVED++))
+        BOT_THREADS_RESOLVED=$((BOT_THREADS_RESOLVED + 1))
       else
         status_red "Failed to resolve bot thread from $AUTHOR"
       fi
     else
       # Dry-run: just log what would happen
       status_yellow "Would resolve bot thread from $AUTHOR"
-      ((BOT_THREADS_RESOLVED++))
+      BOT_THREADS_RESOLVED=$((BOT_THREADS_RESOLVED + 1))
     fi
   else
     # Non-bot thread — block merge
     status_red "Unresolved thread from $AUTHOR (human review required)"
-    ((NON_BOT_THREADS_UNRESOLVED++))
+    NON_BOT_THREADS_UNRESOLVED=$((NON_BOT_THREADS_UNRESOLVED + 1))
     MERGE_BLOCKED=true
   fi
 done <<< "$(echo "$THREAD_NODES" | jq -c '.[]')"
