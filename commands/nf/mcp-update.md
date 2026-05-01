@@ -188,9 +188,8 @@ Update results:
   gemini-1    npm install -g @tuannvm/gemini-...   ✓ UPDATED
   opencode-1  git pull + build in /code/opencode   ✓ UPDATED
   copilot-1   git pull + build in /code/copilot    ✓ UPDATED
-  ccr-1       git pull + build in /code/QGSD       ✓ UPDATED
-  ccr-2       (shared repo with ccr-1)             ⚡ SKIPPED
-  ccr-3       (shared repo)                        ⚡ SKIPPED
+  claude-1    npm install -g @anthropic-ai/claude  ✓ UPDATED
+  (any user-added ccr-* / fleet-extension slots) git pull + build in /code/QGSD ✓ UPDATED
   ...
 
 To load new binaries, restart updated agents:

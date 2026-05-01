@@ -64,6 +64,13 @@ different LLM provider. You need at least one to use quorum.
 
 **Provider template map** (reference throughout the first-run flow):
 
+> ℹ️ **Note**: The `ccr-*` templates below are **not pre-installed** in
+> `bin/providers.json` (they were retired from the default fleet — Together.xyz routing via
+> Claude Code Router is still fully supported, just opt-in). This wizard still configures
+> them on demand: picking one writes both the MCP server entry to `~/.claude.json` and a
+> matching provider entry to `~/.claude/nf/bin/providers.json`. Pick "Skip" if you don't
+> need open-weight routing.
+
 | Agent | Provider | Base URL | Model |
 |---|---|---|---|
 | ccr-1 | Together.xyz | https://api.together.xyz/v1 | MiniMaxAI/MiniMax-M2.5 |
