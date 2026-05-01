@@ -13,10 +13,25 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 
+// SessionStart hooks receive a JSON payload on stdin that includes a workspace cwd.
+// Read it so the profile gate can pick up project-level `hook_profile: minimal` from the
+// right .planning/ — falling back to process.cwd() when:
+//   - stdin is a TTY (manual invocation with --print, would block on read)
+//   - the payload is empty or not JSON
+function readStdinSync() {
+  if (process.stdin.isTTY) return null; // never block on the terminal
+  try {
+    const buf = fs.readFileSync(0, 'utf8'); // fd 0 = stdin
+    return buf ? JSON.parse(buf) : null;
+  } catch (_) { return null; }
+}
+const stdinPayload = readStdinSync();
+const stdinCwd = (stdinPayload && (stdinPayload.workspace?.current_dir || stdinPayload.cwd)) || null;
+
 // Profile gate — opt-out on `minimal`, on by default on `standard`/`strict`.
 try {
   const { loadConfig, shouldRunHook } = require('./config-loader');
-  const cfg = loadConfig(process.cwd());
+  const cfg = loadConfig(stdinCwd || process.cwd());
   const profile = cfg.hook_profile || 'standard';
   if (!shouldRunHook('nf-slot-health-probe', profile)) process.exit(0);
 } catch (_) { /* config-loader missing on first install; fail-open */ }
@@ -25,6 +40,7 @@ const HOME = os.homedir();
 const CACHE = path.join(HOME, '.claude', 'nf', 'slot-health.json');
 const PER_SLOT_TIMEOUT_MS = 5000;
 const TOTAL_BUDGET_MS = 10000;
+const STDOUT_BUFFER_CAP = 64 * 1024; // bound to 64 KiB — beyond that, drop oldest data
 
 function readJson(p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (_) { return null; } }
 
@@ -41,9 +57,12 @@ function probeSlot(name, mcpEntry, deadlineMs) {
       return resolve({ ok: false, latency_ms: 0, error: 'spawn:' + e.message });
     }
 
-    let out = '';
+    // Incremental line buffer: carry over the last partial line and parse complete lines only.
+    // Bounded to STDOUT_BUFFER_CAP so a noisy server can't blow out memory; we only need to find
+    // a single line containing the JSON-RPC response to id:1.
+    let pending = '';
+    let stderrSawData = false;
     let done = false;
-    let stderrTail = '';
 
     const finish = (result) => {
       if (done) return;
@@ -53,11 +72,13 @@ function probeSlot(name, mcpEntry, deadlineMs) {
     };
 
     child.stdout.on('data', (d) => {
-      out += d.toString();
-      // Look for the response to our init call: jsonrpc + id:1 + result
-      // Any line containing "id":1 with a "result" key counts as a successful handshake.
-      const lines = out.split('\n');
-      for (const line of lines) {
+      pending += d.toString();
+      if (pending.length > STDOUT_BUFFER_CAP) pending = pending.slice(-STDOUT_BUFFER_CAP);
+      const lastNl = pending.lastIndexOf('\n');
+      if (lastNl < 0) return; // no complete line yet
+      const complete = pending.slice(0, lastNl);
+      pending = pending.slice(lastNl + 1);
+      for (const line of complete.split('\n')) {
         const trimmed = line.trim();
         if (!trimmed) continue;
         try {
@@ -66,15 +87,23 @@ function probeSlot(name, mcpEntry, deadlineMs) {
             return finish({ ok: true, latency_ms: Date.now() - start });
           }
           if (msg && msg.id === 1 && msg.error) {
-            return finish({ ok: false, latency_ms: Date.now() - start, error: 'init_error:' + (msg.error.message || JSON.stringify(msg.error)).slice(0, 120) });
+            // Truncate error message to a fixed length so we can't accidentally persist secrets
+            // bundled into a verbose JSON-RPC error payload.
+            return finish({ ok: false, latency_ms: Date.now() - start, error: 'init_error:' + (msg.error.message || 'unspecified').slice(0, 120) });
           }
-        } catch (_) { /* not a complete JSON message yet */ }
+        } catch (_) { /* not valid JSON, skip */ }
       }
     });
-    child.stderr.on('data', (d) => { stderrTail = (stderrTail + d.toString()).slice(-500); });
-    child.on('error', (e) => finish({ ok: false, latency_ms: Date.now() - start, error: 'spawn_err:' + e.message }));
+    // Note: we observe stderr only as a "saw any" signal, NOT to persist its content.
+    // MCP server stderr can include tokens, prompts, or endpoints — never write to disk cache.
+    child.stderr.on('data', () => { stderrSawData = true; });
+    child.on('error', (e) => finish({ ok: false, latency_ms: Date.now() - start, error: 'spawn_err:' + e.message.slice(0, 120) }));
     child.on('exit', (code, sig) => {
-      if (!done) finish({ ok: false, latency_ms: Date.now() - start, error: 'exited:' + (code != null ? 'code=' + code : 'sig=' + sig) + (stderrTail ? ' stderr=' + stderrTail.slice(0, 80) : '') });
+      if (!done) finish({
+        ok: false,
+        latency_ms: Date.now() - start,
+        error: 'exited:' + (code != null ? 'code=' + code : 'sig=' + sig) + (stderrSawData ? ' (stderr emitted)' : ''),
+      });
     });
 
     const init = JSON.stringify({
@@ -95,7 +124,10 @@ async function main() {
   const claudeJson = readJson(path.join(HOME, '.claude.json')) || { mcpServers: {} };
   const providersData = readJson(path.join(HOME, '.claude', 'nf', 'bin', 'providers.json')) || { providers: [] };
 
-  const providerNames = new Set(providersData.providers.map(p => p.name));
+  // Guard against malformed providers.json (missing/non-array `providers`). Default to []
+  // so a malformed file is treated as "nothing to probe" rather than crashing the hook.
+  const providersList = Array.isArray(providersData.providers) ? providersData.providers : [];
+  const providerNames = new Set(providersList.map(p => p && p.name).filter(Boolean));
   const mcpServers = claudeJson.mcpServers || {};
 
   // Only probe slots that are in BOTH providers.json (claimed as nForma slots) AND mcpServers (registered).
