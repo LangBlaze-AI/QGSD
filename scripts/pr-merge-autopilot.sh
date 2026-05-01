@@ -47,6 +47,7 @@ NO_MERGE=false
 INTERVAL=30
 TIMEOUT=600
 LATEST=false
+BG_MODE=false
 
 # ── Parse arguments ──
 while [[ $# -gt 0 ]]; do
@@ -67,6 +68,7 @@ FLAGS:
   --no-merge            Poll and resolve threads, but skip merge step
   --interval SECONDS    Polling interval (default: 30 seconds)
   --timeout SECONDS     Max wait time for checks (default: 600 seconds)
+  --bg                  Launch polling in background, print task ID and return immediately
   --help                Show this message
 
 EXAMPLES:
@@ -103,6 +105,10 @@ EOF
     --timeout)
       TIMEOUT="$2"
       shift 2
+      ;;
+    --bg)
+      BG_MODE=true
+      shift
       ;;
     -*)
       echo "ERROR: Unknown flag: $1" >&2
@@ -392,9 +398,9 @@ while true; do
     [[ -z "$name" || -z "$state" ]] && continue
 
     case "$state" in
-      pass)
+      pass|skipping)
         CHECKS_PASSED=$((CHECKS_PASSED + 1))
-        status_green "$name"
+        [[ "$state" == "skipping" ]] && status_yellow "$name (skipped)" || status_green "$name"
         ;;
       fail)
         CHECKS_FAILED=$((CHECKS_FAILED + 1))
@@ -433,6 +439,11 @@ while true; do
     fi
     log "No checks detected yet... (${ELAPSED}s/${TIMEOUT}s)${thread_status}"
     if [[ "$DRY_RUN" == "false" ]]; then
+      if [[ "$BG_MODE" == "true" ]]; then
+        echo ""
+        log "Background mode: exiting after first poll. Re-invoke with same args to continue."
+        exit 0
+      fi
       sleep "$INTERVAL"
     else
       log "Dry run: treating as all passing"
@@ -472,6 +483,13 @@ while true; do
   log "Waiting for checks... (${ELAPSED}s/${TIMEOUT}s, ${CHECKS_PENDING} pending)${thread_status}"
 
   if [[ "$DRY_RUN" == "false" ]]; then
+    if [[ "$BG_MODE" == "true" ]]; then
+      # In background mode, write current state and return immediately.
+      # The caller is responsible for re-invoking to continue polling.
+      echo ""
+      log "Background mode: exiting after first poll. Re-invoke with same args to continue."
+      exit 0
+    fi
     sleep "$INTERVAL"
   else
     break
