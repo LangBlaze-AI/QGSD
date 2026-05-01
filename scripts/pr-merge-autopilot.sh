@@ -191,6 +191,8 @@ while true; do
 
   # Use `gh pr checks` — tab-separated output: name, state, elapsed, url
   # Exit code 0 = all pass, non-zero = some fail or pending
+  # Capture output first to avoid pipefail issues with set -euo pipefail
+  CHECKS_OUTPUT=$(gh pr checks "$PR_NUMBER" 2>/dev/null || true)
   while IFS=$'\t' read -r name state elapsed url; do
     # Skip empty lines
     [[ -z "$name" ]] && continue
@@ -211,7 +213,7 @@ while true; do
         status_yellow "$name"
         ;;
     esac
-  done < <(gh pr checks "$PR_NUMBER" 2>/dev/null | grep -v '^$' || true)
+  done <<< "$CHECKS_OUTPUT"
 
   TOTAL=$((CHECKS_PASSED + CHECKS_FAILED + CHECKS_PENDING))
 
