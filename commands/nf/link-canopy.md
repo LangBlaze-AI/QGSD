@@ -294,6 +294,153 @@ Parse IMPORT_RESULT. If `written: true`:
   Agents:   {importedAgents joined by ", "}
 ```
 
+### Step 2d: Import preset env overrides into providers.json (issue 138 AC2 + AC5)
+
+This step imports env overrides defined in Daintree's `agentSettings.customPresets` and `agentSettings.globalEnv` into nForma's `bin/providers.json` provider entries — model IDs, base URLs, API key references — so that nForma's quorum agents inherit the same provider configuration the user already set up in Daintree.
+
+**Idempotency rule (AC5):** the merge NEVER overwrites a non-empty existing value in `providers[i].env`. Re-running this step is safe.
+
+**Skip gate:** if `CANOPY_INFO.customPresets` is empty AND `CANOPY_INFO.globalEnv` is empty, display "No presets or globalEnv to import — skipping." and continue to Step 3.
+
+Otherwise, build candidate matches between presets and providers using this heuristic (in order):
+
+1. **Exact match** — `preset.id === provider.name` (e.g., preset `"ccr-1"` matches provider `"ccr-1"`).
+2. **Prefix match** — `preset.id` starts with `provider.name + "-"` or `provider.name` starts with `preset.id + "-"`.
+3. **Model match** — `preset.env.MODEL || preset.model` equals `provider.model`.
+
+For each candidate match, list which env keys would be merged into `providers[i].env`. Common keys: `ANTHROPIC_BASE_URL`, `MODEL`, `*_API_KEY` (key NAMES only — values from preset.env). Mark a key as "skipped (already set)" if `providers[i].env[key]` is already non-empty.
+
+**globalEnv allowlist (AC5 safety guardrail):** to avoid leaking arbitrary user env into providers.json, globalEnv keys are gated through this regex allowlist before merging:
+
+```
+^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)
+```
+
+This pattern covers every provider listed in BRAND_COLORS (Step 3e) — Anthropic, OpenAI, Google, Together.xyz, DeepSeek, Ollama, OpenRouter, xAI — plus generic MODEL, *_BASE_URL, and *_API_KEY keys. Document the allowlist in the REVIEW banner so the user sees exactly which keys will pass through.
+
+Display the REVIEW PRESET ENV IMPORT banner:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ nForma ► REVIEW PRESET ENV IMPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+globalEnv allowlist (only keys matching this pattern are merged):
+  ^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)
+
+Preset → Provider env merges:
+  ◆ {preset.id} → {provider.name}
+      merge keys: ANTHROPIC_BASE_URL, MODEL  (skipped: API_KEY [already set])
+  [repeat for each match]
+
+globalEnv keys (allowlisted, applied to all matched providers):
+  {comma-separated list of allowlisted keys, or "none"}
+
+Existing non-empty values in providers.json are NEVER overwritten (idempotent — AC5 guard).
+```
+
+Use AskUserQuestion:
+- header: "Apply"
+- question: "Apply preset env overrides to providers.json?\n\nA timestamped backup will be created before any write."
+- options:
+  - "Apply"
+  - "Cancel — discard"
+
+**If "Cancel":** display "Preset env import cancelled." Continue to Step 3.
+
+**If "Apply":**
+
+Backup providers.json BEFORE writing (try every candidate path — only back up the one that exists):
+
+```bash
+for cand in "$HOME/.claude/nf/bin/providers.json" "$HOME/.claude/nf-bin/providers.json" "bin/providers.json"; do
+  [ -f "$cand" ] && cp "$cand" "${cand}.backup-$(date +%Y-%m-%d-%H%M%S)"
+done
+```
+
+Then merge env values via Node. Pass CANOPY_INFO and SELECTED_MATCHES_JSON via env vars — never interpolate:
+
+```bash
+IMPORT_RESULT=$(node << 'NF_EVAL'
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+const canopyInfo = JSON.parse(process.env.CANOPY_INFO);
+const selectedMatches = JSON.parse(process.env.SELECTED_MATCHES_JSON || '[]');
+
+// Locate providers.json — same candidate paths used elsewhere in this file
+const providersCandidates = [
+  path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),
+  path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),
+  path.join(process.cwd(), 'bin', 'providers.json')
+];
+let providersPath = null;
+let providersData = { providers: [] };
+for (const p of providersCandidates) {
+  try { providersData = JSON.parse(fs.readFileSync(p, 'utf8')); providersPath = p; break; } catch(e) {}
+}
+if (!providersPath) {
+  process.stdout.write(JSON.stringify({ written: false, error: 'providers.json not found' }) + '\n');
+  process.exit(0);
+}
+
+// globalEnv allowlist — restricts which globalEnv keys may be merged into providers
+const ALLOWLIST = /^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)/;
+const allowedGlobalEnv = {};
+for (const [k, v] of Object.entries(canopyInfo.globalEnv || {})) {
+  if (ALLOWLIST.test(k)) allowedGlobalEnv[k] = v;
+}
+
+const perProvider = [];
+let providersUpdated = 0;
+for (const match of selectedMatches) {
+  const provider = providersData.providers.find(p => p.name === match.providerName);
+  if (!provider) continue;
+  provider.env = provider.env || {};
+  const merged = [];
+  const skipped = [];
+
+  // Merge preset env (idempotent — AC5: never overwrite non-empty existing values)
+  const presetEnv = (canopyInfo.customPresets[match.presetId] || {}).env || {};
+  for (const [key, value] of Object.entries(presetEnv)) {
+    const current = provider.env[key];
+    if (!current || current === '') { provider.env[key] = value; merged.push(key); }
+    else { skipped.push({ key, reason: 'already set' }); }
+  }
+
+  // Merge allowlisted globalEnv (same non-overwrite rule)
+  for (const [key, value] of Object.entries(allowedGlobalEnv)) {
+    const current = provider.env[key];
+    if (!current || current === '') { provider.env[key] = value; merged.push(key + ' (globalEnv)'); }
+    else { skipped.push({ key, reason: 'already set' }); }
+  }
+
+  if (merged.length > 0) providersUpdated++;
+  perProvider.push({ provider: provider.name, merged, skipped });
+}
+
+fs.writeFileSync(providersPath, JSON.stringify(providersData, null, 2) + '\n');
+process.stdout.write(JSON.stringify({ written: true, providersPath, providersUpdated, perProvider }) + '\n');
+NF_EVAL
+)
+```
+
+The environment variables are:
+- `CANOPY_INFO` — raw JSON from Step 1 (carries `customPresets`, `globalEnv`)
+- `SELECTED_MATCHES_JSON` — JSON array of `{ presetId, providerName }` matches the user approved
+
+Parse IMPORT_RESULT. Display result with ✓ for merged keys and ○ for skipped (already-set):
+
+```
+✓ Preset env imported into providers.json
+
+{for each perProvider entry:}
+  {provider}: ✓ merged [{merged}]   ○ skipped [{skipped}]
+
+Providers updated: {providersUpdated}
+```
+
 Continue to Step 3.
 
 ---
@@ -460,14 +607,48 @@ cp "$CANOPY_CONFIG_PATH" "${CANOPY_CONFIG_PATH}.backup-$(date +%Y-%m-%d-%H%M%S)"
 
 Where `$CANOPY_CONFIG_PATH` is the `configPath` from Step 1.
 
-Write user agents to Canopy's config. Pass slots and config path via env vars:
+Write user agents to Canopy's config. Pass slots and config path via env vars. This script ALSO writes Step 3e's `customPresets` entries in the same atomic config write, with brand colors derived from a fixed BRAND_COLORS map (see Step 3e below for the full mapping rationale):
 
 ```bash
 REGISTER_RESULT=$(node << 'NF_EVAL'
 const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
 const configPath = process.env.CANOPY_CONFIG_PATH;
 const selectedSlots = JSON.parse(process.env.SELECTED_SLOTS_JSON);
+
+// BRAND_COLORS — fixed lookup for customPreset.color (issue 138 AC4)
+// Keys are lowercased provider/display_provider strings.
+const BRAND_COLORS = {
+  openai:        '#10a37f',  // OpenAI green
+  google:        '#4285f4',  // Google blue
+  anthropic:     '#d97757',  // Anthropic clay
+  github:        '#181717',  // GitHub black
+  xai:           '#000000',  // xAI black
+  opencode:      '#f97316',  // OpenCode orange
+  together:      '#0f6fff',  // Together.xyz blue
+  'together.xyz':'#0f6fff',  // Together.xyz blue (display_provider variant)
+  openrouter:    '#6366f1',  // OpenRouter indigo
+  deepseek:      '#22c55e',  // DeepSeek green
+  ollama:        '#a855f7',  // Ollama purple
+  default:       '#6366f1'   // fallback indigo
+};
+function colorFor(provider) {
+  const key = String(provider || '').toLowerCase();
+  return BRAND_COLORS[key] || BRAND_COLORS.default;
+}
+
+// Load providers.json so customPresets export carries MODEL, ANTHROPIC_BASE_URL, *_API_KEY names
+const providersCandidates = [
+  path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),
+  path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),
+  path.join(process.cwd(), 'bin', 'providers.json')
+];
+let providersData = { providers: [] };
+for (const p of providersCandidates) {
+  try { providersData = JSON.parse(fs.readFileSync(p, 'utf8')); break; } catch(e) {}
+}
 
 let config = {};
 try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch(e) {
@@ -476,28 +657,56 @@ try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch(e) {
 }
 
 if (!config.userAgentRegistry) config.userAgentRegistry = {};
+config.agentSettings = config.agentSettings || {};
+config.agentSettings.customPresets = config.agentSettings.customPresets || {};
 
 const registered = [];
 for (const slot of selectedSlots) {
   const agentId = 'nf-' + slot.name;
+  const providerEntry = providersData.providers.find(p => p.name === slot.name) || {};
 
-  // Do not overwrite if already exists — user may have customized
+  // ── userAgentRegistry entry (existing behavior — never overwrites) ──
   if (config.userAgentRegistry[agentId]) {
-    registered.push({ id: agentId, status: 'skipped (already exists)' });
-    continue;
+    registered.push({ id: agentId, kind: 'userAgent', status: 'skipped (already exists)' });
+  } else {
+    config.userAgentRegistry[agentId] = {
+      id: agentId,
+      name: 'nForma: ' + slot.name,
+      command: (slot.cli || providerEntry.mainTool || 'node').split('/').pop(),
+      color: colorFor(providerEntry.provider || slot.display_provider),
+      iconId: 'brain-circuit',
+      supportsContextInjection: true,
+      tooltip: slot.display_provider + ' — ' + slot.model + ' [' + slot.auth_type + ']'
+    };
+    registered.push({ id: agentId, kind: 'userAgent', status: 'added' });
   }
 
-  config.userAgentRegistry[agentId] = {
-    id: agentId,
-    name: 'nForma: ' + slot.name,
-    command: (slot.cli || 'node').split('/').pop(),
-    color: '#6366f1',
-    iconId: 'brain-circuit',
-    supportsContextInjection: true,
-    tooltip: slot.display_provider + ' — ' + slot.model + ' [' + slot.auth_type + ']'
-  };
+  // ── customPresets entry (Step 3e — issue 138 AC3, AC4, AC5) ──
+  // Idempotent: existing presets show 'unchanged' — values are NEVER overwritten by default.
+  const presetId = 'nf-' + slot.name;
+  if (config.agentSettings.customPresets[presetId]) {
+    registered.push({ id: presetId, kind: 'customPreset', status: 'unchanged' });
+  } else {
+    // Derive env from providers.json — pull MODEL, ANTHROPIC_BASE_URL, *_API_KEY (key NAMES only,
+    // values resolved by Daintree at runtime via ${ENV_VAR} placeholders — never embed secrets here)
+    const env = {};
+    if (providerEntry.model)                       env.MODEL = providerEntry.model;
+    if (providerEntry.env && providerEntry.env.ANTHROPIC_BASE_URL) env.ANTHROPIC_BASE_URL = providerEntry.env.ANTHROPIC_BASE_URL;
+    for (const k of Object.keys(providerEntry.env || {})) {
+      if (/_API_KEY$/.test(k)) env[k] = '${' + k + '}';
+    }
 
-  registered.push({ id: agentId, status: 'added' });
+    config.agentSettings.customPresets[presetId] = {
+      id: presetId,
+      name: 'nForma: ' + slot.name,
+      command: (slot.cli || providerEntry.mainTool || 'node').split('/').pop(),
+      color: colorFor(providerEntry.provider || slot.display_provider),
+      iconId: 'brain-circuit',
+      description: (providerEntry.display_provider || slot.display_provider || 'unknown') + ' — ' + (providerEntry.model || slot.model || 'unknown'),
+      env
+    };
+    registered.push({ id: presetId, kind: 'customPreset', status: 'added' });
+  }
 }
 
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -506,16 +715,30 @@ NF_EVAL
 )
 ```
 
-Parse REGISTER_RESULT. If `written: true`:
+Parse REGISTER_RESULT. If `written: true`, display two columns — userAgentRegistry entries on the left, customPresets entries on the right — so the user sees both export channels:
 
 ```
 ✓ Agents registered in Canopy
 
-{for each registered entry:}
-  {status === 'added' ? '✓' : '○'} {id} — {status}
+  userAgentRegistry                       customPresets (Daintree IDE preset palette)
+  ──────────────────────────────────────  ──────────────────────────────────────
+{for each registered entry, group by kind:}
+  ✓ nf-codex-1 — added                    ✓ nf-codex-1 — added
+  ○ nf-claude-1 — skipped (already exists) ○ nf-claude-1 — unchanged
 
-⚠ Restart Canopy for changes to take effect.
+⚠ Restart Daintree (or canopy-app) for changes to take effect.
 ```
+
+Re-running this command shows `unchanged` for any customPresets that already exist — entries are NEVER overwritten by default (issue 138 AC5 idempotency).
+
+### Step 3e: Custom preset export — implementation notes (issue 138 AC3 + AC4)
+
+Step 3e is implemented as part of Step 3d's atomic write above (one config read, one config write — avoids dual-backup risk). What it does:
+
+1. **Builds a `customPresets` entry per selected quorum slot** (id = `nf-{slot.name}`, mirroring the userAgentRegistry id).
+2. **Derives env from `providers.json`** — MODEL is copied verbatim, ANTHROPIC_BASE_URL is copied if set, and any `*_API_KEY` keys are emitted as Daintree placeholder strings `${KEY_NAME}` so Daintree resolves them from the user's runtime env (no secrets embedded in config).
+3. **Picks brand color from `BRAND_COLORS`** — keyed by `providerEntry.provider` (lowercased), e.g., `openai → #10a37f`, `anthropic → #d97757`, `together.xyz → #0f6fff`. Unknown providers fall back to `#6366f1` (indigo).
+4. **Idempotency (AC5):** existing `customPresets[presetId]` entries are left untouched and emit a `status: 'unchanged'` row in the result. The user must manually delete a preset in Daintree to force re-export.
 
 Continue to Step 4.
 
@@ -530,25 +753,34 @@ Display:
  nForma ► LINK CANOPY — COMPLETE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Import:   {imported ? "✓ Canopy config imported to nf.json" : "○ Skipped"}
-  Register: {registered ? "✓ " + registeredCount + " agent(s) added to Canopy" : "○ Skipped"}
+  Product detected:        {productName} (Daintree, or canopy-app legacy)
+  Import (nf.json):        {imported ? "✓ Canopy config imported to nf.json" : "○ Skipped"}
+  Preset env imported:     {presetEnvImported ? "✓ " + providersUpdated + " provider(s) updated in providers.json" : "○ Skipped"}
+  Register userAgents:     {registered ? "✓ " + userAgentsAddedCount + " added, " + userAgentsSkippedCount + " skipped" : "○ Skipped"}
+  Custom presets exported: {customPresetsAddedCount > 0 || customPresetsUnchangedCount > 0 ? "✓ " + customPresetsAddedCount + " added, " + customPresetsUnchangedCount + " unchanged" : "○ Skipped"}
 
 Re-run /nf:link-canopy any time to refresh the link.
+Existing customPresets and providers.json env values are NEVER overwritten (idempotent — issue 138 AC5).
 ```
 
 </process>
 
 <success_criteria>
-- Canopy install detected via platform-specific config.json path (macOS/Windows/Linux)
+- Daintree detected first; canopy-app paths used as backwards-compatible fallback
 - Discovery banner shows MCP URL, agents, user agents, plugins dir
-- Not-found case handled gracefully with install instructions
+- Custom presets, globalEnv, and providerTemplates from Daintree agentSettings are surfaced in discovery banner (issue 138 AC1)
+- Not-found case handled gracefully with install instructions for both Daintree and legacy canopy-app paths
 - Import writes `canopy` section to ~/.claude/nf.json with MCP URL and agent list
 - nf.json backup created before any write
+- Import path merges preset env into matching providers.json slots without overwriting non-empty values (issue 138 AC2 + AC5)
+- providers.json backup created before any env merge write
+- globalEnv merges are gated by allowlist `^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)` — covers all BRAND_COLORS providers
 - Registration writes to Canopy's userAgentRegistry with `nf-` prefixed agent IDs
+- Export path writes nForma quorum slots to Daintree customPresets with provider-specific brand colors from BRAND_COLORS mapping (issue 138 AC3 + AC4)
 - Canopy config.json backup created before any write
-- Existing user agents in Canopy are never overwritten (skipped with notice)
+- Existing user agents and customPresets in Canopy are never overwritten — re-running shows 'unchanged' (issue 138 AC5 idempotency)
 - No changes applied without explicit user confirmation via AskUserQuestion
 - All values passed via environment variables — never interpolated into script bodies
 - Cross-platform: macOS (~/Library/Application Support), Windows (%APPDATA%), Linux (~/.config)
-- Idempotent: safe to re-run — updates canopy section, skips existing agents
+- Idempotent: safe to re-run — updates canopy section, skips existing agents and customPresets
 </success_criteria>
