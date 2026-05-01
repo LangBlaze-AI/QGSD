@@ -150,6 +150,33 @@ try {
   result.mcp.count = 0;
 }
 
+// ── Daintree (formerly Canopy) IDE detection ──
+function daintreeConfigPath(productName) {
+  if (process.platform === 'darwin')
+    return path.join(os.homedir(), 'Library', 'Application Support', productName, 'config.json');
+  if (process.platform === 'win32')
+    return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), productName, 'config.json');
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), productName, 'config.json');
+}
+const dPath = daintreeConfigPath('Daintree');
+const cPath = daintreeConfigPath('canopy-app');
+let detectedPath = null, detectedProduct = null, customPresetCount = 0;
+if (fs.existsSync(dPath)) { detectedPath = dPath; detectedProduct = 'Daintree'; }
+else if (fs.existsSync(cPath)) { detectedPath = cPath; detectedProduct = 'canopy-app (legacy)'; }
+if (detectedPath) {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(detectedPath, 'utf8'));
+    customPresetCount = cfg.agentSettings && cfg.agentSettings.customPresets
+      ? Object.keys(cfg.agentSettings.customPresets).length : 0;
+  } catch (e) {}
+}
+result.daintree = {
+  installed: !!detectedPath,
+  product: detectedProduct,
+  config_path: detectedPath,
+  custom_preset_count: customPresetCount
+};
+
 // ── Project state ──
 const planDir = path.join(process.cwd(), '.planning');
 result.project.has_planning = fs.existsSync(path.join(planDir, 'PROJECT.md'));
@@ -198,6 +225,11 @@ MCP Servers ({N} configured)
   {name} .................. {type} {model if known}
   {name} .................. {type} {model if known}
   ...
+
+Daintree IDE
+  Detected ................ {Daintree at {path} / canopy-app (legacy) at {path} / not installed}
+  Custom Presets .......... {N defined / 0}
+  Linked .................. {use /nf:link-canopy to sync}
 
 Project
   Initialized ............. {yes — phase N (status) / no}
@@ -304,6 +336,12 @@ If everything is aligned (all installed CLIs are wired up, all MCP servers have 
 > - `ccr` (Claude Code Router) — open-weight models via API, no subscription needed → `npm install -g @musistudio/claude-code-router`
 > - `codex` (OpenAI) → `npm install -g @openai/codex`
 > (etc. — only list ones they don't have)
+
+**Daintree IDE bridge (issue 138):** if `result.daintree.installed` is true AND `result.nforma.commands_synced` is true, mention to the user:
+
+> I see Daintree (or legacy Canopy) is installed at `{result.daintree.config_path}` with {result.daintree.custom_preset_count} custom preset(s). Run `/nf:link-canopy` to import preset env overrides into nForma's providers and export nForma's quorum agents back as Daintree customPresets.
+
+This bridge is bidirectional — Daintree presets flow into `providers.json` and nForma quorum slots flow into Daintree's `agentSettings.customPresets`. Re-running `/nf:link-canopy` is idempotent (existing entries are never overwritten).
 
 Then continue to the next step.
 
