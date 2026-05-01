@@ -1,0 +1,24 @@
+{
+  "feature/issue-138-bidirectional-fleet-sync": {
+    "task_id": 405,
+    "task_description": "Bidirectional fleet sync: Canopy presets <-> nForma providers (issue 138)",
+    "approach": "Implement bidirectional sync between Daintree (formerly Canopy) presets and nForma providers by updating link-canopy.md to detect Daintree paths (productName Daintree), parse agentSettings (customPresets, globalEnv, providerTemplates), import env overrides into matching providers.json slots, export nForma quorum agents back as Daintree customPresets with brand colors, ensure idempotent re-runs, and adapt onboard.md to detect Daintree install with backwards-compat for legacy Canopy paths.",
+    "out_of_scope": [
+      "Creating new Daintree app features or UI changes",
+      "Modifying nForma's core provider architecture beyond providers.json field additions",
+      "Renaming the link-canopy.md filename itself (kept for backwards compat with /nf:link-canopy slash-command surface)",
+      "Migrating existing nf.json data from canopy section to a new daintree section (additive only)"
+    ],
+    "classification": {
+      "type": "feature",
+      "confidence": 0.95,
+      "routed_through_debug": false
+    },
+    "risk_level": "high",
+    "risk_reason": "Multiple files across several directories (commands/nf/, bin/, root) with workflow modifications, providers.json schema additions, and new env override merge logic create significant integration complexity and testing surface.",
+    "branches_affected": ["feature/issue-138-bidirectional-fleet-sync"],
+    "created_at": "2026-05-01T08:47:32.502Z",
+    "planner_model": "inherit",
+    "created_by": "quick-orchestrator"
+  }
+}
