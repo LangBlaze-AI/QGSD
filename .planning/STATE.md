@@ -36,13 +36,11 @@ See: .planning/PROJECT.md
 | 398 | Improve the benchmark to actually test nf:solve autonomy — add a real autonomy track with seeded defects and residual reduction scoring | 2026-04-15 | 4b311884 | Verified | [398-improve-the-benchmark-to-actually-test-n](.planning/quick/398-improve-the-benchmark-to-actually-test-n/) |
 | 399 | Add /nf:coderlm query skill | 2026-04-16 | 2cb11083 | Verified | [399-add-a-nf-coderlm-query-skill-that-lets-u](.planning/quick/399-add-a-nf-coderlm-query-skill-that-lets-u/) |
 | 400 | Add nf:harden adversarial hardening loop skill | 2026-04-16 | 8c12260b | Verified | [400-add-nf-harden-adversarial-skill](./quick/400-add-nf-harden-adversarial-skill/) |
-<<<<<<< HEAD
+| 401 | Fix nf-solve benchmark detection gaps (20.4% to 35%+) | 2026-04-16 | 5a9bafb8 | Pending | [401-fix-nf-solve-benchmark-detection-gaps-20](./quick/401-fix-nf-solve-benchmark-detection-gaps-20/) |
 | 402 | Build generic benchmark runner for nForma skills (issue #107) | 2026-04-17 | aa9c535c | Verified | [402-build-generic-benchmark-runner-for-nform](.planning/quick/402-build-generic-benchmark-runner-for-nform/) |
 | 403 | Add nf:debug benchmark track with TLA+ bug/fix models and TLC trace output | 2026-04-17 | 0748ec12 | Verified | [403-add-nf-debug-benchmark-track-with-generi](.planning/quick/403-add-nf-debug-benchmark-track-with-generi/) |
 | 404 | Build nf:debug autonomy benchmark with graded difficulty stubs, fix-cycle runner, and standalone scorer | 2026-04-17 | 27ad207d | Verified | [404-build-nf-debug-autonomy-benchmark-with-g](.planning/quick/404-build-nf-debug-autonomy-benchmark-with-g/) |
-=======
-| 401 | Fix nf-solve benchmark detection gaps (20.4% to 35%+) | 2026-04-16 | 5a9bafb8 | Pending | [401-fix-nf-solve-benchmark-detection-gaps-20](./quick/401-fix-nf-solve-benchmark-detection-gaps-20/) |
->>>>>>> origin/main
+| 405 | Bidirectional fleet sync: Canopy presets <-> nForma providers (issue 138) | 2026-05-01 | PENDING_FINAL_COMMIT | Pending | [405-bidirectional-fleet-sync-canopy-presets-](./quick/405-bidirectional-fleet-sync-canopy-presets-/) |
 
 ## Session Log
 
@@ -67,8 +65,4 @@ See: .planning/PROJECT.md
 - 2026-04-10 - Completed quick task 388: Sync baseline requirements and audit solver-generated formal models and test stubs
 - 2026-04-11 - Completed quick task 389: Fix shell-prompt-quorum-dedup.als Alloy assertion failure
 
-<<<<<<< HEAD
-Last activity: 2026-04-17 - Completed quick task 404: Build nf:debug autonomy benchmark with graded difficulty stubs, fix-cycle runner, and standalone scorer
-=======
-Last activity: 2026-04-16 - Completed quick task 401: Fix nf-solve benchmark detection gaps
->>>>>>> origin/main
+Last activity: 2026-05-01 - Completed quick task 405: Bidirectional fleet sync (issue 138)
