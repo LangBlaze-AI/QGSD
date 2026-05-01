@@ -69,9 +69,15 @@ const result = {
   agents: [],
   userAgents: [],
   agentSettings: {},
-  customPresets: {},
-  globalEnv: {},
-  providerTemplates: {}
+  // Per-agent customPresets — keyed by Daintree agent name (claude, codex, gemini, ...)
+  // each value is an array of preset objects {id, name, description, env, color, fallbacks, dangerousEnabled}
+  customPresetsByAgent: {},
+  // Per-agent active preset id (agentSettings.agents.<agent>.presetId) — the preset the user has selected.
+  // When set, Step 2d imports ONLY that preset's env to avoid silently merging conflicting alternatives.
+  activePresetIdByAgent: {},
+  presetCount: 0,
+  // Top-level Daintree key — flat object of env-key → env-value
+  globalEnvironmentVariables: {}
 };
 
 // Check config.json
@@ -90,11 +96,23 @@ try {
     result.userAgents = Object.keys(config.userAgentRegistry);
   }
 
-  // Extract Daintree extended agent settings (issue 138 AC1)
-  if (config.agentSettings) {
-    result.customPresets = config.agentSettings.customPresets || {};
-    result.globalEnv = config.agentSettings.globalEnv || {};
-    result.providerTemplates = config.agentSettings.providerTemplates || {};
+  // Daintree v20 schema (issue 138 AC1):
+  //   - customPresets live PER AGENT as arrays at agentSettings.agents.<agent>.customPresets[]
+  //   - globalEnvironmentVariables is a top-level object on the config root (not under agentSettings)
+  //   - providerTemplates does not exist in v20 — omitted from this command
+  if (config.agentSettings && config.agentSettings.agents) {
+    for (const [agentName, agentCfg] of Object.entries(config.agentSettings.agents)) {
+      if (Array.isArray(agentCfg.customPresets) && agentCfg.customPresets.length > 0) {
+        result.customPresetsByAgent[agentName] = agentCfg.customPresets;
+        result.presetCount += agentCfg.customPresets.length;
+      }
+      if (typeof agentCfg.presetId === 'string' && agentCfg.presetId) {
+        result.activePresetIdByAgent[agentName] = agentCfg.presetId;
+      }
+    }
+  }
+  if (config.globalEnvironmentVariables && typeof config.globalEnvironmentVariables === 'object') {
+    result.globalEnvironmentVariables = config.globalEnvironmentVariables;
   }
 } catch (e) {
   // config.json not found or unreadable
@@ -170,14 +188,18 @@ Display discovery banner:
   User Agents ({userAgents.length}):
     {comma-separated list or "none"}
 
-  Custom Presets ({Object.keys(customPresets).length}):
-    {comma-separated list of customPresets keys, or "none"}
+  Custom Presets ({presetCount} across {Object.keys(customPresetsByAgent).length} agent(s)):
+    {for each [agent, presets] in customPresetsByAgent:
+       activeId = activePresetIdByAgent[agent]
+       slugify = name => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+       "{agent} (active = {presets.find(p => p.id === activeId)?.name ?? "(none)"}):"
+       for each preset in presets:
+         marker = preset.id === activeId ? "★" : " "
+         "  {marker} {preset.name}  →  would create slot: {agent}-{slugify(preset.name)}"}
+    {if presetCount === 0: "none"}
 
-  Global Env Keys ({Object.keys(globalEnv).length}):
-    {comma-separated list of globalEnv keys, or "none"}
-
-  Provider Templates ({Object.keys(providerTemplates).length}):
-    {comma-separated list of providerTemplates keys, or "none"}
+  Global Environment Variables ({Object.keys(globalEnvironmentVariables).length}):
+    {comma-separated list of globalEnvironmentVariables keys, or "none"}
 ```
 
 Continue to Step 2.
@@ -294,71 +316,103 @@ Parse IMPORT_RESULT. If `written: true`:
   Agents:   {importedAgents joined by ", "}
 ```
 
-### Step 2d: Import preset env overrides into providers.json (issue 138 AC2 + AC5)
+### Step 2d: Fan-out import — Daintree presets become nForma quorum slots (issue 138 AC2 + AC5)
 
-This step imports env overrides defined in Daintree's `agentSettings.customPresets` and `agentSettings.globalEnv` into nForma's `bin/providers.json` provider entries — model IDs, base URLs, API key references — so that nForma's quorum agents inherit the same provider configuration the user already set up in Daintree.
+Each Daintree preset becomes its **own** nForma quorum slot, alongside the existing vanilla slot for that agent. The vanilla slot stays vanilla. Example: with Daintree's `claude` agent owning `Z.AI` and `MiniMax` presets, the import produces — in addition to `claude-1` (vanilla) — `claude-z-ai` and `claude-minimax`.
 
-**Idempotency rule (AC5):** the merge NEVER overwrites a non-empty existing value in `providers[i].env`. Re-running this step is safe.
+This writes to three live files (each backed up first):
 
-**Skip gate:** if `CANOPY_INFO.customPresets` is empty AND `CANOPY_INFO.globalEnv` is empty, display "No presets or globalEnv to import — skipping." and continue to Step 3.
+1. `~/.claude/nf/bin/providers.json` — append a new provider entry per preset, cloning the vanilla provider for the family and overlaying the preset's allowlisted env.
+2. `~/.claude.json` `mcpServers` — clone the vanilla slot's MCP entry with `PROVIDER_SLOT` set to the new slot name (so the MCP server runs against the new env).
+3. `~/.claude/nf.json` `quorum_active` — append the new slot name.
 
-Otherwise, build candidate matches between presets and providers using this heuristic (in order):
+**Slot-name slug rule.** nForma slot names must match `^[a-z][a-z0-9-]*$` (canonical regex at `bin/provider-mapping.test.cjs:143`). Preset names are slugified:
+- lowercase
+- replace any non-`[a-z0-9]` with `-`
+- collapse runs of `-`
+- trim leading/trailing `-`
 
-1. **Exact match** — `preset.id === provider.name` (e.g., preset `"ccr-1"` matches provider `"ccr-1"`).
-2. **Prefix match** — `preset.id` starts with `provider.name + "-"` or `provider.name` starts with `preset.id + "-"`.
-3. **Model match** — `preset.env.MODEL || preset.model` equals `provider.model`.
+The new slot name is `{vanillaSlotName}-{slug}` (e.g., `claude-z-ai`). On collision (two presets slugifying to the same value), append `-2`, `-3`, etc.
 
-For each candidate match, list which env keys would be merged into `providers[i].env`. Common keys: `ANTHROPIC_BASE_URL`, `MODEL`, `*_API_KEY` (key NAMES only — values from preset.env). Mark a key as "skipped (already set)" if `providers[i].env[key]` is already non-empty.
+**Family gate.** A preset is matched to the *vanilla* slot whose `mainTool === agentName` AND `provider === inferredFamily(preset.env)`. Family is inferred from the preset's allowlisted env-key prefixes:
 
-**globalEnv allowlist (AC5 safety guardrail):** to avoid leaking arbitrary user env into providers.json, globalEnv keys are gated through this regex allowlist before merging:
+| env-key prefix | inferred family |
+|---|---|
+| `ANTHROPIC_*` | `anthropic` |
+| `OPENAI_*` | `openai` |
+| `GOOGLE_*` / `GEMINI_*` | `google` |
+| `TOGETHER_*` | `together` |
+| `XAI_*` / `GROK_*` | `xai` |
+| `DEEPSEEK_*` | `deepseek` |
+| `OPENROUTER_*` | `openrouter` |
+| `OLLAMA_*` | `ollama` |
+
+If no family can be inferred (e.g., preset only has generic `MODEL` / `*_BASE_URL` / `*_API_KEY`), the family check is bypassed and any provider with `mainTool === agentName` is acceptable as the vanilla. If multiple vanilla candidates exist after both gates, prefer the one with no `daintree_preset_id` field (the original) and the lowest numeric suffix (`claude-1` over `claude-2`).
+
+**Idempotency (AC5).** Each new slot carries a `daintree_preset_id` field equal to `preset.id`. On re-import:
+- An existing provider with the same `daintree_preset_id` is updated in place (`description`, `env`, `model` overlay refreshed) but its `name` is kept stable — even if the preset name changed in Daintree.
+- A provider whose `daintree_preset_id` references a preset Daintree no longer has is **preserved by default** (option b — the user removes it manually). This avoids silently destroying slots already referenced in user prompts/scripts.
+
+**Allowlist (AC5 safety guardrail).** Preset env keys must match this regex before being copied into the new slot's env:
 
 ```
 ^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)
 ```
 
-This pattern covers every provider listed in BRAND_COLORS (Step 3e) — Anthropic, OpenAI, Google, Together.xyz, DeepSeek, Ollama, OpenRouter, xAI — plus generic MODEL, *_BASE_URL, and *_API_KEY keys. Document the allowlist in the REVIEW banner so the user sees exactly which keys will pass through.
+Top-level `globalEnvironmentVariables` keys, after the same filter, are merged into every newly-created slot's env (non-overwrite — preset values win over global).
 
-Display the REVIEW PRESET ENV IMPORT banner:
+**Skip gate.** If `CANOPY_INFO.presetCount === 0` AND `CANOPY_INFO.globalEnvironmentVariables` has zero keys, display "No presets or globalEnvironmentVariables to import — skipping." and continue to Step 3.
+
+Display the REVIEW FAN-OUT IMPORT banner:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- nForma ► REVIEW PRESET ENV IMPORT
+ nForma ► REVIEW FAN-OUT IMPORT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-globalEnv allowlist (only keys matching this pattern are merged):
+Allowlist (preset env keys must match):
   ^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)
 
-Preset → Provider env merges:
-  ◆ {preset.id} → {provider.name}
-      merge keys: ANTHROPIC_BASE_URL, MODEL  (skipped: API_KEY [already set])
-  [repeat for each match]
+New slots (one per Daintree preset):
+  ◆ {agentName}: vanilla = {vanillaSlotName} (preserved unchanged)
+      • {preset.name}  →  {agentName}-{slug}   [family={inferredFamily}, env keys={allowlisted preset env keys}]
+      • {preset.name}  →  {agentName}-{slug}-2 (collision-suffixed)   [...]
+  [repeat per agent]
 
-globalEnv keys (allowlisted, applied to all matched providers):
-  {comma-separated list of allowlisted keys, or "none"}
+Skipped:
+  ◆ {agentName}: {reason — e.g., no vanilla provider, family mismatch, no presets}
 
-Existing non-empty values in providers.json are NEVER overwritten (idempotent — AC5 guard).
+Each new slot also gets:
+  - cloned MCP server entry in ~/.claude.json (PROVIDER_SLOT={newName})
+  - appended to quorum_active in ~/.claude/nf.json
+  - daintree_preset_id field for re-import idempotency
+
+Backups (timestamped) are written for all three files before any change.
 ```
 
 Use AskUserQuestion:
 - header: "Apply"
-- question: "Apply preset env overrides to providers.json?\n\nA timestamped backup will be created before any write."
+- question: "Apply fan-out import — create one nForma slot per Daintree preset?"
 - options:
   - "Apply"
   - "Cancel — discard"
 
-**If "Cancel":** display "Preset env import cancelled." Continue to Step 3.
+**If "Cancel":** display "Fan-out import cancelled." Continue to Step 3.
 
 **If "Apply":**
 
-Backup providers.json BEFORE writing (try every candidate path — only back up the one that exists):
+Backup all three files BEFORE writing:
 
 ```bash
+TS=$(date +%Y-%m-%d-%H%M%S)
 for cand in "$HOME/.claude/nf/bin/providers.json" "$HOME/.claude/nf-bin/providers.json" "bin/providers.json"; do
-  [ -f "$cand" ] && cp "$cand" "${cand}.backup-$(date +%Y-%m-%d-%H%M%S)"
+  [ -f "$cand" ] && cp "$cand" "${cand}.backup-${TS}"
 done
+[ -f "$HOME/.claude.json" ] && cp "$HOME/.claude.json" "$HOME/.claude.json.backup-${TS}"
+[ -f "$HOME/.claude/nf.json" ] && cp "$HOME/.claude/nf.json" "$HOME/.claude/nf.json.backup-${TS}"
 ```
 
-Then merge env values via Node. Pass CANOPY_INFO and SELECTED_MATCHES_JSON via env vars — never interpolate:
+Then run the fan-out via Node. Pass CANOPY_INFO via env var — never interpolate:
 
 ```bash
 IMPORT_RESULT=$(node << 'NF_EVAL'
@@ -367,9 +421,8 @@ const path = require('path');
 const os = require('os');
 
 const canopyInfo = JSON.parse(process.env.CANOPY_INFO);
-const selectedMatches = JSON.parse(process.env.SELECTED_MATCHES_JSON || '[]');
 
-// Locate providers.json — same candidate paths used elsewhere in this file
+// ── Locate providers.json ──────────────────────────────────────────────
 const providersCandidates = [
   path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),
   path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),
@@ -385,60 +438,200 @@ if (!providersPath) {
   process.exit(0);
 }
 
-// globalEnv allowlist — restricts which globalEnv keys may be merged into providers
+// ── Slug + family inference ────────────────────────────────────────────
+const SLOT_NAME_RE = /^[a-z][a-z0-9-]*$/;
+function slugify(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
 const ALLOWLIST = /^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)/;
-const allowedGlobalEnv = {};
-for (const [k, v] of Object.entries(canopyInfo.globalEnv || {})) {
-  if (ALLOWLIST.test(k)) allowedGlobalEnv[k] = v;
+function filterAllowlisted(envObj) {
+  const out = {};
+  for (const [k, v] of Object.entries(envObj || {})) if (ALLOWLIST.test(k)) out[k] = v;
+  return out;
+}
+const FAMILY_PREFIXES = [
+  ['anthropic',  /^ANTHROPIC_/],
+  ['openai',     /^OPENAI_/],
+  ['google',     /^(GOOGLE_|GEMINI_)/],
+  ['together',   /^TOGETHER_/],
+  ['xai',        /^(XAI_|GROK_)/],
+  ['deepseek',   /^DEEPSEEK_/],
+  ['openrouter', /^OPENROUTER_/],
+  ['ollama',     /^OLLAMA_/],
+];
+function inferFamily(envObj) {
+  const counts = {};
+  for (const k of Object.keys(envObj || {})) {
+    for (const [fam, re] of FAMILY_PREFIXES) if (re.test(k)) counts[fam] = (counts[fam] || 0) + 1;
+  }
+  const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return ranked.length ? ranked[0][0] : null; // null = no family signal; bypass family gate
 }
 
-const perProvider = [];
-let providersUpdated = 0;
-for (const match of selectedMatches) {
-  const provider = providersData.providers.find(p => p.name === match.providerName);
-  if (!provider) continue;
-  provider.env = provider.env || {};
-  const merged = [];
-  const skipped = [];
+// ── Find vanilla provider for a Daintree agent + family ────────────────
+function findVanilla(agentName, family) {
+  const candidates = providersData.providers.filter(p => p.mainTool === agentName);
+  const familyMatch = family ? candidates.filter(p => p.provider === family) : candidates;
+  const pool = familyMatch.length ? familyMatch : (family ? [] : candidates);
+  // Prefer provider without daintree_preset_id, then lowest numeric suffix
+  pool.sort((a, b) => {
+    const aIsClone = !!a.daintree_preset_id;
+    const bIsClone = !!b.daintree_preset_id;
+    if (aIsClone !== bIsClone) return aIsClone ? 1 : -1;
+    const an = parseInt((a.name.match(/-(\d+)$/) || [])[1] || '0', 10);
+    const bn = parseInt((b.name.match(/-(\d+)$/) || [])[1] || '0', 10);
+    return an - bn;
+  });
+  return pool[0] || null;
+}
 
-  // Merge preset env (idempotent — AC5: never overwrite non-empty existing values)
-  const presetEnv = (canopyInfo.customPresets[match.presetId] || {}).env || {};
-  for (const [key, value] of Object.entries(presetEnv)) {
-    const current = provider.env[key];
-    if (!current || current === '') { provider.env[key] = value; merged.push(key); }
-    else { skipped.push({ key, reason: 'already set' }); }
+// ── Build new-slot plan ────────────────────────────────────────────────
+const customPresetsByAgent = canopyInfo.customPresetsByAgent || {};
+const allowedGlobalEnv = filterAllowlisted(canopyInfo.globalEnvironmentVariables);
+
+const plan = []; // { kind: 'add'|'update'|'skip', preset, vanilla, newName, env, family, reason? }
+const usedNames = new Set(providersData.providers.map(p => p.name));
+
+for (const [agentName, presets] of Object.entries(customPresetsByAgent)) {
+  for (const preset of presets) {
+    const allowedEnv = filterAllowlisted(preset.env);
+    const family = inferFamily(allowedEnv);
+
+    // Idempotency: existing provider with this daintree_preset_id?
+    const existing = providersData.providers.find(p => p.daintree_preset_id === preset.id);
+    const vanilla = findVanilla(agentName, family);
+
+    if (!vanilla && !existing) {
+      plan.push({ kind: 'skip', preset, agentName, family, reason: 'no vanilla provider with mainTool=' + agentName + (family ? ' + provider=' + family : '') });
+      continue;
+    }
+
+    // Compose final env: globalEnv first, preset overlays (preset wins)
+    const env = { ...allowedGlobalEnv, ...allowedEnv };
+
+    if (existing) {
+      plan.push({ kind: 'update', preset, agentName, family, vanilla: vanilla || existing, existingName: existing.name, env });
+      continue;
+    }
+
+    // Build the new slot name. Format: {agentName}-{slug(preset.name)} — e.g., "claude-z-ai".
+    // Use the Daintree agent name as prefix (NOT the vanilla slot's full name) so a vanilla
+    // "claude-1" and a preset "Z.AI" produce "claude-z-ai", not "claude-1-z-ai".
+    const baseSlug = slugify(preset.name) || ('preset-' + Math.abs([...preset.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 0)).toString(36));
+    let candidate = agentName + '-' + baseSlug;
+    if (!SLOT_NAME_RE.test(candidate)) candidate = agentName + '-preset'; // last resort
+    let n = 2;
+    while (usedNames.has(candidate)) {
+      candidate = agentName + '-' + baseSlug + '-' + n;
+      n++;
+    }
+    usedNames.add(candidate);
+
+    plan.push({ kind: 'add', preset, agentName, family, vanilla, newName: candidate, env });
   }
+}
 
-  // Merge allowlisted globalEnv (same non-overwrite rule)
-  for (const [key, value] of Object.entries(allowedGlobalEnv)) {
-    const current = provider.env[key];
-    if (!current || current === '') { provider.env[key] = value; merged.push(key + ' (globalEnv)'); }
-    else { skipped.push({ key, reason: 'already set' }); }
+// ── Apply to providers.json ────────────────────────────────────────────
+const written = { providers: { added: [], updated: [], skipped: [] }, mcpServers: { added: [], skipped: [] }, quorum: { added: [], skipped: [] } };
+
+for (const item of plan) {
+  if (item.kind === 'skip') {
+    written.providers.skipped.push({ preset: item.preset.name, agent: item.agentName, reason: item.reason });
+    continue;
   }
-
-  if (merged.length > 0) providersUpdated++;
-  perProvider.push({ provider: provider.name, merged, skipped });
+  if (item.kind === 'add') {
+    const v = item.vanilla;
+    const newProvider = JSON.parse(JSON.stringify(v));
+    newProvider.name = item.newName;
+    newProvider.env = item.env;
+    newProvider.description = (v.description || '') + ' — Daintree preset: ' + item.preset.name;
+    newProvider.daintree_preset_id = item.preset.id;
+    newProvider.daintree_preset_name = item.preset.name;
+    if (item.family) newProvider.daintree_preset_family = item.family;
+    providersData.providers.push(newProvider);
+    written.providers.added.push({ name: item.newName, presetName: item.preset.name, presetId: item.preset.id, vanilla: v.name, envKeys: Object.keys(item.env) });
+  } else if (item.kind === 'update') {
+    const existing = providersData.providers.find(p => p.daintree_preset_id === item.preset.id);
+    existing.env = item.env;
+    existing.daintree_preset_name = item.preset.name;
+    if (item.family) existing.daintree_preset_family = item.family;
+    written.providers.updated.push({ name: existing.name, presetName: item.preset.name, presetId: item.preset.id, envKeys: Object.keys(item.env) });
+  }
 }
 
 fs.writeFileSync(providersPath, JSON.stringify(providersData, null, 2) + '\n');
-process.stdout.write(JSON.stringify({ written: true, providersPath, providersUpdated, perProvider }) + '\n');
+
+// ── Apply to ~/.claude.json (clone vanilla MCP server entry per new slot) ──
+const claudeJsonPath = path.join(os.homedir(), '.claude.json');
+let claudeJson = {};
+try { claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8')); } catch (e) {}
+claudeJson.mcpServers = claudeJson.mcpServers || {};
+for (const item of plan.filter(p => p.kind === 'add')) {
+  const v = item.vanilla;
+  const vanillaEntry = claudeJson.mcpServers[v.name];
+  if (!vanillaEntry) {
+    written.mcpServers.skipped.push({ name: item.newName, reason: 'vanilla MCP server entry "' + v.name + '" not in ~/.claude.json' });
+    continue;
+  }
+  if (claudeJson.mcpServers[item.newName]) {
+    written.mcpServers.skipped.push({ name: item.newName, reason: 'already present' });
+    continue;
+  }
+  const cloned = JSON.parse(JSON.stringify(vanillaEntry));
+  cloned.env = cloned.env || {};
+  cloned.env.PROVIDER_SLOT = item.newName;
+  // unified-mcp-server.mjs reads providers.json from its own __dirname (repo source) by default.
+  // The new slot only exists in the providers.json we just wrote (the installed copy), so we
+  // point this MCP instance at that copy via UNIFIED_PROVIDERS_CONFIG. Without this, the server
+  // would exit with "Unknown PROVIDER_SLOT" because the new slot is invisible to it.
+  cloned.env.UNIFIED_PROVIDERS_CONFIG = providersPath;
+  claudeJson.mcpServers[item.newName] = cloned;
+  written.mcpServers.added.push({ name: item.newName, vanilla: v.name });
+}
+fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2) + '\n');
+
+// ── Apply to ~/.claude/nf.json (append to quorum_active) ──
+const nfJsonPath = path.join(os.homedir(), '.claude', 'nf.json');
+let nfJson = {};
+try { nfJson = JSON.parse(fs.readFileSync(nfJsonPath, 'utf8')); } catch (e) {}
+nfJson.quorum_active = Array.isArray(nfJson.quorum_active) ? nfJson.quorum_active : [];
+for (const item of plan.filter(p => p.kind === 'add')) {
+  if (nfJson.quorum_active.includes(item.newName)) {
+    written.quorum.skipped.push({ name: item.newName, reason: 'already in quorum_active' });
+  } else {
+    nfJson.quorum_active.push(item.newName);
+    written.quorum.added.push({ name: item.newName });
+  }
+}
+fs.writeFileSync(nfJsonPath, JSON.stringify(nfJson, null, 2) + '\n');
+
+process.stdout.write(JSON.stringify({ written: true, providersPath, claudeJsonPath, nfJsonPath, summary: written, plan }) + '\n');
 NF_EVAL
 )
 ```
 
 The environment variables are:
-- `CANOPY_INFO` — raw JSON from Step 1 (carries `customPresets`, `globalEnv`)
-- `SELECTED_MATCHES_JSON` — JSON array of `{ presetId, providerName }` matches the user approved
+- `CANOPY_INFO` — raw JSON from Step 1 (carries `customPresetsByAgent` and `globalEnvironmentVariables`)
 
-Parse IMPORT_RESULT. Display result with ✓ for merged keys and ○ for skipped (already-set):
+Parse IMPORT_RESULT. Display the result:
 
 ```
-✓ Preset env imported into providers.json
+✓ Fan-out import complete
 
-{for each perProvider entry:}
-  {provider}: ✓ merged [{merged}]   ○ skipped [{skipped}]
+providers.json:
+  ✓ added:    {summary.providers.added.map(a => a.name + " (from preset \"" + a.presetName + "\", clones " + a.vanilla + ")")}
+  ↻ updated:  {summary.providers.updated.map(u => u.name + " ← preset \"" + u.presetName + "\"")}
+  ○ skipped:  {summary.providers.skipped.map(s => "preset \"" + s.preset + "\" → " + s.reason)}
 
-Providers updated: {providersUpdated}
+~/.claude.json mcpServers:
+  ✓ added:    {summary.mcpServers.added.map(m => m.name + " (cloned from " + m.vanilla + ")")}
+  ○ skipped:  {summary.mcpServers.skipped.map(m => m.name + " — " + m.reason)}
+
+~/.claude/nf.json quorum_active:
+  ✓ added:    {summary.quorum.added.map(q => q.name)}
+  ○ skipped:  {summary.quorum.skipped.map(q => q.name + " — " + q.reason)}
+
+⚠ Restart Claude Code to pick up the new MCP servers and quorum slots.
 ```
 
 Continue to Step 3.
@@ -658,7 +851,15 @@ try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch(e) {
 
 if (!config.userAgentRegistry) config.userAgentRegistry = {};
 config.agentSettings = config.agentSettings || {};
-config.agentSettings.customPresets = config.agentSettings.customPresets || {};
+config.agentSettings.agents = config.agentSettings.agents || {};
+
+// Pick the Daintree agent that should host this preset. We prefer providerEntry.mainTool
+// (which is the CLI binary name and matches Daintree's agent keys: claude, codex, gemini, opencode).
+// Fall back to slot.cli, then to 'claude' as a last resort. If the chosen agent doesn't exist
+// in Daintree's agents map, the preset export is skipped for that slot (logged with status).
+function targetAgentFor(slot, providerEntry) {
+  return providerEntry.mainTool || slot.cli || 'claude';
+}
 
 const registered = [];
 for (const slot of selectedSlots) {
@@ -682,30 +883,41 @@ for (const slot of selectedSlots) {
   }
 
   // ── customPresets entry (Step 3e — issue 138 AC3, AC4, AC5) ──
-  // Idempotent: existing presets show 'unchanged' — values are NEVER overwritten by default.
+  // Daintree v20: customPresets is a per-agent ARRAY at agentSettings.agents.<agent>.customPresets[].
+  // Each entry shape: {id, name, description, env, color, fallbacks: [], dangerousEnabled}.
+  // Idempotency by id: existing entries with the same id show 'unchanged' and are NEVER overwritten.
   const presetId = 'nf-' + slot.name;
-  if (config.agentSettings.customPresets[presetId]) {
-    registered.push({ id: presetId, kind: 'customPreset', status: 'unchanged' });
-  } else {
-    // Derive env from providers.json — pull MODEL, ANTHROPIC_BASE_URL, *_API_KEY (key NAMES only,
-    // values resolved by Daintree at runtime via ${ENV_VAR} placeholders — never embed secrets here)
-    const env = {};
-    if (providerEntry.model)                       env.MODEL = providerEntry.model;
-    if (providerEntry.env && providerEntry.env.ANTHROPIC_BASE_URL) env.ANTHROPIC_BASE_URL = providerEntry.env.ANTHROPIC_BASE_URL;
-    for (const k of Object.keys(providerEntry.env || {})) {
-      if (/_API_KEY$/.test(k)) env[k] = '${' + k + '}';
-    }
+  const targetAgent = targetAgentFor(slot, providerEntry);
+  const agentBucket = config.agentSettings.agents[targetAgent];
 
-    config.agentSettings.customPresets[presetId] = {
-      id: presetId,
-      name: 'nForma: ' + slot.name,
-      command: (slot.cli || providerEntry.mainTool || 'node').split('/').pop(),
-      color: colorFor(providerEntry.provider || slot.display_provider),
-      iconId: 'brain-circuit',
-      description: (providerEntry.display_provider || slot.display_provider || 'unknown') + ' — ' + (providerEntry.model || slot.model || 'unknown'),
-      env
-    };
-    registered.push({ id: presetId, kind: 'customPreset', status: 'added' });
+  if (!agentBucket) {
+    registered.push({ id: presetId, kind: 'customPreset', status: 'skipped (Daintree has no agent: ' + targetAgent + ')', targetAgent });
+  } else {
+    if (!Array.isArray(agentBucket.customPresets)) agentBucket.customPresets = [];
+    const existing = agentBucket.customPresets.find(p => p && p.id === presetId);
+    if (existing) {
+      registered.push({ id: presetId, kind: 'customPreset', status: 'unchanged', targetAgent });
+    } else {
+      // Derive env from providers.json. We emit ${ENV_VAR} placeholders for *_API_KEY so Daintree
+      // resolves secrets from the user's runtime env at preset-launch time (never embed secrets here).
+      const env = {};
+      if (providerEntry.model) env.MODEL = providerEntry.model;
+      if (providerEntry.env && providerEntry.env.ANTHROPIC_BASE_URL) env.ANTHROPIC_BASE_URL = providerEntry.env.ANTHROPIC_BASE_URL;
+      for (const k of Object.keys(providerEntry.env || {})) {
+        if (/_API_KEY$/.test(k)) env[k] = '${' + k + '}';
+      }
+
+      agentBucket.customPresets.push({
+        id: presetId,
+        name: 'nForma: ' + slot.name,
+        description: (providerEntry.display_provider || slot.display_provider || 'unknown') + ' — ' + (providerEntry.model || slot.model || 'unknown'),
+        env,
+        color: colorFor(providerEntry.provider || slot.display_provider),
+        fallbacks: [],
+        dangerousEnabled: false
+      });
+      registered.push({ id: presetId, kind: 'customPreset', status: 'added', targetAgent });
+    }
   }
 }
 
@@ -736,9 +948,12 @@ Re-running this command shows `unchanged` for any customPresets that already exi
 Step 3e is implemented as part of Step 3d's atomic write above (one config read, one config write — avoids dual-backup risk). What it does:
 
 1. **Builds a `customPresets` entry per selected quorum slot** (id = `nf-{slot.name}`, mirroring the userAgentRegistry id).
-2. **Derives env from `providers.json`** — MODEL is copied verbatim, ANTHROPIC_BASE_URL is copied if set, and any `*_API_KEY` keys are emitted as Daintree placeholder strings `${KEY_NAME}` so Daintree resolves them from the user's runtime env (no secrets embedded in config).
-3. **Picks brand color from `BRAND_COLORS`** — keyed by `providerEntry.provider` (lowercased), e.g., `openai → #10a37f`, `anthropic → #d97757`, `together.xyz → #0f6fff`. Unknown providers fall back to `#6366f1` (indigo).
-4. **Idempotency (AC5):** existing `customPresets[presetId]` entries are left untouched and emit a `status: 'unchanged'` row in the result. The user must manually delete a preset in Daintree to force re-export.
+2. **Routes the entry to the correct Daintree agent bucket** — Daintree v20 stores `customPresets` as a per-agent **array** at `agentSettings.agents.<agent>.customPresets[]`. The target agent is `providerEntry.mainTool` (the CLI binary the slot drives), falling back to `slot.cli`, then `claude`. If Daintree has no matching agent, the preset is skipped for that slot with a clear status row.
+3. **Derives env from `providers.json`** — MODEL is copied verbatim, ANTHROPIC_BASE_URL is copied if set, and any `*_API_KEY` keys are emitted as Daintree placeholder strings `${KEY_NAME}` so Daintree resolves them from the user's runtime env (no secrets embedded in config).
+4. **Picks brand color from `BRAND_COLORS`** — keyed by `providerEntry.provider` (lowercased), e.g., `openai → #10a37f`, `anthropic → #d97757`, `together.xyz → #0f6fff`. Unknown providers fall back to `#6366f1` (indigo).
+5. **Idempotency (AC5):** existing entries (matched by `id` inside the per-agent array) are left untouched and emit `status: 'unchanged'`. The user must manually delete a preset in Daintree to force re-export.
+
+The shape pushed into the array matches Daintree's preset schema: `{id, name, description, env, color, fallbacks: [], dangerousEnabled: false}`. We default `dangerousEnabled` to false — the slot's own configuration (claude.dangerousEnabled, etc.) governs invocation safety; presets only carry env overrides.
 
 Continue to Step 4.
 
@@ -768,15 +983,15 @@ Existing customPresets and providers.json env values are NEVER overwritten (idem
 <success_criteria>
 - Daintree detected first; canopy-app paths used as backwards-compatible fallback
 - Discovery banner shows MCP URL, agents, user agents, plugins dir
-- Custom presets, globalEnv, and providerTemplates from Daintree agentSettings are surfaced in discovery banner (issue 138 AC1)
+- Custom presets (per-agent arrays at agentSettings.agents.<agent>.customPresets) and top-level globalEnvironmentVariables are surfaced in discovery banner (issue 138 AC1)
 - Not-found case handled gracefully with install instructions for both Daintree and legacy canopy-app paths
 - Import writes `canopy` section to ~/.claude/nf.json with MCP URL and agent list
 - nf.json backup created before any write
-- Import path merges preset env into matching providers.json slots without overwriting non-empty values (issue 138 AC2 + AC5)
+- Import path merges per-agent preset env (matched to providers via provider.mainTool === agentName) and top-level globalEnvironmentVariables into providers.json without overwriting non-empty values (issue 138 AC2 + AC5)
 - providers.json backup created before any env merge write
-- globalEnv merges are gated by allowlist `^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)` — covers all BRAND_COLORS providers
+- Both preset env and globalEnvironmentVariables merges are gated by allowlist `^(ANTHROPIC_|OPENAI_|GOOGLE_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|MODEL$|.*_BASE_URL$|.*_API_KEY$)` — covers all BRAND_COLORS providers
 - Registration writes to Canopy's userAgentRegistry with `nf-` prefixed agent IDs
-- Export path writes nForma quorum slots to Daintree customPresets with provider-specific brand colors from BRAND_COLORS mapping (issue 138 AC3 + AC4)
+- Export path writes nForma quorum slots to per-agent Daintree customPresets arrays (agentSettings.agents.<agent>.customPresets[]) with provider-specific brand colors from BRAND_COLORS mapping (issue 138 AC3 + AC4)
 - Canopy config.json backup created before any write
 - Existing user agents and customPresets in Canopy are never overwritten — re-running shows 'unchanged' (issue 138 AC5 idempotency)
 - No changes applied without explicit user confirmation via AskUserQuestion

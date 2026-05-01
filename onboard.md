@@ -166,8 +166,12 @@ else if (fs.existsSync(cPath)) { detectedPath = cPath; detectedProduct = 'canopy
 if (detectedPath) {
   try {
     const cfg = JSON.parse(fs.readFileSync(detectedPath, 'utf8'));
-    customPresetCount = cfg.agentSettings && cfg.agentSettings.customPresets
-      ? Object.keys(cfg.agentSettings.customPresets).length : 0;
+    // Daintree v20: customPresets are per-agent arrays under agentSettings.agents.<agent>.customPresets[].
+    if (cfg.agentSettings && cfg.agentSettings.agents) {
+      for (const a of Object.values(cfg.agentSettings.agents)) {
+        if (Array.isArray(a.customPresets)) customPresetCount += a.customPresets.length;
+      }
+    }
   } catch (e) {}
 }
 result.daintree = {
