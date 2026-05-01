@@ -119,6 +119,44 @@ function buildToolsLine(homeDir, dir) {
   return parts.join(' \x1b[2m│\x1b[0m ');
 }
 
+// Build the quorum-slots line. Reads providers.json (the configured slot inventory),
+// ~/.claude.json mcpServers (which slots are MCP-registered), and the slot-health
+// cache written by nf-slot-health-probe.js. Statusline rendering must stay fast,
+// so this is purely cache-read — the probe runs out-of-band (e.g. SessionStart).
+function buildSlotsLine(homeDir) {
+  const providersPath = path.join(homeDir, '.claude', 'nf', 'bin', 'providers.json');
+  const claudeJsonPath = path.join(homeDir, '.claude.json');
+  const cachePath = path.join(homeDir, '.claude', 'nf', 'slot-health.json');
+
+  let providers, mcpServers, cache;
+  try { providers = JSON.parse(fs.readFileSync(providersPath, 'utf8')).providers; } catch (_) { return null; }
+  if (!Array.isArray(providers) || providers.length === 0) return null;
+  try { mcpServers = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8')).mcpServers || {}; } catch (_) { mcpServers = {}; }
+  try { cache = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch (_) { cache = null; }
+
+  const FRESH_MS = 5 * 60 * 1000;
+  const checkedAt = cache && cache.checked_at ? Date.parse(cache.checked_at) : 0;
+  const fresh = checkedAt && (Date.now() - checkedAt) < FRESH_MS;
+
+  const parts = [];
+  for (const p of providers) {
+    const inMcp = !!mcpServers[p.name];
+    const entry = cache && cache.slots && cache.slots[p.name];
+    let glyph, color;
+    if (!inMcp) {
+      glyph = '·'; color = '\x1b[2m'; // dim — listed but not MCP-registered
+    } else if (fresh && entry && entry.ok) {
+      glyph = '●'; color = '\x1b[32m'; // green — recent OK
+    } else if (fresh && entry && !entry.ok) {
+      glyph = '⊘'; color = '\x1b[31m'; // red — recent failure
+    } else {
+      glyph = '○'; color = ''; // configured, no fresh data
+    }
+    parts.push(`${color}${glyph} ${p.name}\x1b[0m`);
+  }
+  return parts.join(' \x1b[2m│\x1b[0m ');
+}
+
 // Read JSON from stdin
 let input = '';
 process.stdin.setEncoding('utf8');
@@ -270,6 +308,14 @@ process.stdin.on('end', () => {
     } else {
       process.stdout.write(`${nfUpdate}\x1b[2m${model}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}`);
     }
+
+    // Quorum slots line (above the tools line)
+    try {
+      const slotsLine = buildSlotsLine(homeDir);
+      if (slotsLine) {
+        process.stdout.write('\n' + slotsLine);
+      }
+    } catch (_e) {}
 
     // Tools status second line
     try {

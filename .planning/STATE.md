@@ -40,6 +40,7 @@ See: .planning/PROJECT.md
 | 402 | Build generic benchmark runner for nForma skills (issue #107) | 2026-04-17 | aa9c535c | Verified | [402-build-generic-benchmark-runner-for-nform](.planning/quick/402-build-generic-benchmark-runner-for-nform/) |
 | 403 | Add nf:debug benchmark track with TLA+ bug/fix models and TLC trace output | 2026-04-17 | 0748ec12 | Verified | [403-add-nf-debug-benchmark-track-with-generi](.planning/quick/403-add-nf-debug-benchmark-track-with-generi/) |
 | 404 | Build nf:debug autonomy benchmark with graded difficulty stubs, fix-cycle runner, and standalone scorer | 2026-04-17 | 27ad207d | Verified | [404-build-nf-debug-autonomy-benchmark-with-g](.planning/quick/404-build-nf-debug-autonomy-benchmark-with-g/) |
+| 405 | Implement PR merge-readiness autopilot script (issue #136) | 2026-04-30 | c86519ab | Verified | [405-work-on-issue-136](./quick/405-work-on-issue-136/) |
 | 405 | Bidirectional fleet sync: Canopy presets <-> nForma providers (issue 138) | 2026-05-01 | fc2a0e25 | Needs Review | [405-bidirectional-fleet-sync-canopy-presets-](./quick/405-bidirectional-fleet-sync-canopy-presets-/) |
 
 ## Session Log

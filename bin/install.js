@@ -63,6 +63,7 @@ try {
     'nf-statusline': 10,
     'nf-token-collector': 10,
     'nf-slot-correlator': 10,
+    'nf-slot-health-probe': 10,
   };
 }
 
@@ -1544,9 +1545,7 @@ function uninstall(isGlobal, runtime = 'claude') {
               h.command.includes('nf-check-update') ||
               h.command.includes('nf-statusline') ||
               h.command.includes('nf-session-start') ||
-              h.command.includes('nf-check-update') ||
-              h.command.includes('nf-statusline') ||
-              h.command.includes('nf-session-start')
+              h.command.includes('nf-slot-health-probe')
             )
           );
           return !hasNfHook;
@@ -2772,6 +2771,25 @@ function install(isGlobal, runtime = 'claude') {
         ]
       });
       log(`  ${green}✓${reset} Configured nForma secret sync hook (SessionStart)`);
+    }
+
+    // Register nForma slot-health probe (populates ~/.claude/nf/slot-health.json
+    // for the statusline's quorum slots line). Probe runs in parallel and finishes
+    // in ~400ms for a typical 5-7 slot setup; capped at 15s.
+    const hasSlotHealthProbeHook = settings.hooks.SessionStart.some(entry =>
+      entry.hooks && entry.hooks.some(h => h.command && h.command.includes('nf-slot-health-probe'))
+    );
+    if (!hasSlotHealthProbeHook) {
+      settings.hooks.SessionStart.push({
+        hooks: [
+          {
+            type: 'command',
+            command: buildHookCommand(targetDir, 'nf-slot-health-probe.js'),
+            timeout: 15
+          }
+        ]
+      });
+      log(`  ${green}✓${reset} Configured nForma slot-health probe (SessionStart)`);
     }
 
     // INST-05: Warn (yellow) if quorum MCP servers are absent — runs every install
