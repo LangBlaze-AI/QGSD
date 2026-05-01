@@ -193,23 +193,40 @@ while true; do
   # Exit code 0 = all pass, non-zero = some fail or pending
   # Capture output first to avoid pipefail issues with set -euo pipefail
   CHECKS_OUTPUT=$(gh pr checks "$PR_NUMBER" 2>/dev/null || true)
-  while IFS=$'\t' read -r name state elapsed url; do
-    # Skip empty lines
-    [[ -z "$name" ]] && continue
+
+  # Parse via jq to avoid IFS/read parsing issues with set -u
+  # Each line: name[TAB]state[TAB]elapsed[TAB]url
+  TOTAL=0
+  CHECKS_PASSED=0
+  CHECKS_FAILED=0
+  CHECKS_PENDING=0
+  FAILED_CHECKS=""
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+
+    # Use awk to split tab-separated fields (name, state, elapsed, url)
+    name=$(echo "$line" | awk -F'\t' '{print $1}')
+    state=$(echo "$line" | awk -F'\t' '{print $2}')
+    elapsed=$(echo "$line" | awk -F'\t' '{print $3}')
+
+    [[ -z "$name" || -z "$state" ]] && continue
+
+    TOTAL=$((TOTAL + 1))
 
     case "$state" in
       pass)
-        ((CHECKS_PASSED++))
+        CHECKS_PASSED=$((CHECKS_PASSED + 1))
         status_green "$name"
         ;;
       fail)
-        ((CHECKS_FAILED++))
+        CHECKS_FAILED=$((CHECKS_FAILED + 1))
         FAILED_CHECKS="${FAILED_CHECKS}
   - $name"
         status_red "$name"
         ;;
       pending|*)
-        ((CHECKS_PENDING++))
+        CHECKS_PENDING=$((CHECKS_PENDING + 1))
         status_yellow "$name"
         ;;
     esac
@@ -278,20 +295,28 @@ done
 
 echo ""
 
-# ── TASK 2: Bot thread detection and resolution ──
+# ── TASK 2: Resolve bot threads and comments ──
+# This runs in parallel with check polling — resolve bot conversations
+# regardless of check status so we're ready to merge the moment checks pass.
 
-log "Task 2: Detecting and resolving bot threads..."
+log "Task 2: Resolving bot threads and comments..."
 echo ""
 
 # Known bot usernames
 BOT_LOGINS=(
   "copilot-pull-request-reviewer[bot]"
-  "coderabbitai[bot]"
+  "coderabbitai"
   "gitar-bot[bot]"
 )
 
-# Fetch review threads via GraphQL
-THREAD_QUERY='
+resolve_bot_threads() {
+  local owner="$1"
+  local repo="$2"
+  local pr_number="$3"
+  local dry_run="$4"
+
+  # Fetch review threads via GraphQL
+  THREAD_QUERY='
 query($owner:String!, $repo:String!, $number:Int!) {
   repository(owner:$owner, name:$repo) {
     pullRequest(number:$number) {
@@ -314,56 +339,59 @@ query($owner:String!, $repo:String!, $number:Int!) {
 }
 '
 
-THREADS=$(gh api graphql \
-  -f query="$THREAD_QUERY" \
-  -f owner="$OWNER" \
-  -f repo="$REPO" \
-  -F number="$PR_NUMBER" \
-  2>/dev/null || echo '{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}')
+  THREADS=$(gh api graphql \
+    -f query="$THREAD_QUERY" \
+    -f owner="$owner" \
+    -f repo="$repo" \
+    -F number="$pr_number" \
+    2>/dev/null || echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}')
 
-THREAD_NODES=$(echo "$THREADS" | jq '.repository.pullRequest.reviewThreads.nodes // []')
-THREAD_COUNT=$(echo "$THREAD_NODES" | jq 'length')
+  THREAD_NODES=$(echo "$THREADS" | jq '.data.repository.pullRequest.reviewThreads.nodes // []')
+  THREAD_COUNT=$(echo "$THREAD_NODES" | jq 'length')
 
-if [[ $THREAD_COUNT -eq 0 ]]; then
-  log "No review threads found"
-else
-  log "Found $THREAD_COUNT review thread(s)"
-fi
-
-BOT_THREADS_RESOLVED=0
-NON_BOT_THREADS_UNRESOLVED=0
-MERGE_BLOCKED=false
-
-while IFS= read -r thread_json; do
-  if [[ -z "$thread_json" || "$thread_json" == "null" ]]; then
-    continue
+  if [[ $THREAD_COUNT -eq 0 ]]; then
+    log "No review threads found"
+  else
+    log "Found $THREAD_COUNT review thread(s)"
   fi
 
-  THREAD_ID=$(echo "$thread_json" | jq -r '.id')
-  IS_RESOLVED=$(echo "$thread_json" | jq -r '.isResolved')
-  AUTHOR=$(echo "$thread_json" | jq -r '.comments.nodes[0].author.login // "unknown"')
+  BOT_THREADS_RESOLVED=0
+  NON_BOT_THREADS_UNRESOLVED=0
+  MERGE_BLOCKED=false
 
-  # Skip already resolved threads
-  if [[ "$IS_RESOLVED" == "true" ]]; then
-    continue
-  fi
-
-  # Check if author is a known bot
-  IS_BOT=false
-  for bot_login in "${BOT_LOGINS[@]}"; do
-    if [[ "$AUTHOR" == "$bot_login" ]]; then
-      IS_BOT=true
-      break
+  while IFS= read -r thread_json; do
+    if [[ -z "$thread_json" || "$thread_json" == "null" ]]; then
+      continue
     fi
-  done
 
-  if [[ "$IS_BOT" == "true" ]]; then
-    log "Resolving bot thread from $AUTHOR..."
+    THREAD_ID=$(echo "$thread_json" | jq -r '.id')
+    IS_RESOLVED=$(echo "$thread_json" | jq -r '.isResolved')
+    AUTHOR=$(echo "$thread_json" | jq -r '.comments.nodes[0].author.login // "unknown"')
 
-    if [[ "$DRY_RUN" == "false" ]]; then
-      # Post reply via GraphQL
-      REPLY_BODY="Acknowledged — addressed or accepted as advisory."
-      REPLY_MUTATION='
+    # Skip already resolved threads
+    if [[ "$IS_RESOLVED" == "true" ]]; then
+      continue
+    fi
+
+    # Check if author is a known bot
+    # Handle both bare username and [bot] suffix variants
+    IS_BOT=false
+    AUTHOR_BASE="${AUTHOR%\[bot\]}"  # strip [bot] suffix if present
+    for bot_login in "${BOT_LOGINS[@]}"; do
+      BOT_BASE="${bot_login%\[bot\]}"  # strip [bot] suffix if present
+      if [[ "$AUTHOR_BASE" == "$BOT_BASE" ]]; then
+        IS_BOT=true
+        break
+      fi
+    done
+
+    if [[ "$IS_BOT" == "true" ]]; then
+      log "Resolving bot thread from $AUTHOR..."
+
+      if [[ "$dry_run" == "false" ]]; then
+        # Post reply via GraphQL
+        REPLY_BODY="Acknowledged — addressed or accepted as advisory."
+        REPLY_MUTATION='
 mutation($threadId:ID!, $body:String!) {
   addPullRequestReviewComment(input:{pullRequestReviewThreadId:$threadId, body:$body}) {
     comment {
@@ -373,23 +401,18 @@ mutation($threadId:ID!, $body:String!) {
 }
 '
 
-      # Try GraphQL mutation first
-      if gh api graphql \
-        -f query="$REPLY_MUTATION" \
-        -f threadId="$THREAD_ID" \
-        -f body="$REPLY_BODY" \
-        >/dev/null 2>&1; then
-        # Successfully posted reply
-        true
-      else
-        # Fall back to REST API (not needed in most cases but kept for compatibility)
-        log "GraphQL reply failed, attempting REST fallback..."
-        # REST fallback would go here if needed
-        true
-      fi
+        # Try GraphQL mutation first
+        if gh api graphql \
+          -f query="$REPLY_MUTATION" \
+          -f threadId="$THREAD_ID" \
+          -f body="$REPLY_BODY" \
+          >/dev/null 2>&1; then
+          # Successfully posted reply
+          true
+        fi
 
-      # Resolve the thread
-      RESOLVE_MUTATION='
+        # Resolve the thread
+        RESOLVE_MUTATION='
 mutation($threadId:ID!) {
   resolveReviewThread(input:{threadId:$threadId}) {
     thread {
@@ -399,27 +422,115 @@ mutation($threadId:ID!) {
 }
 '
 
-      if gh api graphql \
-        -f query="$RESOLVE_MUTATION" \
-        -f threadId="$THREAD_ID" \
-        >/dev/null 2>&1; then
-        status_green "Resolved bot thread from $AUTHOR"
-        ((BOT_THREADS_RESOLVED++))
+        if gh api graphql \
+          -f query="$RESOLVE_MUTATION" \
+          -f threadId="$THREAD_ID" \
+          >/dev/null 2>&1; then
+          status_green "Resolved bot thread from $AUTHOR"
+          ((BOT_THREADS_RESOLVED++))
+        else
+          status_red "Failed to resolve bot thread from $AUTHOR"
+        fi
       else
-        status_red "Failed to resolve bot thread from $AUTHOR"
+        # Dry-run: just log what would happen
+        status_yellow "Would resolve bot thread from $AUTHOR"
+        ((BOT_THREADS_RESOLVED++))
       fi
     else
-      # Dry-run: just log what would happen
-      status_yellow "Would resolve bot thread from $AUTHOR"
-      ((BOT_THREADS_RESOLVED++))
+      # Non-bot thread — block merge
+      status_red "Unresolved thread from $AUTHOR (human review required)"
+      ((NON_BOT_THREADS_UNRESOLVED++))
+      MERGE_BLOCKED=true
     fi
-  else
-    # Non-bot thread — block merge
-    status_red "Unresolved thread from $AUTHOR (human review required)"
-    ((NON_BOT_THREADS_UNRESOLVED++))
-    MERGE_BLOCKED=true
-  fi
-done <<< "$(echo "$THREAD_NODES" | jq -c '.[]')"
+  done <<< "$(echo "$THREAD_NODES" | jq -c '.[]')"
+
+  # Also resolve standalone PR comments from bots (not part of review threads)
+  # These can block merge under "All conversations must be resolved" settings
+  log "Checking for standalone bot comments..."
+  COMMENTS_QUERY='
+query($owner:String!, $repo:String!, $number:Int!) {
+  repository(owner:$owner, name:$repo) {
+    pullRequest(number:$number) {
+      comments(first:100) {
+        nodes {
+          id
+          body
+          author {
+            login
+          }
+          isMinimized
+        }
+      }
+    }
+  }
+}
+'
+
+  COMMENTS_RESULT=$(gh api graphql \
+    -f query="$COMMENTS_QUERY" \
+    -f owner="$owner" \
+    -f repo="$repo" \
+    -F number="$pr_number" \
+    2>/dev/null || echo '{"data":{"repository":{"pullRequest":{"comments":{"nodes":[]}}}}}')
+
+  COMMENT_NODES=$(echo "$COMMENTS_RESULT" | jq '.data.repository.pullRequest.comments.nodes // []')
+  COMMENT_COUNT=$(echo "$COMMENT_NODES" | jq 'length')
+
+  log "Found $COMMENT_COUNT PR comment(s)"
+
+  while IFS= read -r comment_json; do
+    if [[ -z "$comment_json" || "$comment_json" == "null" ]]; then
+      continue
+    fi
+
+    COMMENT_ID=$(echo "$comment_json" | jq -r '.id')
+    AUTHOR=$(echo "$comment_json" | jq -r '.author.login // "unknown"')
+    IS_MINIMIZED=$(echo "$comment_json" | jq -r '.isMinimized')
+
+    # Check if author is a known bot
+    # Handle both bare username and [bot] suffix variants
+    IS_BOT=false
+    AUTHOR_BASE="${AUTHOR%\[bot\]}"  # strip [bot] suffix if present
+    for bot_login in "${BOT_LOGINS[@]}"; do
+      BOT_BASE="${bot_login%\[bot\]}"  # strip [bot] suffix if present
+      if [[ "$AUTHOR_BASE" == "$BOT_BASE" ]]; then
+        IS_BOT=true
+        break
+      fi
+    done
+
+    if [[ "$IS_BOT" == "true" ]] && [[ "$IS_MINIMIZED" != "true" ]]; then
+      log "Minimizing bot comment from $AUTHOR (not part of a thread)..."
+
+      if [[ "$dry_run" == "false" ]]; then
+        # Minimize the comment via REST API
+        if gh api --method PATCH \
+          "repos/${owner}/${repo}/pulls/comments/${COMMENT_ID}" \
+          -f body=" " \
+          -f minimized=true \
+          >/dev/null 2>&1; then
+          status_green "Minimized bot comment from $AUTHOR"
+        else
+          status_yellow "Could not minimize bot comment from $AUTHOR (may not support)"
+        fi
+      else
+        status_yellow "Would minimize bot comment from $AUTHOR"
+      fi
+    fi
+  done <<< "$(echo "$COMMENT_NODES" | jq -c '.[]')"
+
+  # Return results via globals
+  BOT_THREADS_RESOLVED_COUNT=$BOT_THREADS_RESOLVED
+  NON_BOT_THREADS_UNRESOLVED_COUNT=$NON_BOT_THREADS_UNRESOLVED
+  MERGE_BLOCKED_BY_THREADS=$MERGE_BLOCKED
+}
+
+BOT_THREADS_RESOLVED=0
+NON_BOT_THREADS_UNRESOLVED=0
+MERGE_BLOCKED=false
+
+# Run thread resolution early (before checks complete)
+resolve_bot_threads "$OWNER" "$REPO" "$PR_NUMBER" "$DRY_RUN"
 
 echo ""
 
