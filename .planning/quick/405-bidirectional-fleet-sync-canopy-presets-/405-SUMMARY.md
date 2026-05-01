@@ -39,7 +39,27 @@ metrics:
 
 # Quick Task 405: Bidirectional Fleet Sync — Daintree Presets <-> nForma Providers
 
-One-liner: Daintree-first detection with canopy-app fallback in `/nf:link-canopy` and `onboard.md`, idempotent merge of preset env into providers.json with allowlist-gated globalEnv passthrough, and export of nForma quorum slots back to Daintree's customPresets with provider-specific brand colors from a fixed lookup table.
+> **⚠️ HISTORICAL DOCUMENT.** The body below describes the original plan-time design.
+> Live testing surfaced schema and design errors; the shipped implementation diverges
+> substantially. Authoritative description lives in `commands/nf/link-canopy.md` itself
+> (see Step 2d preamble) and in the `implementation_evolution` block of this file's
+> frontmatter. Do **not** treat the wording below as current behavior — it's preserved
+> only as a record of what the plan said before testing.
+
+**Shipped design (one-liner)**: Daintree-first detection with canopy-app fallback in
+`/nf:link-canopy` and `onboard.md`. Step 2d **fans out** each Daintree preset (read from
+`agentSettings.agents.<agent>.customPresets[]`) into its own new nForma quorum slot named
+`{agentName}-{slug(preset.name)}`, cloned from the matching vanilla provider, with three-layer
+env composition: `globalEnvironmentVariables` (top-level) as base, vanilla env in the middle,
+preset env on top. Re-imports update preset-linked slots in place by `daintree_preset_id`
+(String-normalized). Step 3e exports nForma quorum slots back to per-agent
+`agentSettings.agents.<agent>.customPresets[]` arrays, with brand colors from a fixed lookup
+and secret-bearing env keys (matched broadly: `*_API_KEY`, `*_AUTH_TOKEN`, `*_TOKEN`) emitted
+as `${KEY}` placeholders so secrets stay in the user's runtime env.
+
+---
+
+**Original plan-time one-liner (HISTORICAL):** Daintree-first detection with canopy-app fallback in `/nf:link-canopy` and `onboard.md`, idempotent merge of preset env into providers.json with allowlist-gated globalEnv passthrough, and export of nForma quorum slots back to Daintree's customPresets with provider-specific brand colors from a fixed lookup table.
 
 ## Sectional Edits to commands/nf/link-canopy.md (513 -> 786 lines)
 

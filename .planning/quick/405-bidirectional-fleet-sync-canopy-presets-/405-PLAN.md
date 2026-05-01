@@ -81,6 +81,13 @@ must_haves:
 ---
 
 <objective>
+> **⚠️ HISTORICAL PLAN.** Body retained for record. Live testing during execution
+> surfaced a Daintree v20 schema mismatch (the body below references `globalEnv` and
+> `providerTemplates` which don't exist in v20) and a design flaw in the merge-style
+> import (would have given Together-routed `ccr-*` slots Anthropic env). The shipped
+> implementation uses fan-out semantics with three-layer env composition. See the
+> `implementation_evolution` block in this file's frontmatter for the corrections.
+
 Implement bidirectional fleet sync between Daintree (renamed Canopy) presets and nForma providers per issue 138. Update commands/nf/link-canopy.md to detect Daintree paths first (with canopy-app fallback for backwards compat), parse agentSettings (customPresets, globalEnv, providerTemplates), import env overrides into matching providers.json slots without overwriting secrets, export nForma quorum agents back as Daintree customPresets with brand colors derived from a fixed mapping, and ensure idempotent re-runs. Adapt onboard.md Step 1 to detect Daintree alongside CLI detection.
 
 Purpose: Issue 138 acceptance criteria — env overrides flow Daintree → nForma, quorum agents flow nForma → Daintree as customPresets, and the operation is idempotent and brand-aware.

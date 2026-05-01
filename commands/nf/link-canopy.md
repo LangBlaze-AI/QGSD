@@ -600,7 +600,10 @@ for (const item of plan) {
       existing.description = (item.vanilla.description || '') + ' — Daintree preset: ' + item.preset.name;
     }
     existing.daintree_preset_name = item.preset.name;
+    // Refresh family. Explicitly clear when no family can be inferred so a preset whose env
+    // mutated to drop its family signal doesn't keep a stale daintree_preset_family field.
     if (item.family) existing.daintree_preset_family = item.family;
+    else delete existing.daintree_preset_family;
     const envKeys = [...new Set([...Object.keys(item.globalEnv || {}), ...Object.keys(item.presetEnv || {})])];
     written.providers.updated.push({ name: existing.name, presetName: item.preset.name, presetId: existingId, envKeys });
   }
@@ -967,15 +970,18 @@ for (const slot of selectedSlots) {
     if (existing) {
       registered.push({ id: presetId, kind: 'customPreset', status: 'unchanged', targetAgent });
     } else {
-      // Derive env from providers.json. *_API_KEY keys are emitted as ${KEY} placeholders so
-      // Daintree resolves secrets from the user's runtime env at preset-launch time (no embedded
-      // secrets in the config). *_BASE_URL keys are copied verbatim — they're endpoints, not
-      // secrets, and per-provider overrides need to round-trip into Daintree.
+      // Derive env from providers.json. Secret-bearing keys (matched broadly: *_API_KEY,
+      // *_AUTH_TOKEN, *_TOKEN) are emitted as ${KEY} placeholders so Daintree resolves them
+      // from the user's runtime env at preset-launch time — never embed secrets in the config
+      // file on disk. Endpoint keys (*_BASE_URL) and other allowlisted env (*_DEFAULT_*_MODEL,
+      // ANTHROPIC_MODEL etc.) are copied verbatim so per-provider overrides round-trip cleanly.
       const env = {};
       if (providerEntry.model) env.MODEL = providerEntry.model;
+      const SECRET_RE = /_(API_KEY|AUTH_TOKEN|TOKEN)$/;
       for (const [k, v] of Object.entries(providerEntry.env || {})) {
-        if (/_API_KEY$/.test(k)) env[k] = '${' + k + '}';
+        if (SECRET_RE.test(k)) env[k] = '${' + k + '}';
         else if (/_BASE_URL$/.test(k)) env[k] = v;
+        else if (/^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|XAI_|GROK_)/.test(k)) env[k] = v;
       }
 
       agentBucket.customPresets.push({

@@ -36,10 +36,18 @@ human_verification:
 
 # Quick Task 405: Bidirectional Fleet Sync — Verification Report
 
+> **⚠️ HISTORICAL DOCUMENT.** This static-only verification was performed against the
+> ORIGINAL plan, before live testing redesigned Step 2d (merge → fan-out) and corrected the
+> Daintree v20 schema (`globalEnv` → `globalEnvironmentVariables`, per-agent customPresets[]
+> arrays, no `providerTemplates`). The "Observable Truths" table below was true of the
+> original code paths, but those paths have since been replaced. See the
+> `implementation_evolution` block in this file's frontmatter for the runtime-verification
+> summary that covers the shipped fan-out implementation.
+
 **Task Goal:** Bidirectional fleet sync between Daintree (renamed Canopy) presets and nForma providers per issue 138. Update `commands/nf/link-canopy.md` to detect Daintree paths first (with canopy-app fallback) and sync presets bidirectionally. Adapt `onboard.md` to detect Daintree install.
 
-**Verified:** 2026-05-01
-**Status:** human_needed (all 7 automated truths verified; 4 runtime checks need human)
+**Verified:** 2026-05-01 (original-plan verification — superseded; see HISTORICAL note above)
+**Status:** human_needed (all 7 automated truths verified against ORIGINAL plan code paths; current implementation is fan-out, runtime-verified separately per frontmatter)
 **Re-verification:** No — initial verification
 
 ## Goal Achievement — Observable Truths
