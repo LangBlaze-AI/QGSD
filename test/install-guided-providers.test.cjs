@@ -26,42 +26,31 @@ const providers = require('../bin/providers.json').providers;
 describe('classifyProviders', () => {
   const result = classifyProviders(providers);
 
-  it('should classify 6 CCR slots (claude-1..6)', () => {
-    assert.equal(result.ccr.length, 6);
-    for (const p of result.ccr) {
-      assert.equal(path.basename(p.cli || ''), 'ccr', `${p.name} should have cli basename "ccr"`);
-      assert.ok(p.name.startsWith('claude-'), `${p.name} should start with "claude-"`);
-    }
+  it('should return empty CCR array (CCR presets removed)', () => {
+    assert.equal(result.ccr.length, 0);
   });
 
-  it('should classify 4 external primary slots', () => {
-    assert.equal(result.externalPrimary.length, 4);
+  it('should classify 5 external primary slots', () => {
+    assert.equal(result.externalPrimary.length, 5);
     const names = result.externalPrimary.map(p => p.name).sort();
-    assert.deepEqual(names, ['codex-1', 'copilot-1', 'gemini-1', 'opencode-1']);
+    assert.deepEqual(names, ['claude-1', 'codex-1', 'copilot-1', 'gemini-1', 'opencode-1']);
   });
 
-  it('should classify 2 dual-subscription slots', () => {
-    assert.equal(result.dualSubscription.length, 2);
-    const names = result.dualSubscription.map(p => p.name).sort();
-    assert.deepEqual(names, ['codex-2', 'gemini-2']);
+  it('should return empty dual-subscription array', () => {
+    assert.equal(result.dualSubscription.length, 0);
   });
 
-  it('should set correct parent for dual-subscription slots', () => {
-    const codex2 = result.dualSubscription.find(p => p.name === 'codex-2');
-    const gemini2 = result.dualSubscription.find(p => p.name === 'gemini-2');
-    assert.equal(codex2.parent, 'codex-1');
-    assert.equal(gemini2.parent, 'gemini-1');
-  });
-
-  it('should derive bareCli as "copilot" for copilot-1 (NOT "ask")', () => {
+  it('should derive bareCli for copilot-1 from mainTool when cli is null', () => {
     const copilot = result.externalPrimary.find(p => p.name === 'copilot-1');
-    assert.equal(copilot.bareCli, 'copilot', 'bareCli must come from cli path basename, not mainTool');
+    assert.equal(copilot.bareCli, 'ask', 'bareCli falls back to mainTool when cli is null');
   });
 
   it('should derive correct bareCli for all external primaries', () => {
+    const claude = result.externalPrimary.find(p => p.name === 'claude-1');
     const codex = result.externalPrimary.find(p => p.name === 'codex-1');
     const gemini = result.externalPrimary.find(p => p.name === 'gemini-1');
     const opencode = result.externalPrimary.find(p => p.name === 'opencode-1');
+    assert.equal(claude.bareCli, 'claude');
     assert.equal(codex.bareCli, 'codex');
     assert.equal(gemini.bareCli, 'gemini');
     assert.equal(opencode.bareCli, 'opencode');
@@ -121,11 +110,11 @@ describe('detectExternalClis', () => {
 
 describe('selectedProviderSlots filter logic', () => {
   it('should filter providers when selectedProviderSlots is an array', () => {
-    const slots = ['claude-1', 'claude-2', 'codex-1'];
+    const slots = ['claude-1', 'codex-1', 'gemini-1'];
     const filtered = providers.filter(p => slots.includes(p.name));
     assert.equal(filtered.length, 3);
     const names = filtered.map(p => p.name).sort();
-    assert.deepEqual(names, ['claude-1', 'claude-2', 'codex-1']);
+    assert.deepEqual(names, ['claude-1', 'codex-1', 'gemini-1']);
   });
 
   it('should pass ALL providers when selectedProviderSlots is null', () => {
@@ -134,14 +123,12 @@ describe('selectedProviderSlots filter logic', () => {
     assert.equal(filtered.length, providers.length);
   });
 
-  it('should pass only CCR slots when selectedProviderSlots has only claude names', () => {
+  it('should filter claude-1 when selectedProviderSlots has claude name', () => {
     const classified = classifyProviders(providers);
-    const ccrOnly = classified.ccr.map(p => p.name);
-    const filtered = providers.filter(p => ccrOnly.includes(p.name));
-    assert.equal(filtered.length, 6);
-    for (const p of filtered) {
-      assert.ok(p.name.startsWith('claude-'), `${p.name} should be a claude slot`);
-    }
+    const claudeOnly = classified.externalPrimary.filter(p => p.name === 'claude-1').map(p => p.name);
+    const filtered = providers.filter(p => claudeOnly.includes(p.name));
+    assert.equal(filtered.length, 1);
+    assert.equal(filtered[0].name, 'claude-1');
   });
 });
 
