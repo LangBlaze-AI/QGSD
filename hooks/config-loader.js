@@ -54,6 +54,7 @@ const HOOK_PROFILE_MAP = {
     'nf-token-collector',
     'nf-slot-correlator',
     'nf-session-start',
+    'nf-slot-health-probe',
     'nf-statusline',
     'nf-post-edit-format',
     'nf-console-guard',
@@ -73,6 +74,7 @@ const HOOK_PROFILE_MAP = {
     'nf-token-collector',
     'nf-slot-correlator',
     'nf-session-start',
+    'nf-slot-health-probe',
     'nf-statusline',
     'nf-post-edit-format',
     'nf-console-guard',
@@ -103,6 +105,7 @@ const DEFAULT_HOOK_PRIORITIES = {
   'nf-statusline':        10,  // Low — status display
   'nf-token-collector':   10,  // Low — token tracking
   'nf-slot-correlator':   10,  // Low — slot correlation
+  'nf-slot-health-probe': 10,  // Low — quorum slot responsiveness probe (SessionStart)
   'nf-destructive-git-guard': 50,  // Normal — destructive ops advisory
   'nf-scope-guard': 50,             // Normal — scope advisory (warn-only)
   'nf-mcp-dispatch-guard': 50,    // Normal — MCP dispatch advisory
