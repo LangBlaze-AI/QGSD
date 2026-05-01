@@ -21,6 +21,7 @@ const HOOKS_TO_COPY = [
   'nf-spec-regen.js',      // nForma: PostToolUse spec regeneration
   'nf-token-collector.js', // nForma: SubagentStop token collection
   'nf-slot-correlator.js', // nForma: SubagentStart slot correlation
+  'nf-slot-health-probe.js', // nForma: SessionStart quorum slot responsiveness probe
   'nf-context-monitor.js', // nForma: PostToolUse context monitoring
   'nf-post-edit-format.js',  // nForma: PostToolUse edit formatting
   'nf-console-guard.js',     // nForma: Stop console guard
