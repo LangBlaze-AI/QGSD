@@ -106,7 +106,10 @@ try {
         result.customPresetsByAgent[agentName] = agentCfg.customPresets;
         result.presetCount += agentCfg.customPresets.length;
       }
-      if (typeof agentCfg.presetId === 'string' && agentCfg.presetId) {
+      // Accept any non-null presetId — Daintree may emit it as a number or other primitive
+      // depending on schema generation; coerce to string at lookup time, not record time, so
+      // the stored type matches whatever customPresets[].id uses.
+      if (agentCfg.presetId != null) {
         result.activePresetIdByAgent[agentName] = agentCfg.presetId;
       }
     }
@@ -500,8 +503,13 @@ for (const [agentName, presets] of Object.entries(customPresetsByAgent)) {
     const allowedEnv = filterAllowlisted(preset.env);
     const family = inferFamily(allowedEnv);
 
+    // Normalize daintree_preset_id to a string everywhere — plan, lookup, and stored field —
+    // so a Daintree schema-generation change between runs (string vs number) never breaks
+    // re-import idempotency. Without this, a string-vs-number id mismatch would create
+    // duplicate preset-linked slots instead of updating in place (AC5 violation).
+    const daintreePresetId = String(preset.id);
     // Idempotency: existing provider with this daintree_preset_id?
-    const existing = providersData.providers.find(p => p.daintree_preset_id === preset.id);
+    const existing = providersData.providers.find(p => String(p.daintree_preset_id) === daintreePresetId);
     const vanilla = findVanilla(agentName, family);
 
     if (!vanilla && !existing) {
@@ -561,13 +569,14 @@ for (const item of plan) {
       newProvider.model = item.env.MODEL;
     }
     newProvider.description = (v.description || '') + ' — Daintree preset: ' + item.preset.name;
-    newProvider.daintree_preset_id = item.preset.id;
+    newProvider.daintree_preset_id = String(item.preset.id);
     newProvider.daintree_preset_name = item.preset.name;
     if (item.family) newProvider.daintree_preset_family = item.family;
     providersData.providers.push(newProvider);
-    written.providers.added.push({ name: item.newName, presetName: item.preset.name, presetId: item.preset.id, vanilla: v.name, envKeys: Object.keys(item.env) });
+    written.providers.added.push({ name: item.newName, presetName: item.preset.name, presetId: String(item.preset.id), vanilla: v.name, envKeys: Object.keys(item.env) });
   } else if (item.kind === 'update') {
-    const existing = providersData.providers.find(p => p.daintree_preset_id === item.preset.id);
+    const existingId = String(item.preset.id);
+    const existing = providersData.providers.find(p => String(p.daintree_preset_id) === existingId);
     // Same overlay rule on update — preserve any non-allowlisted runtime env the user may have
     // hand-added on the slot, replacing only the keys the preset actually carries.
     existing.env = { ...(existing.env || {}), ...item.env };
@@ -581,7 +590,7 @@ for (const item of plan) {
     }
     existing.daintree_preset_name = item.preset.name;
     if (item.family) existing.daintree_preset_family = item.family;
-    written.providers.updated.push({ name: existing.name, presetName: item.preset.name, presetId: item.preset.id, envKeys: Object.keys(item.env) });
+    written.providers.updated.push({ name: existing.name, presetName: item.preset.name, presetId: existingId, envKeys: Object.keys(item.env) });
   }
 }
 
@@ -631,7 +640,11 @@ for (const item of plan.filter(p => p.kind === 'add')) {
 }
 fs.writeFileSync(nfJsonPath, JSON.stringify(nfJson, null, 2) + '\n');
 
-process.stdout.write(JSON.stringify({ written: true, providersPath, claudeJsonPath, nfJsonPath, summary: written, plan }) + '\n');
+// CRITICAL: do NOT include `plan` in the stdout payload. plan[].env carries allowlisted preset env
+// which includes `*_API_KEY` values verbatim (the allowlist passes raw values for keys like
+// ANTHROPIC_AUTH_TOKEN). Emitting plan would leak those secrets to terminal/logs/CI artifacts.
+// `summary: written` carries only key NAMES (envKeys arrays), never values.
+process.stdout.write(JSON.stringify({ written: true, providersPath, claudeJsonPath, nfJsonPath, summary: written }) + '\n');
 NF_EVAL
 )
 ```
