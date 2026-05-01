@@ -469,6 +469,26 @@ function detectCcrCli() {
   return { found, resolvedPath: found ? result : null };
 }
 
+// providers.json merge: see bin/install-helpers.cjs for the implementation. The wrapper here
+// adapts the colored install.js logger and forwards the result so the install path keeps a
+// single call site.
+const { mergeProvidersJson: _mergeProvidersJson } = require('./install-helpers.cjs');
+function mergeProvidersJson(repoPath, userPath) {
+  const result = _mergeProvidersJson(repoPath, userPath, {
+    log: (msg) => {
+      // Re-color based on result kind. The helper just emits plain text so it's easy to test.
+      if (msg.startsWith('providers.json: could not read repo source')) {
+        log(`  ${yellow}⚠${reset} ${msg}`);
+      } else if (msg.startsWith('providers.json: user copy unreadable')) {
+        log(`  ${yellow}⚠${reset} ${msg}`);
+      } else {
+        log(`  ${green}✓${reset} ${msg}`);
+      }
+    },
+  });
+  return result;
+}
+
 // Ensures all provider slots from providers.json have corresponding MCP entries in ~/.claude.json.
 // Only adds missing entries (never modifies existing ones).
 // Fail-open: errors are logged but do not abort install.
@@ -2475,14 +2495,21 @@ function install(isGlobal, runtime = 'claude') {
     }
   }
 
-  // Copy bin/*.cjs scripts to nf-bin/ (used by commands with absolute paths)
+  // Copy bin/*.cjs scripts to nf-bin/ (used by commands with absolute paths).
+  // providers.json gets MERGE semantics rather than overwrite: user-added entries
+  // (slots created by /nf:link-canopy fan-out, /nf:mcp-setup, hand-edited customizations,
+  // anything carrying daintree_preset_id or simply not present in the repo source) are
+  // preserved across re-installs. Repo-shipped slot entries are always refreshed from
+  // the repo so metadata bumps (description, mainTool, model defaults) propagate.
   const binSrc = path.join(src, 'bin');
   if (fs.existsSync(binSrc)) {
     const binDest = path.join(targetDir, 'nf-bin');
     fs.mkdirSync(binDest, { recursive: true });
     const binEntries = fs.readdirSync(binSrc);
     for (const entry of binEntries) {
-      if (entry.endsWith('.cjs') || entry === 'providers.json') {
+      if (entry === 'providers.json') {
+        mergeProvidersJson(path.join(binSrc, entry), path.join(binDest, entry));
+      } else if (entry.endsWith('.cjs')) {
         fs.copyFileSync(path.join(binSrc, entry), path.join(binDest, entry));
       }
     }
