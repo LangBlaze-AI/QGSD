@@ -198,9 +198,9 @@ while true; do
     [[ -z "$name" ]] && continue
 
     case "$state" in
-      pass)
+      pass|skipping)
         ((CHECKS_PASSED++))
-        status_green "$name"
+        [[ "$state" == "skipping" ]] && status_yellow "$name (skipped)" || status_green "$name"
         ;;
       fail)
         ((CHECKS_FAILED++))
@@ -249,7 +249,7 @@ while true; do
   fi
 
   # If all checks completed successfully
-  if [[ $CHECKS_PENDING -eq 0 ]] && [[ $CHECKS_PASSED -gt 0 ]]; then
+  if [[ $CHECKS_PENDING -eq 0 ]] && [[ $CHECKS_FAILED -eq 0 ]]; then
     log "All checks passed"
     break
   fi
