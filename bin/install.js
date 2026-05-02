@@ -36,9 +36,26 @@ try {
     process.exit(1);
   }
   if (providersData.providers.length === 0) {
-    log('providers.json is empty — providers will be populated via /nf:link-daintree');
+    log('providers.json is empty — scanning PATH for known CLIs...');
+    const { resolveCli } = require('./resolve-cli.cjs');
+    const KNOWN_CLIS = ['claude', 'codex', 'gemini', 'opencode', 'copilot'];
+    const found = [];
+    for (const name of KNOWN_CLIS) {
+      const resolved = resolveCli(name);
+      if (resolved !== name) {
+        found.push({ name, resolvedPath: resolved, found: true });
+      }
+    }
+    if (found.length > 0) {
+      providers = found;
+      log(`Auto-detected ${found.length} CLIs: ${found.map(p => p.name).join(', ')}`);
+    } else {
+      providers = [];
+      log('No known CLIs found on PATH — run /nf:link-daintree to populate providers');
+    }
+  } else {
+    providers = providersData.providers;
   }
-  providers = providersData.providers;
   log(`Loaded manifest with ${providers.length} providers`);
 } catch (e) {
   console.error('ERROR: providers.json not found at bin/providers.json. Cannot detect CLIs.');
