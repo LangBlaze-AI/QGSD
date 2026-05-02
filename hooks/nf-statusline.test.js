@@ -588,3 +588,271 @@ test('TC26: embed package present shows hollow idle indicator', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+// --- Quorum Slots Line Tests (added in PR #141 follow-up — issue from CodeRabbit on #141) ---
+//
+// buildSlotsLine reads three files (all under HOME) and renders one glyph per provider:
+//   ~/.claude/nf/bin/providers.json  — the configured-slot inventory (required)
+//   ~/.claude.json                    — mcpServers (which slots are MCP-registered)
+//   ~/.claude/nf/slot-health.json    — cached probe results (optional; staleness-aware)
+//
+// Glyph rules:
+//   · dim    — listed in providers.json but NOT registered as MCP server
+//   ○ normal — registered, but no fresh probe data (cache missing or > 5min stale)
+//   ● green  — recent probe OK
+//   ⊘ red    — recent probe FAILED
+//
+// Helper: lay down all three files for a slot scenario.
+function setupSlotsHome(suffix, opts) {
+  const tempHome = makeTempDir(suffix);
+  const providersDir = path.join(tempHome, '.claude', 'nf', 'bin');
+  fs.mkdirSync(providersDir, { recursive: true });
+  fs.writeFileSync(path.join(providersDir, 'providers.json'),
+    JSON.stringify({ providers: opts.providers || [] }), 'utf8');
+  if (opts.mcpServers !== undefined) {
+    fs.writeFileSync(path.join(tempHome, '.claude.json'),
+      JSON.stringify({ mcpServers: opts.mcpServers }), 'utf8');
+  }
+  if (opts.health !== undefined) {
+    fs.writeFileSync(path.join(tempHome, '.claude', 'nf', 'slot-health.json'),
+      JSON.stringify(opts.health), 'utf8');
+  }
+  return tempHome;
+}
+
+// TC30: provider in providers.json but NOT in mcpServers → dim · indicator
+test('TC30: provider not in mcpServers → dim · indicator', () => {
+  const tempHome = setupSlotsHome('tc30', {
+    providers: [{ name: 'codex-1' }],
+    mcpServers: {}, // not registered
+  });
+  const tempDir = makeTempDir('tc30-dir');
+  try {
+    const { stdout, exitCode } = runHook(
+      { model: { display_name: 'M' }, workspace: { current_dir: tempDir } },
+      { HOME: tempHome }
+    );
+    assert.strictEqual(exitCode, 0);
+    assert.ok(stdout.includes('\x1b[2m· codex-1\x1b[0m'),
+      `stdout must include dim · codex-1 when not in mcpServers; got: ${JSON.stringify(stdout)}`);
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// TC31: registered + recent OK probe → green ●
+test('TC31: registered + recent OK probe → green ● indicator', () => {
+  const tempHome = setupSlotsHome('tc31', {
+    providers: [{ name: 'claude-1' }],
+    mcpServers: { 'claude-1': { command: 'node' } },
+    health: {
+      checked_at: new Date().toISOString(), // fresh
+      slots: { 'claude-1': { ok: true, latency_ms: 100 } },
+    },
+  });
+  const tempDir = makeTempDir('tc31-dir');
+  try {
+    const { stdout, exitCode } = runHook(
+      { model: { display_name: 'M' }, workspace: { current_dir: tempDir } },
+      { HOME: tempHome }
+    );
+    assert.strictEqual(exitCode, 0);
+    assert.ok(stdout.includes('\x1b[32m● claude-1\x1b[0m'),
+      `stdout must include green ● claude-1 when recent probe OK; got: ${JSON.stringify(stdout)}`);
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// TC32: registered + recent FAILED probe → red ⊘
+test('TC32: registered + recent failed probe → red ⊘ indicator', () => {
+  const tempHome = setupSlotsHome('tc32', {
+    providers: [{ name: 'gemini-1' }],
+    mcpServers: { 'gemini-1': { command: 'node' } },
+    health: {
+      checked_at: new Date().toISOString(), // fresh
+      slots: { 'gemini-1': { ok: false, latency_ms: 5000, error: 'timeout' } },
+    },
+  });
+  const tempDir = makeTempDir('tc32-dir');
+  try {
+    const { stdout, exitCode } = runHook(
+      { model: { display_name: 'M' }, workspace: { current_dir: tempDir } },
+      { HOME: tempHome }
+    );
+    assert.strictEqual(exitCode, 0);
+    assert.ok(stdout.includes('\x1b[31m⊘ gemini-1\x1b[0m'),
+      `stdout must include red ⊘ gemini-1 when recent probe failed; got: ${JSON.stringify(stdout)}`);
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// TC33: registered, but no slot-health cache → hollow ○ (no fresh data)
+test('TC33: registered + no health cache → hollow ○ indicator', () => {
+  const tempHome = setupSlotsHome('tc33', {
+    providers: [{ name: 'opencode-1' }],
+    mcpServers: { 'opencode-1': { command: 'node' } },
+    // no health file
+  });
+  const tempDir = makeTempDir('tc33-dir');
+  try {
+    const { stdout, exitCode } = runHook(
+      { model: { display_name: 'M' }, workspace: { current_dir: tempDir } },
+      { HOME: tempHome }
+    );
+    assert.strictEqual(exitCode, 0);
+    // ○ has no color escape on either side — match the bare token followed by reset
+    assert.ok(/○ opencode-1\x1b\[0m/.test(stdout),
+      `stdout must include hollow ○ opencode-1 when no fresh health data; got: ${JSON.stringify(stdout)}`);
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// TC34: registered + STALE probe (older than 5min) → hollow ○
+test('TC34: registered + stale (>5min) probe → hollow ○ indicator', () => {
+  const stale = new Date(Date.now() - 6 * 60 * 1000).toISOString(); // 6 min ago
+  const tempHome = setupSlotsHome('tc34', {
+    providers: [{ name: 'copilot-1' }],
+    mcpServers: { 'copilot-1': { command: 'node' } },
+    health: { checked_at: stale, slots: { 'copilot-1': { ok: true, latency_ms: 100 } } },
+  });
+  const tempDir = makeTempDir('tc34-dir');
+  try {
+    const { stdout, exitCode } = runHook(
+      { model: { display_name: 'M' }, workspace: { current_dir: tempDir } },
+      { HOME: tempHome }
+    );
+    assert.strictEqual(exitCode, 0);
+    assert.ok(/○ copilot-1\x1b\[0m/.test(stdout),
+      `stdout must show hollow ○ for stale probe (>5min); got: ${JSON.stringify(stdout)}`);
+    // It must NOT be green (the OK state is stale, so don't trust it)
+    assert.ok(!stdout.includes('\x1b[32m● copilot-1\x1b[0m'),
+      'stale OK probe must NOT render green');
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// TC35: providers.json absent entirely → no slots line emitted (skips silently)
+test('TC35: providers.json absent → no slots line', () => {
+  const tempHome = makeTempDir('tc35');
+  // intentionally do NOT create providers.json
+  fs.mkdirSync(path.join(tempHome, '.claude'), { recursive: true });
+  const tempDir = makeTempDir('tc35-dir');
+  try {
+    const { stdout, exitCode } = runHook(
+      { model: { display_name: 'M' }, workspace: { current_dir: tempDir } },
+      { HOME: tempHome }
+    );
+    assert.strictEqual(exitCode, 0);
+    // No slot tokens (·, ●, ⊘, ○) should appear before the existing tools-line indicators.
+    // Tools line still renders coderlm/River/embed — that's fine.
+    // The slots line is preceded/followed by the same separator as tools line (\x1b[2m│\x1b[0m).
+    // Strategy: check that the FIRST line after the main statusline doesn't have any slot glyphs
+    // alongside tool glyphs (slot indicators include actual slot names, never "coderlm"/"River"/"embed").
+    const lines = stdout.split('\n').filter(l => l.length > 0);
+    // Last line should be the tools line. Everything else is the main line. No middle slots line.
+    const hasSlotsLine = lines.some(l => /[·●⊘○] [a-z]+-\d+/.test(l) && !l.includes('coderlm'));
+    assert.ok(!hasSlotsLine, 'no slots line should be emitted when providers.json is absent');
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// TC36: multiple providers preserve declaration order (statusline reads .providers array as-is)
+test('TC36: slots line preserves providers.json declaration order', () => {
+  const tempHome = setupSlotsHome('tc36', {
+    providers: [{ name: 'codex-1' }, { name: 'gemini-1' }, { name: 'claude-1' }],
+    mcpServers: {
+      'codex-1': { command: 'node' },
+      'gemini-1': { command: 'node' },
+      'claude-1': { command: 'node' },
+    },
+    health: {
+      checked_at: new Date().toISOString(),
+      slots: {
+        'codex-1': { ok: true, latency_ms: 80 },
+        'gemini-1': { ok: true, latency_ms: 90 },
+        'claude-1': { ok: true, latency_ms: 100 },
+      },
+    },
+  });
+  const tempDir = makeTempDir('tc36-dir');
+  try {
+    const { stdout, exitCode } = runHook(
+      { model: { display_name: 'M' }, workspace: { current_dir: tempDir } },
+      { HOME: tempHome }
+    );
+    assert.strictEqual(exitCode, 0);
+    // Expect order: codex-1 → gemini-1 → claude-1 (not alphabetical)
+    const codexIdx = stdout.indexOf('codex-1');
+    const geminiIdx = stdout.indexOf('gemini-1');
+    const claudeIdx = stdout.indexOf('claude-1');
+    assert.ok(codexIdx >= 0 && geminiIdx >= 0 && claudeIdx >= 0, 'all three slots must render');
+    assert.ok(codexIdx < geminiIdx && geminiIdx < claudeIdx,
+      `slots must render in providers.json declaration order, got indices [codex=${codexIdx}, gemini=${geminiIdx}, claude=${claudeIdx}]`);
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// TC37: malformed slot-health.json → fail-open (treat as no fresh data)
+test('TC37: malformed slot-health.json falls back to ○ (fail-open)', () => {
+  const tempHome = setupSlotsHome('tc37', {
+    providers: [{ name: 'claude-1' }],
+    mcpServers: { 'claude-1': { command: 'node' } },
+  });
+  // Corrupt the health file
+  fs.writeFileSync(path.join(tempHome, '.claude', 'nf', 'slot-health.json'), 'not json {{{', 'utf8');
+  const tempDir = makeTempDir('tc37-dir');
+  try {
+    const { stdout, exitCode } = runHook(
+      { model: { display_name: 'M' }, workspace: { current_dir: tempDir } },
+      { HOME: tempHome }
+    );
+    assert.strictEqual(exitCode, 0, 'malformed cache must NOT crash the statusline (fail-open)');
+    assert.ok(/○ claude-1\x1b\[0m/.test(stdout),
+      `malformed cache must render ○ (no fresh data); got: ${JSON.stringify(stdout)}`);
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// TC38: slots line is rendered ABOVE the tools line (coderlm/River/embed)
+test('TC38: slots line renders above tools line', () => {
+  const tempHome = setupSlotsHome('tc38', {
+    providers: [{ name: 'codex-1' }],
+    mcpServers: { 'codex-1': { command: 'node' } },
+    health: {
+      checked_at: new Date().toISOString(),
+      slots: { 'codex-1': { ok: true, latency_ms: 100 } },
+    },
+  });
+  const tempDir = makeTempDir('tc38-dir');
+  try {
+    const { stdout, exitCode } = runHook(
+      { model: { display_name: 'M' }, workspace: { current_dir: tempDir } },
+      { HOME: tempHome }
+    );
+    assert.strictEqual(exitCode, 0);
+    const codexIdx = stdout.indexOf('codex-1');
+    const coderlmIdx = stdout.indexOf('coderlm');
+    assert.ok(codexIdx >= 0, 'slots line must contain codex-1');
+    assert.ok(coderlmIdx >= 0, 'tools line must contain coderlm');
+    assert.ok(codexIdx < coderlmIdx,
+      `slots line must come BEFORE tools line; got codex=${codexIdx}, coderlm=${coderlmIdx}`);
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

@@ -346,8 +346,9 @@ function writeProvidersJson(data) {
  *   in unified-mcp-server.mjs so that resolvedCli is populated before probing.
  *   If resolvedCli is absent (e.g. called out-of-order or in isolation), the raw `cli`
  *   field is used as a best-effort fallback. Test with fs.accessSync(path, fs.constants.X_OK).
- * - De-duplicate probes: slots sharing the same binary path (e.g. ccr-1..ccr-6 all use
- *   /opt/homebrew/bin/ccr) check the filesystem only once per unique path.
+ * - De-duplicate probes: slots sharing the same binary path (e.g. multiple ccr-* slots
+ *   added by /nf:mcp-setup that all point at /opt/homebrew/bin/ccr) check the filesystem
+ *   only once per unique path.
  * - Fail-open: any unexpected error returns the full providers list unchanged.
  *
  * @param {Array} providers - array of provider objects from providers.json

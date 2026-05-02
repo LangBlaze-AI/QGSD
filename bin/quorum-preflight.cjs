@@ -523,9 +523,10 @@ async function main() {
       });
 
       // ─── Model dedup guard (DEDUP-01) ────────────────────────────────────
-      // When the same model appears in both CCR and API tiers (e.g., ccr-1 and
-      // api-1 both → DeepSeek-V3.1), keep the first occurrence (higher-tier slot
-      // due to sort order: CLI/CCR before HTTP) and move the duplicate to backup.
+      // When the same model appears in both CCR and API tiers (e.g., a user-added
+      // ccr-* slot and an api-* slot both → DeepSeek-V3.1), keep the first occurrence
+      // (higher-tier slot due to sort order: CLI/CCR before HTTP) and move the
+      // duplicate to backup.
       const modelMap = new Map(activeProviders.map(p => [p.name, p.model]));
       const seenModels = new Set();
       const deduped = [];

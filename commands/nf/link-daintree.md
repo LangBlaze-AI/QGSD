@@ -151,7 +151,7 @@ Parse CANOPY_INFO JSON.
 
 Display:
 
-```
+```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  nForma ► LINK CANOPY — NOT FOUND
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -173,7 +173,7 @@ Stop.
 
 Display discovery banner:
 
-```
+```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  nForma ► LINK CANOPY — DISCOVERED
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -249,7 +249,7 @@ If no MCP and no agents were selected: display "Import skipped — nothing selec
 
 Otherwise, display pending summary:
 
-```
+```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  nForma ► REVIEW IMPORT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -316,7 +316,7 @@ The environment variables are:
 
 Parse IMPORT_RESULT. If `written: true`:
 
-```
+```text
 ✓ Canopy config imported into ~/.claude/nf.json
 
   {if hasMcp: "MCP URL:  " + mcp.url}
@@ -365,7 +365,7 @@ The export direction (Step 3e) is also idempotent but with **no-overwrite** sema
 
 **Allowlist (AC5 safety guardrail).** Preset env keys must match this regex before being copied into the new slot's env:
 
-```
+```text
 ^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$)
 ```
 
@@ -375,7 +375,7 @@ Top-level `globalEnvironmentVariables` keys, after the same filter, are merged i
 
 Display the REVIEW FAN-OUT IMPORT banner:
 
-```
+```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  nForma ► REVIEW FAN-OUT IMPORT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -750,7 +750,7 @@ Parse QUORUM_SLOTS for `slots` array and `count`.
 
 Display:
 
-```
+```text
 No nForma quorum agents found in ~/.claude.json.
 Run /nf:mcp-setup to configure agents first.
 ```
@@ -761,7 +761,7 @@ Continue to Step 4 (closing).
 
 Display the slots with full detail:
 
-```
+```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  nForma ► REGISTER AGENTS IN CANOPY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -820,7 +820,7 @@ Continue to Step 3c with the selected slots.
 
 Display pending summary:
 
-```
+```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  nForma ► REVIEW PENDING CHANGES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1040,7 +1040,7 @@ Continue to Step 4.
 
 Display:
 
-```
+```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  nForma ► LINK CANOPY — COMPLETE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
