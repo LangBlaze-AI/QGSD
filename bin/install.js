@@ -36,8 +36,7 @@ try {
     process.exit(1);
   }
   if (providersData.providers.length === 0) {
-    console.error('ERROR: No providers found in providers.json. Cannot detect CLIs.');
-    process.exit(1);
+    log('providers.json is empty — providers will be populated via /nf:link-daintree');
   }
   providers = providersData.providers;
   log(`Loaded manifest with ${providers.length} providers`);
