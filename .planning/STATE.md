@@ -42,6 +42,7 @@ See: .planning/PROJECT.md
 | 404 | Build nf:debug autonomy benchmark with graded difficulty stubs, fix-cycle runner, and standalone scorer | 2026-04-17 | 27ad207d | Verified | [404-build-nf-debug-autonomy-benchmark-with-g](.planning/quick/404-build-nf-debug-autonomy-benchmark-with-g/) |
 | 405 | Implement PR merge-readiness autopilot script (issue #136) | 2026-04-30 | c86519ab | Verified | [405-work-on-issue-136](./quick/405-work-on-issue-136/) |
 | 405 | Bidirectional fleet sync: Canopy presets <-> nForma providers (issue 138) | 2026-05-01 | fc2a0e25 | Needs Review | [405-bidirectional-fleet-sync-canopy-presets-](./quick/405-bidirectional-fleet-sync-canopy-presets-/) |
+| 407 | Cleanup manifest-driven CLI detection (issue 149) | 2026-05-01 | 3f19b4c7 | Verified | [407-issue-149](./quick/407-issue-149/) |
 
 ## Session Log
 
@@ -66,4 +67,4 @@ See: .planning/PROJECT.md
 - 2026-04-10 - Completed quick task 388: Sync baseline requirements and audit solver-generated formal models and test stubs
 - 2026-04-11 - Completed quick task 389: Fix shell-prompt-quorum-dedup.als Alloy assertion failure
 
-Last activity: 2026-05-01 - Completed quick task 405: Bidirectional fleet sync (issue 138)
+Last activity: 2026-05-01 - Completed quick task 407: Cleanup manifest-driven CLI detection (issue 149)

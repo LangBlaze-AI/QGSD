@@ -1,14 +1,4 @@
 {
-<<<<<<< HEAD
-  "generated": "2026-04-20T18:19:34.054Z",
-  "total_claims_checked": 188,
-  "doc_files_scanned": 8,
-  "raw_broken_count": 49,
-  "weighted_residual": 96,
-  "suppressed_fp_count": 9,
-  "category_breakdown": {
-    "user": 47,
-=======
   "generated": "2026-04-16T21:04:43.632Z",
   "total_claims_checked": 188,
   "doc_files_scanned": 8,
@@ -17,7 +7,6 @@
   "suppressed_fp_count": 7,
   "category_breakdown": {
     "user": 56,
->>>>>>> origin/main
     "developer": 2
   },
   "broken_claims": [
@@ -41,18 +30,6 @@
     },
     {
       "doc_file": "README.md",
-<<<<<<< HEAD
-      "line": 685,
-      "type": "file_path",
-      "value": "gates/gate-a-grounding.json",
-      "reason": "file not found",
-      "category": "user",
-      "weight": 2
-    },
-    {
-      "doc_file": "README.md",
-=======
->>>>>>> origin/main
       "line": 964,
       "type": "dependency",
       "value": "api-and-interface-design",
@@ -79,18 +56,6 @@
       "weight": 1
     },
     {
-<<<<<<< HEAD
-      "doc_file": "docs/dev/requirements-coverage.md",
-      "line": 1997,
-      "type": "file_path",
-      "value": ".planning/formal/promotion-changelog.json",
-      "reason": "file not found",
-      "category": "developer",
-      "weight": 1
-    },
-    {
-=======
->>>>>>> origin/main
       "doc_file": "docs/USER-GUIDE.md",
       "line": 362,
       "type": "dependency",
@@ -569,3 +534,4 @@
     }
   ]
 }
+

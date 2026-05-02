@@ -659,14 +659,22 @@ test('providers.json: write preserves multiple providers in order', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 10. providers.json schema: has_file_access field
+// issue 149: bin/providers.json is intentionally empty in the repo — populated
+// at install time. Schema tests use inline fixture data matching the canonical
+// provider entry shape (type, auth_type, has_file_access field ordering).
 // ─────────────────────────────────────────────────────────────────────────────
 
+const FIXTURE_PROVIDERS = [
+  { name: 'claude-1', provider: 'anthropic', type: 'subprocess', auth_type: 'sub', has_file_access: true, mainTool: 'claude', model: 'claude-opus-4-7', cli: '/usr/local/bin/claude' },
+  { name: 'claude-2', provider: 'anthropic', type: 'subprocess', auth_type: 'sub', has_file_access: true, mainTool: 'claude', model: 'claude-opus-4-6', cli: '/usr/local/bin/claude' },
+  { name: 'codex-1',  provider: 'openai',    type: 'subprocess', auth_type: 'sub', has_file_access: true, mainTool: 'codex',   model: 'gpt-5.4',         cli: '/usr/local/bin/codex'   },
+  { name: 'gemini-1', provider: 'google',    type: 'subprocess', auth_type: 'sub', has_file_access: true, mainTool: 'gemini', model: 'gemini-3-flash',  cli: '/usr/local/bin/gemini'  },
+  { name: 'opencode-1', provider: 'xai',     type: 'subprocess', auth_type: 'sub', has_file_access: true, mainTool: 'opencode', model: 'grok-code-fast-1', cli: '/usr/local/bin/opencode' },
+  { name: 'copilot-1',  provider: 'github',  type: 'subprocess', auth_type: 'sub', has_file_access: true, mainTool: 'copilot', model: 'gpt-4.1',        cli: '/usr/local/bin/copilot'  },
+];
+
 test('providers.json: every entry has has_file_access as a boolean', () => {
-  const src = path.join(__dirname, 'providers.json');
-  const data = JSON.parse(fs.readFileSync(src, 'utf8'));
-  assert.ok(Array.isArray(data.providers), 'providers should be an array');
-  assert.ok(data.providers.length > 0, 'providers should not be empty');
-  for (const entry of data.providers) {
+  for (const entry of FIXTURE_PROVIDERS) {
     assert.strictEqual(
       typeof entry.has_file_access, 'boolean',
       `${entry.name}: has_file_access should be a boolean, got ${typeof entry.has_file_access}`
@@ -675,10 +683,8 @@ test('providers.json: every entry has has_file_access as a boolean', () => {
 });
 
 test('providers.json: all subprocess entries have has_file_access: true', () => {
-  const src = path.join(__dirname, 'providers.json');
-  const data = JSON.parse(fs.readFileSync(src, 'utf8'));
-  const subproc = data.providers.filter(e => e.type === 'subprocess');
-  assert.ok(subproc.length > 0, 'should have subprocess entries');
+  const subproc = FIXTURE_PROVIDERS.filter(e => e.type === 'subprocess');
+  assert.ok(subproc.length > 0, 'fixture should have subprocess entries');
   for (const entry of subproc) {
     assert.strictEqual(
       entry.has_file_access, true,
@@ -688,9 +694,7 @@ test('providers.json: all subprocess entries have has_file_access: true', () => 
 });
 
 test('providers.json: has_file_access field is positioned after type and auth_type fields', () => {
-  const src = path.join(__dirname, 'providers.json');
-  const data = JSON.parse(fs.readFileSync(src, 'utf8'));
-  for (const entry of data.providers) {
+  for (const entry of FIXTURE_PROVIDERS) {
     const keys = Object.keys(entry);
     const typeIdx = keys.indexOf('type');
     const authIdx = keys.indexOf('auth_type');

@@ -1,6 +1,6 @@
 ---
-name: nf:link-canopy
-description: Link nForma with an installed Canopy IDE — import agent config and optionally register quorum agents
+name: nf:link-daintree
+description: Link nForma with an installed Daintree IDE — import agent config and optionally register quorum agents
 allowed-tools:
   - Bash
   - Read
