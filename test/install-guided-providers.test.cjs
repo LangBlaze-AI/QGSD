@@ -30,10 +30,10 @@ describe('classifyProviders', () => {
     assert.equal(result.ccr.length, 0);
   });
 
-  it('should classify 5 external primary slots', () => {
-    assert.equal(result.externalPrimary.length, 5);
+  it('should classify 7 external primary slots (5 vanilla + 2 Daintree presets)', () => {
+    assert.equal(result.externalPrimary.length, 7);
     const names = result.externalPrimary.map(p => p.name).sort();
-    assert.deepEqual(names, ['claude-1', 'codex-1', 'copilot-1', 'gemini-1', 'opencode-1']);
+    assert.deepEqual(names, ['claude-1', 'claude-minimax', 'claude-z-ai', 'codex-1', 'copilot-1', 'gemini-1', 'opencode-1']);
   });
 
   it('should return empty dual-subscription array', () => {
@@ -54,6 +54,17 @@ describe('classifyProviders', () => {
     assert.equal(codex.bareCli, 'codex');
     assert.equal(gemini.bareCli, 'gemini');
     assert.equal(opencode.bareCli, 'opencode');
+  });
+
+  it('should classify Daintree preset slots with correct metadata', () => {
+    const zai = result.externalPrimary.find(p => p.name === 'claude-z-ai');
+    const minimax = result.externalPrimary.find(p => p.name === 'claude-minimax');
+    assert.ok(zai, 'claude-z-ai should be classified as externalPrimary');
+    assert.ok(minimax, 'claude-minimax should be classified as externalPrimary');
+    assert.equal(zai.bareCli, 'claude');
+    assert.equal(minimax.bareCli, 'claude');
+    assert.equal(zai.mainTool, 'claude');
+    assert.equal(minimax.mainTool, 'claude');
   });
 });
 
