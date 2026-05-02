@@ -527,6 +527,64 @@ function ensureMcpSlotsFromProviders() {
 
     const providers = providersData.providers || [];
     if (providers.length === 0) {
+      // providers.json is empty — sync slots from ~/.claude.json (fan-out slots created by
+      // /nf:link-daintree) AND auto-detect PATH CLIs so both sources are available.
+      if (hasGlobal) {
+        const globalProvidersJson = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
+        const merged = { providers: [] };
+        try {
+          // Step 1: Sync slots from ~/.claude.json (fan-out creates MCP entries here)
+          // Only include slots whose prefix is a known coding agent CLI.
+          const KNOWN_CLI_PREFIXES = ['claude', 'codex', 'gemini', 'opencode', 'copilot', 'kilo', 'cursor', 'windsurf', 'antigravity', 'augment', 'trae', 'cline'];
+          const claudeJsonPath = path.join(os.homedir(), '.claude.json');
+          const claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8'));
+          const mcpSlots = Object.keys(claudeJson.mcpServers || {}).filter(name =>
+            KNOWN_CLI_PREFIXES.some(prefix => name === prefix || name.startsWith(prefix + '-'))
+          );
+          for (const slotName of mcpSlots) {
+            // Infer mainTool from slot name prefix (e.g., "claude-z-ai" → "claude")
+            const dashIdx = slotName.indexOf('-');
+            const mainTool = dashIdx > 0 ? slotName.slice(0, dashIdx) : slotName;
+            merged.providers.push({
+              name: slotName,
+              provider: mainTool,
+              type: 'subprocess',
+              description: `Slot: ${slotName}`,
+              mainTool,
+              display_type: mainTool + '-cli',
+              display_provider: mainTool.charAt(0).toUpperCase() + mainTool.slice(1),
+            });
+          }
+          // Step 2: Also add PATH-detected CLIs that aren't already in ~/.claude.json
+          const { resolveCli } = require('./resolve-cli.cjs');
+          const KNOWN_CLIS = ['claude', 'codex', 'gemini', 'opencode', 'copilot'];
+          const existingNames = new Set(mcpSlots);
+          for (const name of KNOWN_CLIS) {
+            if (existingNames.has(name + '-1')) continue; // Already covered by step 1
+            const resolved = resolveCli(name);
+            if (resolved !== name) {
+              merged.providers.push({
+                name: name + '-1',
+                provider: 'auto-detected',
+                type: 'subprocess',
+                description: `Auto-detected ${name} on PATH`,
+                mainTool: name,
+                cli: resolved,
+                display_type: name + '-cli',
+                display_provider: name.charAt(0).toUpperCase() + name.slice(1),
+              });
+            }
+          }
+          if (merged.providers.length > 0) {
+            const tmpPath = globalProvidersJson + '.tmp';
+            fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2) + '\n', 'utf8');
+            fs.renameSync(tmpPath, globalProvidersJson);
+            console.log(`  ${green}✓${reset} Synced ${merged.providers.length} slot(s) to ${globalProvidersJson}`);
+          }
+        } catch (e) {
+          console.warn(`  ${yellow}⚠${reset} Could not sync providers to ${globalProvidersJson}: ${e.message}`);
+        }
+      }
       return; // No providers to sync
     }
 
@@ -2661,13 +2719,13 @@ function install(isGlobal, runtime = 'claude') {
       const nfPythonEnv = path.join(os.homedir(), '.claude', 'nf-python-env');
       const nfPython = path.join(nfPythonEnv, 'bin', 'python');
       try {
+        // Create venv first if missing — River needs the file to be active
+        if (!fs.existsSync(nfPythonEnv)) {
+          _spawnRiver('uv', ['venv', nfPythonEnv], { timeout: 30000 });
+        }
         const riverCheck = _spawnRiver(nfPython, ['-c', 'import river'], { timeout: 3000 });
         if (riverCheck.status !== 0) {
           console.log(`  ${cyan}↓${reset} Installing River ML (uv)...`);
-          // Create venv if it doesn't exist yet
-          if (!fs.existsSync(nfPythonEnv)) {
-            _spawnRiver('uv', ['venv', nfPythonEnv], { timeout: 30000 });
-          }
           const riverInstall = _spawnRiver('uv', ['pip', 'install', '--python', nfPythonEnv, 'river'], { timeout: 60000 });
           if (riverInstall.status === 0) {
             console.log(`  ${green}✓${reset} River ML installed`);
