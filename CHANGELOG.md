@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-05-02
+
+### Changed
+- refactor(install): manifest-driven CLI detection — `providers.json` now shipped empty and populated at install time from `~/.claude.json` MCP servers and PATH auto-detection
+
+### Fixed
+- fix(formal): resolve merge conflict markers in `.planning/formal/` JSON files that caused `extract-annotations.cjs` to fail with JSON parse errors
+- fix(formal): give `max_retries` a safe default value in `oauth-rotation.pm` — PRISM requires all constants to be defined
+
 ## [0.43.0-rc.1] - 2026-04-23 — next prerelease
 
 ### Changed
