@@ -33,8 +33,9 @@ const double p_fail     = 0.30;
 
 // Maximum rotation attempts (from providers.json oauth_rotation.max_retries)
 // Changing this constant re-parameterises the entire model.
-// Value injected via -const max_retries=N by run-oauth-rotation-prism.cjs
-const int    max_retries;
+// Value injected via -const max_retries=N by run-oauth-rotation-prism.cjs.
+// Falls back to 3 if not injected (safe default; matches legacy gemini-1 config).
+const int    max_retries     = 3;
 
 module oauth_rotation
 
