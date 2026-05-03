@@ -482,7 +482,7 @@ function inferFamily(envObj) {
 function findVanilla(agentName, family) {
   const candidates = providersData.providers.filter(p => p.mainTool === agentName);
   const familyMatch = family ? candidates.filter(p => p.provider === family) : candidates;
-  const pool = familyMatch.length ? familyMatch : (family ? [] : candidates);
+  const pool = familyMatch.length ? familyMatch : candidates;
   // Prefer provider without daintree_preset_id, then lowest numeric suffix
   pool.sort((a, b) => {
     const aIsClone = !!a.daintree_preset_id;
