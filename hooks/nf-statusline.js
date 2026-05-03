@@ -76,22 +76,26 @@ function buildToolsLine(homeDir, dir) {
           const riverState = JSON.parse(fs.readFileSync(riverPath, 'utf8'));
           const qTable = riverState && riverState.qTable;
           if (qTable && typeof qTable === 'object') {
+            // Check if ANY arm has been visited — means "ready to start learning"
             const RIVER_MIN_EXPLORE = 20;
             let hasArms = false;
+            let hasVisits = false;
             let allAbove = true;
             for (const taskType of Object.keys(qTable)) {
               const arms = qTable[taskType];
               if (arms && typeof arms === 'object') {
                 for (const armName of Object.keys(arms)) {
                   hasArms = true;
-                  if ((arms[armName].visits || 0) < RIVER_MIN_EXPLORE) allAbove = false;
+                  const visits = arms[armName].visits || 0;
+                  if (visits > 0) hasVisits = true;
+                  if (visits < RIVER_MIN_EXPLORE) allAbove = false;
                 }
               }
             }
-            if (hasArms) {
+            if (hasArms && hasVisits) {
               toolsRiver = allAbove
                 ? '\x1b[32m● River\x1b[0m'   // trained
-                : '\x1b[36m● River\x1b[0m';   // exploring
+                : '\x1b[36m● River\x1b[0m';   // exploring (has learning data, not all trained)
             }
             if (riverState.lastShadow && typeof riverState.lastShadow.recommendation === 'string' && riverState.lastShadow.recommendation) {
               toolsRiver = `\x1b[33m● River: ${riverState.lastShadow.recommendation}\x1b[0m`;
