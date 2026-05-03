@@ -2746,6 +2746,23 @@ function install(isGlobal, runtime = 'claude') {
       const nfPythonEnv = path.join(os.homedir(), '.claude', 'nf-python-env');
       const nfPython = path.join(nfPythonEnv, 'bin', 'python');
       try {
+        // Check uv availability first — install it if missing
+        const uvCheck = _spawnRiver('which', ['uv'], { timeout: 3000 });
+        if (uvCheck.status !== 0) {
+          log(`  ${cyan}↓${reset} Installing uv...`);
+          const uvInstall = _spawnRiver('curl', ['-sSL', 'https://astral.sh/uv/install.sh'], { timeout: 30000 });
+          if (uvInstall.status !== 0) {
+            log(`  ${yellow}⚠${reset} uv install failed — skipping River ML`);
+            return;
+          }
+          // Reload PATH so uv is found immediately after install
+          const newPath = [...new Set([path.join(os.homedir(), '.local', 'bin'), ...process.env.PATH.split(':')])].join(':');
+          const uvPathCheck = _spawnRiver('which', ['uv'], { timeout: 3000, env: { ...process.env, PATH: newPath } });
+          if (uvPathCheck.status !== 0) {
+            log(`  ${yellow}⚠${reset} uv not in PATH after install — skipping River ML`);
+            return;
+          }
+        }
         // Create venv first if missing — River needs the file to be active
         if (!fs.existsSync(nfPythonEnv)) {
           _spawnRiver('uv', ['venv', nfPythonEnv], { timeout: 30000 });
