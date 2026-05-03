@@ -43,7 +43,7 @@ See: .planning/PROJECT.md
 | 405 | Implement PR merge-readiness autopilot script (issue #136) | 2026-04-30 | c86519ab | Verified | [405-work-on-issue-136](./quick/405-work-on-issue-136/) |
 | 405 | Bidirectional fleet sync: Canopy presets <-> nForma providers (issue 138) | 2026-05-01 | fc2a0e25 | Needs Review | [405-bidirectional-fleet-sync-canopy-presets-](./quick/405-bidirectional-fleet-sync-canopy-presets-/) |
 | 407 | Cleanup manifest-driven CLI detection (issue 149) | 2026-05-01 | 3f19b4c7 | Verified | [407-issue-149](./quick/407-issue-149/) |
-| 408 | Add river dependency check and install to install.js | 2026-05-03 | | Pending | [408-add-river-dependency-check-and-install-t](./quick/408-add-river-dependency-check-and-install-t/) |
+| 408 | Add river dependency check and install to install.js | 2026-05-03 | 8382da26 | Verified | [408-add-river-dependency-check-and-install-t](./quick/408-add-river-dependency-check-and-install-t/) |
 
 ## Session Log
 
