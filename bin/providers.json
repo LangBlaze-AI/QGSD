@@ -1,3 +1,582 @@
 {
-  "providers": []
+  "providers": [
+    {
+      "name": "codex-1",
+      "provider": "openai",
+      "type": "subprocess",
+      "auth_type": "sub",
+      "has_file_access": true,
+      "description": "Execute Codex CLI agent non-interactively (slot 1)",
+      "mainTool": "codex",
+      "model": "gpt-5.4",
+      "model_detect": {
+        "file": "~/.codex/config.toml",
+        "pattern": "^model = \"([^\"]+)\""
+      },
+      "health_check_args": [
+        "--version"
+      ],
+      "display_provider": "OpenAI",
+      "cli": null,
+      "args_template": [
+        "exec",
+        "{prompt}"
+      ],
+      "helpArgs": [
+        "--help"
+      ],
+      "extraTools": [
+        {
+          "name": "review",
+          "description": "Run a code review against the current repository using Codex CLI",
+          "args_template": [
+            "review",
+            "{prompt}"
+          ]
+        }
+      ],
+      "timeout_ms": 300000,
+      "quorum_timeout_ms": 300000,
+      "idle_timeout_ms": 30000,
+      "hard_timeout_ms": 600000,
+      "latency_budget_ms": null,
+      "env": {},
+      "display_type": "codex-cli",
+      "auth_check": {
+        "args": [
+          "login",
+          "status"
+        ],
+        "success_pattern": "Logged in",
+        "login_args": [
+          "login"
+        ],
+        "login_hint": "Opens browser for OpenAI authentication",
+        "timeout_ms": 5000
+      },
+      "oauth_rotation": {
+        "enabled": true,
+        "creds_dir": "~/.codex/accounts",
+        "active_file": "~/.codex/auth.json",
+        "max_retries": 3,
+        "retry_on_patterns": [
+          "quota",
+          "rate_limit",
+          "unauthorized",
+          "401",
+          "429",
+          "refresh_token_reused",
+          "token_expired"
+        ],
+        "rotate_cmd": [
+          "node",
+          "bin/account-manager.cjs",
+          "switch",
+          "next",
+          "--provider",
+          "codex-1"
+        ]
+      },
+      "deep_probe": {
+        "prompt": "respond with: PROBE_OK",
+        "expect": "PROBE_OK",
+        "timeout_ms": 45000
+      }
+    },
+    {
+      "name": "gemini-1",
+      "provider": "google",
+      "type": "subprocess",
+      "auth_type": "sub",
+      "has_file_access": true,
+      "description": "Query Gemini CLI agent non-interactively (slot 1)",
+      "mainTool": "gemini",
+      "model": "gemini-3-flash-preview",
+      "health_check_args": [
+        "--version"
+      ],
+      "display_provider": "Google",
+      "cli": null,
+      "args_template": [
+        "-m",
+        "gemini-3-flash-preview",
+        "-p",
+        "{prompt}"
+      ],
+      "helpArgs": [
+        "--help"
+      ],
+      "extraTools": [],
+      "timeout_ms": 300000,
+      "quorum_timeout_ms": 300000,
+      "idle_timeout_ms": 45000,
+      "hard_timeout_ms": 600000,
+      "latency_budget_ms": null,
+      "env": {},
+      "display_type": "gemini-cli",
+      "auth_check": {
+        "args": [
+          "auth",
+          "print-access-token"
+        ],
+        "success_pattern": "Loaded cached credentials|ya29\\.",
+        "login_args": [
+          "auth",
+          "login"
+        ],
+        "login_hint": "Opens browser for Google authentication",
+        "timeout_ms": 5000
+      },
+      "oauth_rotation": {
+        "enabled": true,
+        "creds_dir": "~/.gemini/accounts",
+        "active_file": "~/.gemini/oauth_creds.json",
+        "max_retries": 3,
+        "retry_on_patterns": [
+          "quota",
+          "resource_exhausted",
+          "unauthorized",
+          "401",
+          "403",
+          "429"
+        ],
+        "rotate_cmd": [
+          "node",
+          "bin/account-manager.cjs",
+          "switch",
+          "next",
+          "--provider",
+          "gemini-1"
+        ]
+      },
+      "deep_probe": {
+        "prompt": "respond with: PROBE_OK",
+        "expect": "PROBE_OK",
+        "timeout_ms": 45000
+      }
+    },
+    {
+      "name": "opencode-1",
+      "provider": "xai",
+      "type": "subprocess",
+      "auth_type": "sub",
+      "has_file_access": true,
+      "description": "Run OpenCode agent non-interactively with a message",
+      "mainTool": "opencode",
+      "model": "grok-code-fast-1",
+      "model_detect": {
+        "file": "~/.local/state/opencode/model.json",
+        "pattern": "\"recent\":\\[{\"providerID\":\"[^\"]*\",\"modelID\":\"([^\"]+)\""
+      },
+      "health_check_args": [
+        "--version"
+      ],
+      "display_provider": "OpenCode",
+      "cli": null,
+      "args_template": [
+        "run",
+        "--print-logs",
+        "--log-level",
+        "ERROR",
+        "{prompt}"
+      ],
+      "helpArgs": [
+        "--help"
+      ],
+      "extraTools": [
+        {
+          "name": "opencode_check_update",
+          "description": "Check whether a newer version of OpenCode is available on npm. Returns current version, latest version, and whether an update is available.",
+          "checkUpdate": true
+        }
+      ],
+      "timeout_ms": 300000,
+      "quorum_timeout_ms": 300000,
+      "idle_timeout_ms": 20000,
+      "hard_timeout_ms": 600000,
+      "latency_budget_ms": null,
+      "env": {},
+      "display_type": "opencode-cli",
+      "auth_check": {
+        "args": [
+          "auth",
+          "list"
+        ],
+        "success_pattern": "api|oauth",
+        "login_args": [
+          "auth",
+          "login"
+        ],
+        "login_hint": "Configure provider credentials for OpenCode",
+        "timeout_ms": 5000
+      },
+      "deep_probe": {
+        "prompt": "respond with: PROBE_OK",
+        "expect": "PROBE_OK",
+        "timeout_ms": 45000
+      }
+    },
+    {
+      "name": "copilot-1",
+      "provider": "github",
+      "type": "subprocess",
+      "auth_type": "sub",
+      "has_file_access": true,
+      "description": "Execute GitHub Copilot CLI non-interactively",
+      "mainTool": "ask",
+      "model": "gpt-4.1",
+      "health_check_args": [
+        "--version"
+      ],
+      "display_provider": "GitHub",
+      "cli": null,
+      "args_template": [
+        "-p",
+        "{prompt}",
+        "--allow-all-tools",
+        "--no-color",
+        "-s"
+      ],
+      "helpArgs": [
+        "--help"
+      ],
+      "extraTools": [
+        {
+          "name": "suggest",
+          "description": "Ask GitHub Copilot to suggest a shell, git, or gh CLI command for a given task.",
+          "args_template": [
+            "-p",
+            "Suggest a shell command for the following task: {prompt}",
+            "--allow-all-tools",
+            "--no-color",
+            "-s"
+          ]
+        },
+        {
+          "name": "explain",
+          "description": "Ask GitHub Copilot to explain what a shell command does in plain language.",
+          "args_template": [
+            "-p",
+            "Explain what the following shell command does: {prompt}",
+            "--allow-all-tools",
+            "--no-color",
+            "-s"
+          ]
+        }
+      ],
+      "timeout_ms": 300000,
+      "quorum_timeout_ms": 300000,
+      "idle_timeout_ms": 30000,
+      "hard_timeout_ms": 600000,
+      "latency_budget_ms": null,
+      "env": {},
+      "display_type": "copilot-cli",
+      "auth_check": {
+        "args": [
+          "--version"
+        ],
+        "success_pattern": "\\d+\\.\\d+",
+        "login_args": null,
+        "login_hint": "Copilot authenticates via GitHub CLI (gh auth login). No separate login command.",
+        "timeout_ms": 5000
+      },
+      "deep_probe": {
+        "prompt": "respond with: PROBE_OK",
+        "expect": "PROBE_OK",
+        "timeout_ms": 45000
+      }
+    },
+    {
+      "name": "claude-1",
+      "provider": "anthropic",
+      "type": "subprocess",
+      "auth_type": "sub",
+      "has_file_access": true,
+      "description": "Claude Opus via Anthropic — direct Claude CLI (non-interactive print mode)",
+      "mainTool": "claude",
+      "model": "claude-opus-4-6",
+      "display_provider": "Anthropic",
+      "cli": null,
+      "args_template": [
+        "-p",
+        "{prompt}",
+        "--model",
+        "claude-opus-4-6",
+        "--dangerously-skip-permissions"
+      ],
+      "health_check_args": [
+        "--version"
+      ],
+      "helpArgs": [
+        "--help"
+      ],
+      "extraTools": [],
+      "timeout_ms": 300000,
+      "quorum_timeout_ms": 300000,
+      "idle_timeout_ms": 90000,
+      "hard_timeout_ms": 600000,
+      "latency_budget_ms": null,
+      "max_context_tokens": 200000,
+      "max_output_tokens": 32000,
+      "env": {},
+      "display_type": "claude-cli",
+      "deep_probe": {
+        "prompt": "respond with: PROBE_OK",
+        "expect": "PROBE_OK",
+        "timeout_ms": 45000
+      }
+    },
+    {
+      "name": "ccr-1",
+      "provider": "together",
+      "type": "subprocess",
+      "auth_type": "sub",
+      "has_file_access": true,
+      "description": "MiniMax-M2.5 via Together.xyz — Claude Code Router (CCR) preset claude-1",
+      "mainTool": "claude",
+      "model": "MiniMaxAI/MiniMax-M2.5",
+      "display_provider": "Together.xyz",
+      "cli": null,
+      "args_template": [
+        "claude-1",
+        "-p",
+        "{prompt}",
+        "--dangerously-skip-permissions"
+      ],
+      "health_check_args": [
+        "-v"
+      ],
+      "helpArgs": [
+        "--help"
+      ],
+      "extraTools": [],
+      "timeout_ms": 300000,
+      "quorum_timeout_ms": 300000,
+      "idle_timeout_ms": 90000,
+      "hard_timeout_ms": 600000,
+      "latency_budget_ms": null,
+      "max_context_tokens": 131072,
+      "max_output_tokens": 4096,
+      "max_concurrency": 3,
+      "ccr_overhead_tokens": 95000,
+      "ccr_response_budget_tokens": 64000,
+      "env": {},
+      "display_type": "claude-code-router",
+      "deep_probe": {
+        "prompt": "respond with: PROBE_OK",
+        "expect": "PROBE_OK",
+        "timeout_ms": 45000
+      }
+    },
+    {
+      "name": "ccr-2",
+      "provider": "together",
+      "type": "subprocess",
+      "auth_type": "sub",
+      "has_file_access": true,
+      "description": "Qwen3.5-397B via Together.xyz — Claude Code Router (CCR) preset claude-2",
+      "mainTool": "claude",
+      "model": "Qwen/Qwen3.5-397B-A17B",
+      "display_provider": "Together.xyz",
+      "cli": null,
+      "args_template": [
+        "claude-2",
+        "-p",
+        "{prompt}",
+        "--dangerously-skip-permissions"
+      ],
+      "health_check_args": [
+        "-v"
+      ],
+      "helpArgs": [
+        "--help"
+      ],
+      "extraTools": [],
+      "timeout_ms": 300000,
+      "quorum_timeout_ms": 300000,
+      "idle_timeout_ms": 90000,
+      "hard_timeout_ms": 600000,
+      "latency_budget_ms": null,
+      "max_context_tokens": 131072,
+      "max_output_tokens": 4096,
+      "max_concurrency": 3,
+      "ccr_overhead_tokens": 95000,
+      "ccr_response_budget_tokens": 64000,
+      "env": {},
+      "display_type": "claude-code-router",
+      "deep_probe": {
+        "prompt": "respond with: PROBE_OK",
+        "expect": "PROBE_OK",
+        "timeout_ms": 45000
+      }
+    },
+    {
+      "name": "ccr-3",
+      "provider": "together",
+      "type": "subprocess",
+      "auth_type": "sub",
+      "has_file_access": true,
+      "description": "Qwen3-Coder-480B via Together.xyz — Claude Code Router (CCR) preset claude-3",
+      "mainTool": "claude",
+      "model": "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+      "display_provider": "Together.xyz",
+      "cli": null,
+      "args_template": [
+        "claude-3",
+        "-p",
+        "{prompt}",
+        "--dangerously-skip-permissions"
+      ],
+      "health_check_args": [
+        "-v"
+      ],
+      "helpArgs": [
+        "--help"
+      ],
+      "extraTools": [],
+      "timeout_ms": 300000,
+      "quorum_timeout_ms": 300000,
+      "idle_timeout_ms": 90000,
+      "hard_timeout_ms": 600000,
+      "latency_budget_ms": null,
+      "max_context_tokens": 131072,
+      "max_output_tokens": 4096,
+      "max_concurrency": 3,
+      "ccr_overhead_tokens": 95000,
+      "ccr_response_budget_tokens": 64000,
+      "env": {},
+      "display_type": "claude-code-router",
+      "deep_probe": {
+        "prompt": "respond with: PROBE_OK",
+        "expect": "PROBE_OK",
+        "timeout_ms": 45000
+      }
+    },
+    {
+      "name": "ccr-4",
+      "provider": "together",
+      "type": "subprocess",
+      "auth_type": "sub",
+      "has_file_access": true,
+      "description": "Kimi-K2.5 via Together.xyz — Claude Code Router (CCR) preset claude-4",
+      "mainTool": "claude",
+      "model": "moonshotai/Kimi-K2.5",
+      "display_provider": "Together.xyz",
+      "cli": null,
+      "args_template": [
+        "claude-4",
+        "-p",
+        "{prompt}",
+        "--dangerously-skip-permissions"
+      ],
+      "health_check_args": [
+        "-v"
+      ],
+      "helpArgs": [
+        "--help"
+      ],
+      "extraTools": [],
+      "timeout_ms": 300000,
+      "quorum_timeout_ms": 300000,
+      "idle_timeout_ms": 90000,
+      "hard_timeout_ms": 600000,
+      "latency_budget_ms": null,
+      "max_context_tokens": 131072,
+      "max_output_tokens": 4096,
+      "max_concurrency": 3,
+      "ccr_overhead_tokens": 95000,
+      "ccr_response_budget_tokens": 64000,
+      "env": {},
+      "display_type": "claude-code-router",
+      "deep_probe": {
+        "prompt": "respond with: PROBE_OK",
+        "expect": "PROBE_OK",
+        "timeout_ms": 45000
+      }
+    },
+    {
+      "name": "ccr-5",
+      "provider": "together",
+      "type": "subprocess",
+      "auth_type": "sub",
+      "has_file_access": true,
+      "description": "GPT-OSS-120B via Together.xyz — Claude Code Router (CCR) preset claude-5",
+      "mainTool": "claude",
+      "model": "openai/gpt-oss-120b",
+      "display_provider": "Together.xyz",
+      "cli": null,
+      "args_template": [
+        "claude-5",
+        "-p",
+        "{prompt}",
+        "--dangerously-skip-permissions"
+      ],
+      "health_check_args": [
+        "-v"
+      ],
+      "helpArgs": [
+        "--help"
+      ],
+      "extraTools": [],
+      "timeout_ms": 300000,
+      "quorum_timeout_ms": 300000,
+      "idle_timeout_ms": 90000,
+      "hard_timeout_ms": 600000,
+      "latency_budget_ms": null,
+      "max_context_tokens": 131072,
+      "max_output_tokens": 4096,
+      "max_concurrency": 3,
+      "ccr_overhead_tokens": 95000,
+      "ccr_response_budget_tokens": 64000,
+      "env": {},
+      "display_type": "claude-code-router",
+      "deep_probe": {
+        "prompt": "respond with: PROBE_OK",
+        "expect": "PROBE_OK",
+        "timeout_ms": 45000
+      }
+    },
+    {
+      "name": "ccr-6",
+      "provider": "together",
+      "type": "subprocess",
+      "auth_type": "sub",
+      "has_file_access": true,
+      "description": "GLM-5.1 via Together.xyz — Claude Code Router (CCR) preset claude-6",
+      "mainTool": "claude",
+      "model": "zai-org/GLM-5.1",
+      "display_provider": "Together.xyz",
+      "cli": null,
+      "args_template": [
+        "claude-6",
+        "-p",
+        "{prompt}",
+        "--dangerously-skip-permissions"
+      ],
+      "health_check_args": [
+        "-v"
+      ],
+      "helpArgs": [
+        "--help"
+      ],
+      "extraTools": [],
+      "timeout_ms": 300000,
+      "quorum_timeout_ms": 300000,
+      "idle_timeout_ms": 90000,
+      "hard_timeout_ms": 600000,
+      "latency_budget_ms": null,
+      "max_context_tokens": 131072,
+      "max_output_tokens": 4096,
+      "max_concurrency": 3,
+      "ccr_overhead_tokens": 95000,
+      "ccr_response_budget_tokens": 64000,
+      "env": {},
+      "display_type": "claude-code-router",
+      "deep_probe": {
+        "prompt": "respond with: PROBE_OK",
+        "expect": "PROBE_OK",
+        "timeout_ms": 45000
+      }
+    }
+  ]
 }
