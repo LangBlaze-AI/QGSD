@@ -560,13 +560,26 @@ function ensureMcpSlotsFromProviders() {
           // Daintree metadata from preset-cloned slots and re-running /nf:link-daintree would
           // fail to recognize them as preset-linked, creating duplicate -N slots instead of
           // updating in place.
+          // Build existingByName by reading from two sources, in order of freshness:
+          //   1. nf-local-patches/nf/bin/providers.json — saveLocalPatches() backs up the
+          //      user's pre-wipe providers.json here. Earlier in this same install,
+          //      copyWithPathReplacement wiped ~/.claude/nf/, removing the live nf/bin/
+          //      providers.json. The patches backup is the only place the user's metadata
+          //      (daintree_preset_id, env, model) still lives.
+          //   2. ~/.claude/nf/bin/providers.json — current live file (whatever the mirror
+          //      step just put there, typically stale once nf/ has been wiped).
+          // Patches backup wins where both have the same slot name, because it carries
+          // the metadata the wipe destroyed.
           const existingByName = new Map();
-          try {
-            if (fs.existsSync(globalProvidersJson)) {
-              const existing = JSON.parse(fs.readFileSync(globalProvidersJson, 'utf8'));
-              for (const p of existing.providers || []) existingByName.set(p.name, p);
-            }
-          } catch (_) { /* fall through with empty map */ }
+          const patchedProvidersPath = path.join(os.homedir(), '.claude', PATCHES_DIR_NAME, 'nf', 'bin', 'providers.json');
+          for (const candidatePath of [globalProvidersJson, patchedProvidersPath]) {
+            try {
+              if (fs.existsSync(candidatePath)) {
+                const existing = JSON.parse(fs.readFileSync(candidatePath, 'utf8'));
+                for (const p of existing.providers || []) existingByName.set(p.name, p);
+              }
+            } catch (_) { /* skip unreadable / malformed */ }
+          }
 
           // Step 1: Sync slots from ~/.claude.json (fan-out creates MCP entries here)
           // Only include slots whose prefix is a known coding agent CLI.
