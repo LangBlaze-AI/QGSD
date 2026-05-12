@@ -1120,10 +1120,7 @@ Display:
   Register userAgents:     {registered ? "✓ " + userAgentsAddedCount + " added, " + userAgentsSkippedCount + " skipped" : "○ Skipped"}
   Custom presets exported: {customPresetsAddedCount > 0 || customPresetsUnchangedCount > 0 ? "✓ " + customPresetsAddedCount + " added, " + customPresetsUnchangedCount + " unchanged" : "○ Skipped"}
 
-{if probedCount > 0 || imported:}
-⚠ Restart Claude Code now — newly-added MCP slots register their tools only at session start.
-   Quit with CTRL+C (or `/quit`), then run `claude` again.
-
+{probedCount > 0 || imported ? "⚠ Restart Claude Code now — newly-added MCP slots register their tools only at session start.\n   Quit with CTRL+C (or `/quit`), then run `claude` again.\n" : ""}
 Re-run /nf:link-canopy any time to refresh the link. Idempotency rules:
   • Vanilla nForma slots (no daintree_preset_id) are never touched.
   • Preset-linked slots (matched by daintree_preset_id) are updated in place — env is overlaid
