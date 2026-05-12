@@ -639,6 +639,35 @@ function ensureMcpSlotsFromProviders() {
             fs.renameSync(tmpPath, globalProvidersJson);
             console.log(`  ${green}✓${reset} Synced ${merged.providers.length} slot(s) to ${globalProvidersJson}`);
           }
+
+          // Backfill UNIFIED_PROVIDERS_CONFIG on existing mcpServers entries that are
+          // missing it. The main backfill loop further down only runs when the repo
+          // source providers.json is populated (the non-empty branch) — for users
+          // whose repo source is empty (the typical case after install), this branch
+          // returns early and the main backfill never executes. Self-heal here too.
+          try {
+            const claudeJsonForBackfill = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8'));
+            if (claudeJsonForBackfill?.mcpServers) {
+              let backfilled = 0;
+              for (const slotName of mcpSlots) {
+                const entry = claudeJsonForBackfill.mcpServers[slotName];
+                if (!entry) continue;
+                entry.env = entry.env || {};
+                if (!entry.env.UNIFIED_PROVIDERS_CONFIG) {
+                  entry.env.UNIFIED_PROVIDERS_CONFIG = globalProvidersJson;
+                  backfilled++;
+                }
+              }
+              if (backfilled > 0) {
+                const tmpPath = claudeJsonPath + '.tmp';
+                fs.writeFileSync(tmpPath, JSON.stringify(claudeJsonForBackfill, null, 2) + '\n', 'utf8');
+                fs.renameSync(tmpPath, claudeJsonPath);
+                console.log(`  ${green}✓${reset} Backfilled UNIFIED_PROVIDERS_CONFIG on ${backfilled} mcpServers entry/entries`);
+              }
+            }
+          } catch (e) {
+            console.warn(`  ${yellow}⚠${reset} Could not backfill UNIFIED_PROVIDERS_CONFIG: ${e.message}`);
+          }
         } catch (e) {
           console.warn(`  ${yellow}⚠${reset} Could not sync providers to ${globalProvidersJson}: ${e.message}`);
         }
