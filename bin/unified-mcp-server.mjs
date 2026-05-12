@@ -41,11 +41,17 @@ if (!Array.isArray(providers) || providers.length === 0) {
 
 // Resolve CLI paths at startup (XPLAT-01: cross-platform path discovery)
 for (const provider of providers) {
-  if (provider.type === 'subprocess' && provider.cli) {
-    const bareName = provider.cli.split('/').pop();
+  if (provider.type === 'subprocess') {
+    // `cli` is optional in providers.json — when absent, fall back to `mainTool`
+    // as the bare binary name. Without this fallback, `provider.resolvedCli`
+    // stays unset and the spawn at runtime hands `null` to child_process.spawn,
+    // failing with ENOENT/EINVAL and reporting healthy:false at ~1ms latency.
+    const cliSource = provider.cli || provider.mainTool;
+    if (!cliSource) continue;
+    const bareName = cliSource.split('/').pop();
     provider.resolvedCli = resolveCli(bareName);
-    if (provider.cli !== provider.resolvedCli) {
-      process.stderr.write(`[mcp] Resolved ${bareName}: ${provider.cli} -> ${provider.resolvedCli}\n`);
+    if (cliSource !== provider.resolvedCli) {
+      process.stderr.write(`[mcp] Resolved ${bareName}: ${cliSource} -> ${provider.resolvedCli}\n`);
     }
     // Also resolve service commands if present (e.g., ccr start/stop/status)
     if (provider.service) {

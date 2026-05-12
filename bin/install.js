@@ -605,7 +605,13 @@ function ensureMcpSlotsFromProviders() {
               display_provider: mainTool.charAt(0).toUpperCase() + mainTool.slice(1),
             };
             const existing = existingByName.get(slotName);
-            merged.providers.push(existing ? { ...base, ...existing } : base);
+            // Overlay existing on top of base (preserves Daintree metadata, env, etc.)
+            // BUT force `name` and `mainTool` from the base (slot-name-derived). Otherwise
+            // historical corruption like `copilot-1: { mainTool: 'ask' }` would persist
+            // forever and cause the MCP server to spawn the wrong binary at health_check.
+            merged.providers.push(existing
+              ? { ...base, ...existing, name: base.name, mainTool: base.mainTool }
+              : base);
           }
           // Step 2: Also add PATH-detected CLIs that aren't already in ~/.claude.json
           const { resolveCli } = require('./resolve-cli.cjs');
