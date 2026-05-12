@@ -553,6 +553,21 @@ function ensureMcpSlotsFromProviders() {
         const globalProvidersJson = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
         const merged = { providers: [] };
         try {
+          // Preserve existing entries — when reconstructing providers.json from ~/.claude.json
+          // mcpServers, fields like `daintree_preset_id`, `daintree_preset_name`,
+          // `daintree_preset_family`, `env`, `model`, and `health_check_args` only live in the
+          // installed providers.json. Without preserving them, every install would strip
+          // Daintree metadata from preset-cloned slots and re-running /nf:link-daintree would
+          // fail to recognize them as preset-linked, creating duplicate -N slots instead of
+          // updating in place.
+          const existingByName = new Map();
+          try {
+            if (fs.existsSync(globalProvidersJson)) {
+              const existing = JSON.parse(fs.readFileSync(globalProvidersJson, 'utf8'));
+              for (const p of existing.providers || []) existingByName.set(p.name, p);
+            }
+          } catch (_) { /* fall through with empty map */ }
+
           // Step 1: Sync slots from ~/.claude.json (fan-out creates MCP entries here)
           // Only include slots whose prefix is a known coding agent CLI.
           const KNOWN_CLI_PREFIXES = ['claude', 'codex', 'gemini', 'opencode', 'copilot', 'kilo', 'cursor', 'windsurf', 'antigravity', 'augment', 'trae', 'cline'];
@@ -565,7 +580,9 @@ function ensureMcpSlotsFromProviders() {
             // Infer mainTool from slot name prefix (e.g., "claude-z-ai" → "claude")
             const dashIdx = slotName.indexOf('-');
             const mainTool = dashIdx > 0 ? slotName.slice(0, dashIdx) : slotName;
-            merged.providers.push({
+            // Base shape derived from slot name; existing entry's fields (if any) win on overlay
+            // — preserves daintree_preset_id, env, model, etc.
+            const base = {
               name: slotName,
               provider: mainTool,
               type: 'subprocess',
@@ -573,7 +590,9 @@ function ensureMcpSlotsFromProviders() {
               mainTool,
               display_type: mainTool + '-cli',
               display_provider: mainTool.charAt(0).toUpperCase() + mainTool.slice(1),
-            });
+            };
+            const existing = existingByName.get(slotName);
+            merged.providers.push(existing ? { ...base, ...existing } : base);
           }
           // Step 2: Also add PATH-detected CLIs that aren't already in ~/.claude.json
           const { resolveCli } = require('./resolve-cli.cjs');
