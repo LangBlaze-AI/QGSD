@@ -684,18 +684,34 @@ function ensureMcpSlotsFromProviders() {
       if (selectedProviderSlots && !selectedProviderSlots.includes(providerName)) {
         continue;
       }
+      // unified-mcp-server reads its providers config from this path; without an explicit
+      // pointer it falls back to its own __dirname/providers.json (which ships empty) and
+      // exits with "Unknown PROVIDER_SLOT". Set UNIFIED_PROVIDERS_CONFIG on every entry —
+      // new entries get it on creation, existing entries get backfilled below.
+      const installedProvidersPath = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
       if (!claudeConfig.mcpServers.hasOwnProperty(providerName)) {
         // Create entry for this provider
         claudeConfig.mcpServers[providerName] = {
           type: 'stdio',
           command: 'node',
           args: [unifiedMcpPath],
-          env: { PROVIDER_SLOT: providerName }
+          env: { PROVIDER_SLOT: providerName, UNIFIED_PROVIDERS_CONFIG: installedProvidersPath }
         };
         addedCount++;
         console.log(`  ${green}✓${reset} Added MCP entry for ${providerName}`);
       } else {
-        console.log(`  ${dim}↳ MCP entry for ${providerName} already exists (skipped)${reset}`);
+        // Backfill UNIFIED_PROVIDERS_CONFIG on existing entries that are missing it —
+        // older /nf:mcp-setup runs created entries without this env, causing the spawned
+        // server to look at the empty repo source. Self-heal on every install.
+        const existing = claudeConfig.mcpServers[providerName];
+        existing.env = existing.env || {};
+        if (!existing.env.UNIFIED_PROVIDERS_CONFIG) {
+          existing.env.UNIFIED_PROVIDERS_CONFIG = installedProvidersPath;
+          addedCount++;
+          console.log(`  ${green}✓${reset} Backfilled UNIFIED_PROVIDERS_CONFIG on ${providerName}`);
+        } else {
+          console.log(`  ${dim}↳ MCP entry for ${providerName} already exists (skipped)${reset}`);
+        }
       }
     }
 
