@@ -44,6 +44,8 @@ fi
 PR_NUMBER=""
 DRY_RUN=false
 NO_MERGE=false
+EXPORT_THREADS=false
+RESOLVE_FROM=""
 INTERVAL=30
 TIMEOUT=600
 LATEST=false
@@ -65,6 +67,8 @@ FLAGS:
   --dry-run             Show what would happen without mutations
   --latest              Auto-detect PR number from current branch
   --no-merge            Poll and resolve threads, but skip merge step
+  --export-threads      Export unresolved threads as JSON and exit (no mutations)
+  --resolve-from FILE   Apply per-thread resolutions from a JSON file, then poll CI and merge
   --interval SECONDS    Polling interval (default: 30 seconds)
   --timeout SECONDS     Max wait time for checks (default: 600 seconds)
   --help                Show this message
@@ -95,6 +99,18 @@ EOF
     --no-merge)
       NO_MERGE=true
       shift
+      ;;
+    --export-threads)
+      EXPORT_THREADS=true
+      shift
+      ;;
+    --resolve-from)
+      if [[ -z "${2:-}" || "$2" == -* ]]; then
+        echo "ERROR: --resolve-from requires a file path argument" >&2
+        exit 1
+      fi
+      RESOLVE_FROM="$2"
+      shift 2
       ;;
     --interval)
       INTERVAL="$2"
@@ -156,6 +172,80 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo ""
 fi
 
+# ── Validate --resolve-from file ──
+if [[ -n "$RESOLVE_FROM" ]]; then
+  if [[ ! -f "$RESOLVE_FROM" ]]; then
+    echo -e "${RED}ERROR: --resolve-from file not found: $RESOLVE_FROM${RESET}" >&2
+    exit 1
+  fi
+  if ! jq -e '.resolutions | type == "array"' "$RESOLVE_FROM" >/dev/null 2>&1; then
+    echo -e "${RED}ERROR: --resolve-from file must contain a 'resolutions' array${RESET}" >&2
+    exit 1
+  fi
+fi
+
+# ── Export threads mode ──
+if [[ "$EXPORT_THREADS" == "true" ]]; then
+  EXPORT_QUERY='
+query($owner:String!, $repo:String!, $number:Int!) {
+  repository(owner:$owner, name:$repo) {
+    pullRequest(number:$number) {
+      reviewThreads(first:100) {
+        nodes {
+          id
+          isResolved
+          comments(first:20) {
+            nodes {
+              author { login }
+              body
+              path
+              line
+              diffHunk
+            }
+          }
+        }
+      }
+    }
+  }
+}
+'
+
+  RESULT=$(gh api graphql \
+    -f query="$EXPORT_QUERY" \
+    -f owner="$OWNER" \
+    -f repo="$REPO" \
+    -F number="$PR_NUMBER" \
+    2>/dev/null) || {
+    echo -e '{"error": "GraphQL query failed"}' >&2
+    exit 1
+  }
+
+  # Filter to unresolved threads, extract relevant fields
+  echo "$RESULT" | jq '{
+    pr: '"$PR_NUMBER"',
+    owner: "'"$OWNER"'",
+    repo: "'"$REPO"'",
+    threads: [
+      .data.repository.pullRequest.reviewThreads.nodes[]
+      | select(.isResolved == false)
+      | {
+        thread_id: .id,
+        path: (.comments.nodes[0].path // null),
+        line: (.comments.nodes[0].line // null),
+        comments: [
+          .comments.nodes[]
+          | {
+            author: .author.login,
+            body: .body,
+            diffHunk: (.diffHunk // null)
+          }
+        ]
+      }
+    ]
+  }'
+  exit 0
+fi
+
 # ── Helpers ──
 
 log() {
@@ -175,6 +265,110 @@ BOT_LOGINS=(
 
 # ── Thread state file (shared between background resolver and polling loop) ──
 THREAD_STATE_FILE="/tmp/pr-${PR_NUMBER}-thread-state.json"
+
+# ── resolve_from_file: apply per-thread resolutions from a JSON file ──
+resolve_from_file() {
+  local resolutions_file="$1"
+  local dry_run="$2"
+  local state_file="$3"
+
+  local total resolved_count accepted_count
+  total=$(jq '.resolutions | length' "$resolutions_file")
+  resolved_count=0
+  accepted_count=0
+
+  # Build accepted reasons as proper JSON array upfront
+  local accepted_reasons_json
+  accepted_reasons_json=$(jq -c '[.resolutions[] | select(.decision=="accept") .reason]' "$resolutions_file")
+
+  # Write initial state
+  cat > "$state_file" << EOF
+{
+  "status": "resolving",
+  "resolved_count": 0,
+  "accepted_count": 0,
+  "accepted_reasons": ${accepted_reasons_json},
+  "resolutions_file": "${resolutions_file}",
+  "unresolved_human": 0,
+  "done": false,
+  "blocked": false
+}
+EOF
+
+  for ((i=0; i<total; i++)); do
+    local thread_id decision reply_body reason
+    thread_id=$(jq -r ".resolutions[$i].thread_id" "$resolutions_file")
+    decision=$(jq -r ".resolutions[$i].decision" "$resolutions_file")
+    reply_body=$(jq -r ".resolutions[$i].reply // \"\"" "$resolutions_file")
+    reason=$(jq -r ".resolutions[$i].reason // \"\"" "$resolutions_file")
+
+    case "$decision" in
+      accept|advisory|noise|already-fixed) ;;
+      *)
+        echo -e "${RED}ERROR: unknown decision '${decision}' for thread ${thread_id}${RESET}" >&2
+        exit 1
+        ;;
+    esac
+
+    if [[ "$decision" == "accept" ]]; then
+      accepted_count=$((accepted_count + 1))
+      # Update state
+      cat > "$state_file" << EOF
+{
+  "status": "resolving",
+  "resolved_count": ${resolved_count},
+  "accepted_count": ${accepted_count},
+  "accepted_reasons": ${accepted_reasons_json},
+  "resolutions_file": "${resolutions_file}",
+  "unresolved_human": 0,
+  "done": false,
+  "blocked": true
+}
+EOF
+      continue
+    fi
+
+    # For advisory, noise, already-fixed: post reply + resolve
+    if [[ "$dry_run" == "false" ]]; then
+      if [[ -n "$reply_body" && "$reply_body" != "" && "$reply_body" != "null" ]]; then
+        gh api graphql -f query='mutation($threadId:ID!, $body:String!) { addPullRequestReviewComment(input:{pullRequestReviewThreadId:$threadId, body:$body}) { comment { id } } }' \
+          -f threadId="$thread_id" -f body="$reply_body" >/dev/null 2>&1 || true
+      fi
+      gh api graphql -f query='mutation($threadId:ID!) { resolveReviewThread(input:{threadId:$threadId}) { thread { isResolved } } }' \
+        -f threadId="$thread_id" >/dev/null 2>&1 || true
+    fi
+
+    resolved_count=$((resolved_count + 1))
+
+    # Update state after each resolution
+    cat > "$state_file" << EOF
+{
+  "status": "resolving",
+  "resolved_count": ${resolved_count},
+  "accepted_count": ${accepted_count},
+  "accepted_reasons": ${accepted_reasons_json},
+  "resolutions_file": "${resolutions_file}",
+  "unresolved_human": 0,
+  "done": false,
+  "blocked": $([[ $accepted_count -gt 0 ]] && echo "true" || echo "false")
+}
+EOF
+  done
+
+  # Write done state
+  cat > "$state_file" << EOF
+{
+  "status": "done",
+  "resolved_count": ${resolved_count},
+  "accepted_count": ${accepted_count},
+  "accepted_reasons": ${accepted_reasons_json},
+  "resolutions_file": "${resolutions_file}",
+  "unresolved_human": 0,
+  "done": true,
+  "blocked": $([[ $accepted_count -gt 0 ]] && echo "true" || echo "false")
+}
+EOF
+}
 
 # ── TASK 1 + TASK 2: Poll checks AND resolve threads in parallel ──
 
@@ -360,8 +554,13 @@ EOF
 }
 
 # Launch background thread resolver
-resolve_threads_bg "$OWNER" "$REPO" "$PR_NUMBER" "$DRY_RUN" "$THREAD_STATE_FILE" &
-THREAD_BG_PID=$!
+if [[ -n "$RESOLVE_FROM" ]]; then
+  resolve_from_file "$RESOLVE_FROM" "$DRY_RUN" "$THREAD_STATE_FILE" &
+  THREAD_BG_PID=$!
+else
+  resolve_threads_bg "$OWNER" "$REPO" "$PR_NUMBER" "$DRY_RUN" "$THREAD_STATE_FILE" &
+  THREAD_BG_PID=$!
+fi
 
 # ── Poll check runs (Task 1) ──
 
@@ -415,10 +614,18 @@ while true; do
   thread_status=""
   if [[ -f "$THREAD_STATE_FILE" ]]; then
     thread_resolved=$(jq -r '.resolved_count // 0' "$THREAD_STATE_FILE" 2>/dev/null || echo "0")
-    thread_total=$(jq -r '.unresolved_coderabbitai + unresolved_copilot + unresolved_human + .resolved_count // 0' "$THREAD_STATE_FILE" 2>/dev/null || echo "0")
+    thread_accepted=$(jq -r '.accepted_count // 0' "$THREAD_STATE_FILE" 2>/dev/null || echo "0")
+    # Old state format has bot-type counts; new format has accepted_count
+    if [[ "$thread_accepted" != "0" ]]; then
+      thread_total=$((thread_resolved + thread_accepted))
+    else
+      thread_total=$(jq -r '(.unresolved_coderabbitai // 0) + (.unresolved_copilot // 0) + (.unresolved_human // 0) + .resolved_count // 0' "$THREAD_STATE_FILE" 2>/dev/null || echo "0")
+    fi
     thread_blocked=$(jq -r '.blocked // false' "$THREAD_STATE_FILE" 2>/dev/null || echo "false")
     thread_done=$(jq -r '.done // false' "$THREAD_STATE_FILE" 2>/dev/null || echo "false")
-    thread_status=" [threads: ${thread_resolved}/${thread_total} resolved]"
+    accepted_suffix=""
+    [[ $thread_accepted -gt 0 ]] && accepted_suffix=", ${thread_accepted} accepted"
+    thread_status=" [threads: ${thread_resolved}/${thread_total} resolved${accepted_suffix}]"
   fi
 
   if [[ $TOTAL -eq 0 ]]; then
@@ -490,15 +697,19 @@ if [[ -f "$THREAD_STATE_FILE" ]]; then
   THREAD_RESOLVED=$(jq -r '.resolved_count // 0' "$THREAD_STATE_FILE" 2>/dev/null || echo "0")
   THREAD_BLOCKED=$(jq -r '.blocked // false' "$THREAD_STATE_FILE" 2>/dev/null || echo "false")
   UNRESOLVED_HUMAN=$(jq -r '.unresolved_human // 0' "$THREAD_STATE_FILE" 2>/dev/null || echo "0")
+  THREAD_ACCEPTED=$(jq -r '.accepted_count // 0' "$THREAD_STATE_FILE" 2>/dev/null || echo "0")
+  ACCEPTED_REASONS=$(jq -r '.accepted_reasons // [] | if type == "array" then .[] else . end' "$THREAD_STATE_FILE" 2>/dev/null || true)
   STATUS_MSG=$(jq -r '.status // "unknown"' "$THREAD_STATE_FILE" 2>/dev/null || echo "unknown")
 else
   THREAD_RESOLVED=0
   THREAD_BLOCKED=false
   UNRESOLVED_HUMAN=0
+  THREAD_ACCEPTED=0
+  ACCEPTED_REASONS=""
   STATUS_MSG="not_started"
 fi
 
-log "Thread resolution ${STATUS_MSG}: ${THREAD_RESOLVED} bot threads resolved${thread_status}"
+log "Thread resolution ${STATUS_MSG}: ${THREAD_RESOLVED} resolved$( [[ $THREAD_ACCEPTED -gt 0 ]] && echo ", ${THREAD_ACCEPTED} accepted (requires attention)" )"
 
 # Cleanup state file
 rm -f "$THREAD_STATE_FILE"
@@ -519,7 +730,15 @@ fi
 
 if [[ "$THREAD_BLOCKED" == "true" ]]; then
   MERGE_READY=false
-  status_red "Cannot merge: non-bot threads require human review (${UNRESOLVED_HUMAN} unresolved)"
+  if [[ $THREAD_ACCEPTED -gt 0 ]]; then
+    status_red "Cannot merge: ${THREAD_ACCEPTED} bot comment(s) accepted as genuine issues (requires attention)"
+    echo "$ACCEPTED_REASONS" | while IFS= read -r reason; do
+      [[ -n "$reason" ]] && echo "  - $reason"
+    done
+  fi
+  if [[ $UNRESOLVED_HUMAN -gt 0 ]]; then
+    status_red "Cannot merge: ${UNRESOLVED_HUMAN} human thread(s) require review"
+  fi
 fi
 
 if [[ "$NO_MERGE" == "true" ]]; then
@@ -555,6 +774,12 @@ log "Summary"
 echo ""
 echo "Checks: $CHECKS_PASSED passed, $CHECKS_FAILED failed, $CHECKS_PENDING pending"
 echo "Bot threads resolved: $THREAD_RESOLVED"
+if [[ $THREAD_ACCEPTED -gt 0 ]]; then
+  echo "Bot threads accepted (requires attention): $THREAD_ACCEPTED"
+  echo "$ACCEPTED_REASONS" | while IFS= read -r reason; do
+    [[ -n "$reason" ]] && echo "  - $reason"
+  done
+fi
 echo "Non-bot threads remaining: $UNRESOLVED_HUMAN"
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "Merge status: dry-run (no mutations made)"
