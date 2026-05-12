@@ -105,6 +105,10 @@ EOF
       shift
       ;;
     --resolve-from)
+      if [[ -z "${2:-}" || "$2" == -* ]]; then
+        echo "ERROR: --resolve-from requires a file path argument" >&2
+        exit 1
+      fi
       RESOLVE_FROM="$2"
       shift 2
       ;;
@@ -174,7 +178,7 @@ if [[ -n "$RESOLVE_FROM" ]]; then
     echo -e "${RED}ERROR: --resolve-from file not found: $RESOLVE_FROM${RESET}" >&2
     exit 1
   fi
-  if ! jq -e '.resolutions' "$RESOLVE_FROM" >/dev/null 2>&1; then
+  if ! jq -e '.resolutions | type == "array"' "$RESOLVE_FROM" >/dev/null 2>&1; then
     echo -e "${RED}ERROR: --resolve-from file must contain a 'resolutions' array${RESET}" >&2
     exit 1
   fi
@@ -297,6 +301,14 @@ EOF
     decision=$(jq -r ".resolutions[$i].decision" "$resolutions_file")
     reply_body=$(jq -r ".resolutions[$i].reply // \"\"" "$resolutions_file")
     reason=$(jq -r ".resolutions[$i].reason // \"\"" "$resolutions_file")
+
+    case "$decision" in
+      accept|advisory|noise|already-fixed) ;;
+      *)
+        echo -e "${RED}ERROR: unknown decision '${decision}' for thread ${thread_id}${RESET}" >&2
+        exit 1
+        ;;
+    esac
 
     if [[ "$decision" == "accept" ]]; then
       accepted_count=$((accepted_count + 1))
