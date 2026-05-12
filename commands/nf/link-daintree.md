@@ -688,6 +688,74 @@ providers.json:
 ⚠ Restart Claude Code to pick up the new MCP servers and quorum slots.
 ```
 
+Continue to Step 2e.
+
+### Step 2e: Smoke-probe newly-added slots
+
+For each newly-added MCP server entry from Step 2d (`summary.mcpServers.added`), spawn the configured `unified-mcp-server.mjs` out-of-band with the slot's exact env and verify it (a) starts, (b) exposes `identity`, and (c) exposes `health_check`. This catches misconfigured slots **before** the user has to restart Claude Code and discover the failure manually.
+
+Pass IMPORT_RESULT to the probe via env var (never interpolate JSON into the script body):
+
+```bash
+PROBE_RESULT=$(NF_IMPORT_JSON="$IMPORT_RESULT" node << 'NF_EVAL'
+const { spawnSync } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const importResult = JSON.parse(process.env.NF_IMPORT_JSON || '{}');
+const added = (importResult.summary?.mcpServers?.added) || [];
+if (added.length === 0) { process.stdout.write(JSON.stringify({ probed: 0, results: [] }) + '\n'); process.exit(0); }
+
+let claudeJson = {};
+try { claudeJson = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8')); } catch (_) {}
+
+const initReq = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }) + '\n';
+const listReq = JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }) + '\n';
+
+const results = [];
+for (const { name } of added) {
+  const entry = (claudeJson.mcpServers || {})[name];
+  if (!entry) { results.push({ slot: name, ok: false, reason: 'mcp entry not found in ~/.claude.json' }); continue; }
+  const res = spawnSync(entry.command, entry.args || [], {
+    input: initReq + listReq,
+    env: { ...process.env, ...(entry.env || {}) },
+    timeout: 8000,
+    encoding: 'utf8',
+  });
+  if (res.error) { results.push({ slot: name, ok: false, reason: 'spawn failed: ' + res.error.message }); continue; }
+  if (res.status !== null && res.status !== 0) {
+    const stderr = (res.stderr || '').trim().split('\n').slice(-3).join(' | ').slice(0, 200);
+    results.push({ slot: name, ok: false, reason: 'exit ' + res.status + ': ' + stderr });
+    continue;
+  }
+  let tools = null;
+  for (const line of (res.stdout || '').split('\n')) {
+    if (!line.trim()) continue;
+    try { const obj = JSON.parse(line); if (obj.id === 2 && obj.result && Array.isArray(obj.result.tools)) tools = obj.result.tools.map(t => t.name); } catch (_) {}
+  }
+  if (!tools) { results.push({ slot: name, ok: false, reason: 'no tools/list response' }); continue; }
+  const missing = ['identity', 'health_check'].filter(t => !tools.includes(t));
+  if (missing.length) { results.push({ slot: name, ok: false, reason: 'missing tools: ' + missing.join(', '), tools }); continue; }
+  results.push({ slot: name, ok: true, toolCount: tools.length });
+}
+process.stdout.write(JSON.stringify({ probed: results.length, results }) + '\n');
+NF_EVAL
+)
+```
+
+Parse PROBE_RESULT and display:
+
+```text
+Slot probe (out-of-band MCP handshake):
+{for each result:}
+  {ok ? "✓" : "✗"} {slot} {ok ? "— " + toolCount + " tools registered" : "— " + reason}
+```
+
+Store the pass/fail counts for the closing summary in Step 4 (`probePassedCount`, `probeFailedCount`).
+
+If any slots failed: tell the user explicitly that those slots will **not** work after a Claude Code restart and link to `/nf:mcp-repair`. If all passed: tell them the slots are wired correctly but still require a Claude Code restart to register tools in this session.
+
 Continue to Step 3.
 
 ---
@@ -1048,9 +1116,11 @@ Display:
   Product detected:        {productName} (Daintree, or canopy-app legacy)
   Import (nf.json):        {imported ? "✓ Canopy config imported to nf.json" : "○ Skipped"}
   Preset env imported:     {presetEnvImported ? "✓ " + providersUpdated + " provider(s) updated in providers.json" : "○ Skipped"}
+  Slot probe:              {probedCount > 0 ? (probeFailedCount === 0 ? "✓ " + probePassedCount + " new slot(s) respond to MCP probe" : "⚠ " + probePassedCount + " ok, " + probeFailedCount + " failed — run /nf:mcp-repair") : "○ No new slots to probe"}
   Register userAgents:     {registered ? "✓ " + userAgentsAddedCount + " added, " + userAgentsSkippedCount + " skipped" : "○ Skipped"}
   Custom presets exported: {customPresetsAddedCount > 0 || customPresetsUnchangedCount > 0 ? "✓ " + customPresetsAddedCount + " added, " + customPresetsUnchangedCount + " unchanged" : "○ Skipped"}
 
+{probedCount > 0 || imported ? "⚠ Restart Claude Code now — newly-added MCP slots register their tools only at session start.\n   Quit with CTRL+C (or `/quit`), then run `claude` again.\n" : ""}
 Re-run /nf:link-canopy any time to refresh the link. Idempotency rules:
   • Vanilla nForma slots (no daintree_preset_id) are never touched.
   • Preset-linked slots (matched by daintree_preset_id) are updated in place — env is overlaid
@@ -1079,4 +1149,6 @@ Re-run /nf:link-canopy any time to refresh the link. Idempotency rules:
 - All values passed via environment variables — never interpolated into script bodies
 - Cross-platform: macOS (~/Library/Application Support), Windows (%APPDATA%), Linux (~/.config)
 - Idempotent: safe to re-run — updates canopy section, skips existing agents and customPresets
+- Post-write smoke probe (Step 2e): each newly-added MCP slot is spawned out-of-band via its exact command+args+env, sent initialize + tools/list, and verified to expose at minimum `identity` and `health_check`. Failures surface per-slot in the probe display and aggregated in Step 4 closing summary.
+- Step 4 closing summary tells the user explicitly to restart Claude Code when any new MCP slot was added or nf.json was imported, since MCP tools register only at session start.
 </success_criteria>
