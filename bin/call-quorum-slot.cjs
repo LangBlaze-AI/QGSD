@@ -353,9 +353,17 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
   const { args, useStdinPrompt, isCcr } = buildSpawnArgs(provider, prompt, allowedToolsFlag);
 
   // XPLAT-01: resolve CLI path at dispatch time (once per invocation)
-  if (provider.type === 'subprocess' && provider.cli) {
-    const bareName = provider.cli.split('/').pop();
-    provider.resolvedCli = resolveCli(bareName);
+  // `cli` is optional in providers.json — when absent, fall back to `mainTool` as the bare
+  // binary name. Without this fallback, `provider.resolvedCli` stays undefined and the spawn
+  // below hands `null` to child_process.spawn, throwing "The 'file' argument must be of type
+  // string. Received null" before any model is contacted — taking the entire quorum offline.
+  // Same fix as PR #161 applied to bin/unified-mcp-server.mjs.
+  if (provider.type === 'subprocess') {
+    const cliSource = provider.cli || provider.mainTool;
+    if (cliSource) {
+      const bareName = cliSource.split('/').pop();
+      provider.resolvedCli = resolveCli(bareName);
+    }
   }
 
   const env  = { ...process.env, ...(provider.env ?? {}) };
@@ -365,7 +373,12 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     try {
       // detached: true creates a new process group — required to kill all descendants
       // (ccr → Claude Code → node, opencode → LLM subprocess, etc.)
-      child = spawn(provider.resolvedCli ?? provider.cli, args, { env, cwd: spawnCwd, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
+      // Chain of fallbacks: resolvedCli (preferred, absolute path) → cli (raw field) →
+      // mainTool (bare binary name, last resort). Guards against spawn(null) in case the
+      // resolution above produced no value.
+      const spawnTarget = provider.resolvedCli || provider.cli || provider.mainTool;
+      if (!spawnTarget) throw new Error(`provider ${provider.name} has no resolvable CLI (cli, resolvedCli, and mainTool all empty)`);
+      child = spawn(spawnTarget, args, { env, cwd: spawnCwd, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
     } catch (err) {
       reject(new Error(`[spawn error: ${err.message}]`));
       return;
