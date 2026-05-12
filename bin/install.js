@@ -553,6 +553,34 @@ function ensureMcpSlotsFromProviders() {
         const globalProvidersJson = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
         const merged = { providers: [] };
         try {
+          // Preserve existing entries — when reconstructing providers.json from ~/.claude.json
+          // mcpServers, fields like `daintree_preset_id`, `daintree_preset_name`,
+          // `daintree_preset_family`, `env`, `model`, and `health_check_args` only live in the
+          // installed providers.json. Without preserving them, every install would strip
+          // Daintree metadata from preset-cloned slots and re-running /nf:link-daintree would
+          // fail to recognize them as preset-linked, creating duplicate -N slots instead of
+          // updating in place.
+          // Build existingByName by reading from two sources, in order of freshness:
+          //   1. nf-local-patches/nf/bin/providers.json — saveLocalPatches() backs up the
+          //      user's pre-wipe providers.json here. Earlier in this same install,
+          //      copyWithPathReplacement wiped ~/.claude/nf/, removing the live nf/bin/
+          //      providers.json. The patches backup is the only place the user's metadata
+          //      (daintree_preset_id, env, model) still lives.
+          //   2. ~/.claude/nf/bin/providers.json — current live file (whatever the mirror
+          //      step just put there, typically stale once nf/ has been wiped).
+          // Patches backup wins where both have the same slot name, because it carries
+          // the metadata the wipe destroyed.
+          const existingByName = new Map();
+          const patchedProvidersPath = path.join(os.homedir(), '.claude', PATCHES_DIR_NAME, 'nf', 'bin', 'providers.json');
+          for (const candidatePath of [globalProvidersJson, patchedProvidersPath]) {
+            try {
+              if (fs.existsSync(candidatePath)) {
+                const existing = JSON.parse(fs.readFileSync(candidatePath, 'utf8'));
+                for (const p of existing.providers || []) existingByName.set(p.name, p);
+              }
+            } catch (_) { /* skip unreadable / malformed */ }
+          }
+
           // Step 1: Sync slots from ~/.claude.json (fan-out creates MCP entries here)
           // Only include slots whose prefix is a known coding agent CLI.
           const KNOWN_CLI_PREFIXES = ['claude', 'codex', 'gemini', 'opencode', 'copilot', 'kilo', 'cursor', 'windsurf', 'antigravity', 'augment', 'trae', 'cline'];
@@ -565,7 +593,9 @@ function ensureMcpSlotsFromProviders() {
             // Infer mainTool from slot name prefix (e.g., "claude-z-ai" → "claude")
             const dashIdx = slotName.indexOf('-');
             const mainTool = dashIdx > 0 ? slotName.slice(0, dashIdx) : slotName;
-            merged.providers.push({
+            // Base shape derived from slot name; existing entry's fields (if any) win on overlay
+            // — preserves daintree_preset_id, env, model, etc.
+            const base = {
               name: slotName,
               provider: mainTool,
               type: 'subprocess',
@@ -573,7 +603,9 @@ function ensureMcpSlotsFromProviders() {
               mainTool,
               display_type: mainTool + '-cli',
               display_provider: mainTool.charAt(0).toUpperCase() + mainTool.slice(1),
-            });
+            };
+            const existing = existingByName.get(slotName);
+            merged.providers.push(existing ? { ...base, ...existing } : base);
           }
           // Step 2: Also add PATH-detected CLIs that aren't already in ~/.claude.json
           const { resolveCli } = require('./resolve-cli.cjs');

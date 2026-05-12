@@ -354,7 +354,7 @@ The new slot name is `{agentName}-{slug}` — using the **Daintree agent name** 
 | `OPENROUTER_*` | `openrouter` |
 | `OLLAMA_*` | `ollama` |
 
-If no family can be inferred (e.g., preset only has generic `MODEL` / `*_BASE_URL` / `*_API_KEY`), the family check is bypassed and any provider with `mainTool === agentName` is acceptable as the vanilla. If multiple vanilla candidates exist after both gates, prefer the one with no `daintree_preset_id` field (the original) and the lowest numeric suffix (`claude-1` over `claude-2`).
+If no family can be inferred (e.g., preset only has generic `MODEL` / `*_BASE_URL` / `*_API_KEY`), the family check is bypassed and any provider with `mainTool === agentName` is acceptable as the vanilla. Vanilla candidates must additionally match the canonical install naming pattern `^<agentName>-<N>$` (e.g., `claude-1`, `claude-2`) and have no `daintree_preset_id` — this excludes preset-cloned slots like `claude-z-ai` (including legacy ones created before the `daintree_preset_id` annotation existed) from being mis-selected as a vanilla source. Among the remaining candidates, the lowest numeric suffix wins (`claude-1` over `claude-2`).
 
 **Idempotency (AC5).** Each new slot carries a `daintree_preset_id` field equal to `preset.id`. On re-import:
 - A **vanilla** slot (no `daintree_preset_id`) is never touched. Its env, model, and description survive every re-import.
@@ -480,16 +480,21 @@ function inferFamily(envObj) {
 
 // ── Find vanilla provider for a Daintree agent + family ────────────────
 function findVanilla(agentName, family) {
-  const candidates = providersData.providers.filter(p => p.mainTool === agentName);
+  // Vanilla candidates must match the canonical install shape `<agentName>-<N>` AND have no
+  // daintree_preset_id. The naming-pattern gate excludes preset-cloned slots like
+  // `claude-z-ai` whose env was overlaid from a Daintree preset; without it, a legacy
+  // preset-clone created before daintree_preset_id annotations existed would win the
+  // suffix-0 sort and be selected as a vanilla source, propagating preset env into new clones.
+  const canonical = new RegExp('^' + agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-\\d+$');
+  const candidates = providersData.providers.filter(p =>
+    p.mainTool === agentName && canonical.test(p.name) && !p.daintree_preset_id
+  );
   const familyMatch = family ? candidates.filter(p => p.provider === family) : candidates;
   const pool = familyMatch.length ? familyMatch : candidates;
-  // Prefer provider without daintree_preset_id, then lowest numeric suffix
+  // Lowest numeric suffix wins (`claude-1` over `claude-2`)
   pool.sort((a, b) => {
-    const aIsClone = !!a.daintree_preset_id;
-    const bIsClone = !!b.daintree_preset_id;
-    if (aIsClone !== bIsClone) return aIsClone ? 1 : -1;
-    const an = parseInt((a.name.match(/-(\d+)$/) || [])[1] || '0', 10);
-    const bn = parseInt((b.name.match(/-(\d+)$/) || [])[1] || '0', 10);
+    const an = parseInt(a.name.match(/-(\d+)$/)[1], 10);
+    const bn = parseInt(b.name.match(/-(\d+)$/)[1], 10);
     return an - bn;
   });
   return pool[0] || null;
