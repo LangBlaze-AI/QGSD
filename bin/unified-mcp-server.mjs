@@ -177,14 +177,13 @@ function buildSlotTools(provider) {
       });
     }
 
-    // health_check tool for subprocess providers
-    if (provider.health_check_args) {
-      tools.push({
-        name: 'health_check',
-        description: 'Test CLI availability by running a lightweight command (e.g. --version). Returns { healthy, latencyMs, type: "subprocess" }.',
-        inputSchema: NO_ARGS_SCHEMA,
-      });
-    }
+    // health_check tool for subprocess providers — always registered;
+    // execution defaults to ['--version'] when health_check_args is missing
+    tools.push({
+      name: 'health_check',
+      description: 'Test CLI availability by running a lightweight command (e.g. --version). Returns { healthy, latencyMs, type: "subprocess" }.',
+      inputSchema: NO_ARGS_SCHEMA,
+    });
 
     // deep_health_check tool for subprocess providers
     tools.push({
@@ -204,13 +203,12 @@ function buildSlotTools(provider) {
       description: 'Display CCR CLI help and available options.',
       inputSchema: NO_ARGS_SCHEMA,
     });
-    if (provider.health_check_args) {
-      tools.push({
-        name: 'health_check',
-        description: 'Test CCR binary availability. Returns { healthy, latencyMs, type: "ccr" }.',
-        inputSchema: NO_ARGS_SCHEMA,
-      });
-    }
+    // Always registered; execution defaults to ['--version'] when health_check_args is missing
+    tools.push({
+      name: 'health_check',
+      description: 'Test CCR binary availability. Returns { healthy, latencyMs, type: "ccr" }.',
+      inputSchema: NO_ARGS_SCHEMA,
+    });
 
     // deep_health_check tool for ccr providers
     tools.push({
