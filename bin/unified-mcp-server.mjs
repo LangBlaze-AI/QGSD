@@ -23,11 +23,39 @@ const { resolveCli } = require('./resolve-cli.cjs');
 const { _pure: { detectInstalledProviders } } = require('./manage-agents-core.cjs');
 
 // ─── Load providers config ─────────────────────────────────────────────────────
-const configPath = process.env.UNIFIED_PROVIDERS_CONFIG
-  ?? join(__dirname, 'providers.json');
-let providers;
+// Precedence:
+//   1. UNIFIED_PROVIDERS_CONFIG env (explicit override — set by /nf:link-daintree)
+//   2. __dirname/providers.json (repo source — populated when running from a dev checkout)
+//   3. ~/.claude/nf/bin/providers.json (user-installed copy — populated by install.js)
+// The shipped repo source is empty by design (populated at install time). Without the
+// step-3 fallback, Claude Code MCP entries that lack UNIFIED_PROVIDERS_CONFIG hit the
+// empty repo source and exit with "Unknown PROVIDER_SLOT" on every session start.
+function loadProvidersConfig() {
+  const explicit = process.env.UNIFIED_PROVIDERS_CONFIG;
+  if (explicit) {
+    return { path: explicit, data: JSON.parse(fs.readFileSync(explicit, 'utf8')) };
+  }
+  const repoPath = join(__dirname, 'providers.json');
+  let repoData = null;
+  try {
+    repoData = JSON.parse(fs.readFileSync(repoPath, 'utf8'));
+    if (Array.isArray(repoData?.providers) && repoData.providers.length > 0) {
+      return { path: repoPath, data: repoData };
+    }
+  } catch (_) { /* fall through to user-installed */ }
+  const userPath = join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
+  if (fs.existsSync(userPath)) {
+    return { path: userPath, data: JSON.parse(fs.readFileSync(userPath, 'utf8')) };
+  }
+  // Last resort: return whatever we read from repo (even if empty) so warning path triggers below
+  return { path: repoPath, data: repoData ?? { providers: [] } };
+}
+
+let configPath, providers;
 try {
-  providers = JSON.parse(fs.readFileSync(configPath, 'utf8')).providers;
+  const loaded = loadProvidersConfig();
+  configPath = loaded.path;
+  providers = loaded.data.providers;
 } catch (e) {
   process.stderr.write(`[unified-mcp-server] Failed to load config: ${e.message}\n`);
   process.exit(1);
@@ -35,7 +63,7 @@ try {
 
 // Guard: handle empty providers array gracefully
 if (!Array.isArray(providers) || providers.length === 0) {
-  process.stderr.write('[unified-mcp-server] WARNING: No providers configured in providers.json — server will start with zero tools\n');
+  process.stderr.write(`[unified-mcp-server] WARNING: No providers configured in ${configPath} — server will start with zero tools\n`);
   providers = providers || [];
 }
 
