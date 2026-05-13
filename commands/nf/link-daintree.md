@@ -358,7 +358,7 @@ If no family can be inferred (e.g., preset only has generic `MODEL` / `*_BASE_UR
 
 **Idempotency (AC5).** Each new slot carries a `daintree_preset_id` field equal to `preset.id`. On re-import:
 - A **vanilla** slot (no `daintree_preset_id`) is never touched. Its env, model, and description survive every re-import.
-- A **preset-linked** slot (matched by `daintree_preset_id`) is updated in place: the allowlisted preset env keys overlay the slot's existing env (preset values win on collision; non-allowlisted env the user added by hand is preserved), and `model` / `description` / `daintree_preset_name` / `daintree_preset_family` are refreshed. The slot's `name` is kept stable even if the preset name changed in Daintree.
+- A **preset-linked** slot (matched by `daintree_preset_id`) is updated in place: the allowlisted preset env keys overlay the slot's existing env (preset values win on collision; non-allowlisted env the user added by hand is preserved), and `model` / `description` / `display_provider` / `daintree_preset_name` / `daintree_preset_family` are refreshed. `display_provider` is set to the preset name (e.g., `Z.AI`, `MiniMax`) so scoreboard, statusline, and DEDUP-01 can attribute votes to the actual upstream rather than the vanilla's family. The slot's `name` is kept stable even if the preset name changed in Daintree.
 - A preset-linked slot whose `daintree_preset_id` references a preset Daintree no longer has is **preserved by default** (option b — the user removes it manually). This avoids silently destroying slots already referenced in user prompts/scripts.
 
 The export direction (Step 3e) is also idempotent but with **no-overwrite** semantics: existing `customPresets[]` entries with a matching `id` are left untouched (status `unchanged`). To force a re-export, delete the preset in Daintree first.
@@ -583,6 +583,12 @@ for (const item of plan) {
       newProvider.model = item.presetEnv.MODEL;
     }
     newProvider.description = (v.description || '') + ' — Daintree preset: ' + item.preset.name;
+    // Override display_provider with the preset name so this slot is attributable to its actual
+    // upstream (e.g., "Z.AI", "MiniMax") rather than inheriting the vanilla's "Anthropic" label.
+    // Without this, every Daintree-cloned slot looks like a duplicate of the vanilla in the
+    // scoreboard, statusline, and DEDUP-01 — even though it routes to a different LLM family
+    // via the proxy's ANTHROPIC_BASE_URL override.
+    newProvider.display_provider = item.preset.name;
     newProvider.daintree_preset_id = String(item.preset.id);
     newProvider.daintree_preset_name = item.preset.name;
     if (item.family) newProvider.daintree_preset_family = item.family;
@@ -605,6 +611,9 @@ for (const item of plan) {
       existing.description = (item.vanilla.description || '') + ' — Daintree preset: ' + item.preset.name;
     }
     existing.daintree_preset_name = item.preset.name;
+    // Backfill display_provider on every re-import so legacy preset-linked slots created before
+    // this field was tracked get attributed to the right upstream (see add-branch rationale).
+    existing.display_provider = item.preset.name;
     // Refresh family. Explicitly clear when no family can be inferred so a preset whose env
     // mutated to drop its family signal doesn't keep a stale daintree_preset_family field.
     if (item.family) existing.daintree_preset_family = item.family;

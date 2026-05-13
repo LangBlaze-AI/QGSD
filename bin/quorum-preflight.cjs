@@ -86,6 +86,32 @@ function buildTeam(providers, active) {
   return team;
 }
 
+// ─── DEDUP-01 — composite (model, display_provider) deduplication ──────────
+// Pure function: given an ordered slot list and a provider lookup, partition
+// into kept slots and demoted-to-backup slots. Two slots collide only when both
+// (model, display_provider) tuples are equal — so Daintree fan-out slots that
+// share a model string but route to different upstreams via ANTHROPIC_BASE_URL
+// (claude-z-ai, claude-minimax) stay distinct from the vanilla claude-1.
+function dedupBySlotIdentity(orderedSlots, providerByName) {
+  const keyMap = new Map();
+  for (const [name, p] of providerByName) {
+    keyMap.set(name, `${p.model || ''}|${p.display_provider || p.provider || ''}`);
+  }
+  const seen = new Set();
+  const kept = [];
+  const demoted = [];
+  for (const slot of orderedSlots) {
+    const key = keyMap.get(slot);
+    if (key && key !== '|' && seen.has(key)) {
+      demoted.push(slot);
+    } else {
+      if (key && key !== '|') seen.add(key);
+      kept.push(slot);
+    }
+  }
+  return { kept, demoted };
+}
+
 // ─── URL normalization for dedup ────────────────────────────────────────────
 function normalizeBaseUrl(urlStr) {
   try {
@@ -503,23 +529,10 @@ async function main() {
       });
 
       // ─── Model dedup guard (DEDUP-01) ────────────────────────────────────
-      // When the same model appears in both CLI and HTTP tiers, keep the first
-      // occurrence (CLI tier by sort order) and move duplicates to backup.
-      const modelMap = new Map(activeProviders.map(p => [p.name, p.model]));
-      const seenModels = new Set();
-      const deduped = [];
-      const dedupedOut = [];
-      for (const slot of output.available_slots) {
-        const model = modelMap.get(slot);
-        if (model && seenModels.has(model)) {
-          dedupedOut.push(slot);
-        } else {
-          if (model) seenModels.add(model);
-          deduped.push(slot);
-        }
-      }
+      const providerByName = new Map(activeProviders.map(p => [p.name, p]));
+      const { kept: deduped, demoted: dedupedOut } = dedupBySlotIdentity(output.available_slots, providerByName);
       if (dedupedOut.length > 0) {
-        process.stderr.write(`[preflight] Dedup: ${dedupedOut.length} duplicate model(s) moved to backup: ${dedupedOut.join(', ')}\n`);
+        process.stderr.write(`[preflight] Dedup: ${dedupedOut.length} duplicate (model, display_provider) pair(s) moved to backup: ${dedupedOut.join(', ')}\n`);
       }
       output.available_slots = deduped;
       output.deduped_slots = dedupedOut;
@@ -542,4 +555,8 @@ async function main() {
   }
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+if (require.main === module) {
+  main().catch(e => { console.error(e); process.exit(1); });
+}
+
+module.exports = { dedupBySlotIdentity };
