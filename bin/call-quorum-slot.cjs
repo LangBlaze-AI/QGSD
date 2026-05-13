@@ -276,10 +276,16 @@ if (!slot && require.main === module) {
 }
 
 // ─── Find providers.json ───────────────────────────────────────────────────────
+// Path precedence: the slash path (~/.claude/nf/bin/) is where /nf:link-daintree writes
+// preset-cloned slots and what mcpServers UNIFIED_PROVIDERS_CONFIG references — it's the
+// canonical runtime source. The dash path (~/.claude/nf-bin/) lags behind for Daintree
+// fan-out additions. Without preferring slash, the quorum dispatcher silently omits
+// Daintree slots (e.g. claude-z-ai, claude-minimax).
 function findProviders() {
   const searchPaths = [
-    path.join(__dirname, 'providers.json'),                             // same dir (nf-bin)
-    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),  // installed fallback
+    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),   // canonical (slash)
+    path.join(__dirname, 'providers.json'),                              // same dir (nf-bin)
+    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),      // installed fallback
   ];
 
   // Also derive path from unified-1 MCP server config in ~/.claude.json
@@ -295,7 +301,9 @@ function findProviders() {
   for (const p of searchPaths) {
     try {
       if (fs.existsSync(p)) {
-        return JSON.parse(fs.readFileSync(p, 'utf8')).providers;
+        const providers = JSON.parse(fs.readFileSync(p, 'utf8')).providers;
+        // Skip empty files (the shipped repo source is empty by design); fall through to next path
+        if (Array.isArray(providers) && providers.length > 0) return providers;
       }
     } catch (_) { /* try next */ }
   }
