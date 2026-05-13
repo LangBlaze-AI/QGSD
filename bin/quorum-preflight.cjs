@@ -52,8 +52,15 @@ function readConfig() {
 }
 
 // ─── Find providers.json (mirrors call-quorum-slot.cjs / probe-quorum-slots.cjs) ──
+// Path precedence: the slash path (~/.claude/nf/bin/) is where /nf:link-daintree writes
+// preset-cloned slots and what mcpServers UNIFIED_PROVIDERS_CONFIG references — it's the
+// canonical runtime source. The dash path (~/.claude/nf-bin/) is where install.js's
+// mergeProvidersJson writes; it lags behind for Daintree fan-out additions. Reading the
+// dash path first hides Daintree slots from quorum dispatch (5/7 slots visible instead
+// of 7/7). Prefer slash when present.
 function findProviders() {
   const searchPaths = [
+    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),
     path.join(__dirname, 'providers.json'),
     path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),
   ];
@@ -65,7 +72,11 @@ function findProviders() {
   } catch (_) {}
   for (const p of searchPaths) {
     try {
-      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8')).providers;
+      if (fs.existsSync(p)) {
+        const providers = JSON.parse(fs.readFileSync(p, 'utf8')).providers;
+        // Skip empty files (the shipped repo source is empty by design); fall through to next path
+        if (Array.isArray(providers) && providers.length > 0) return providers;
+      }
     } catch (_) {}
   }
   return [];
@@ -272,24 +283,10 @@ function probeInferenceHistory(ttlMinutes = 30) {
 
 // ─── Two-layer parallel health probe ────────────────────────────────────────
 async function probeHealth(providers) {
-  // Load ~/.claude.json for MCP server env (ccr slots need ANTHROPIC_BASE_URL)
-  let mcpServers = {};
-  try {
-    const raw = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
-    mcpServers = raw.mcpServers ?? {};
-  } catch (e) {
-    process.stderr.write(`[probe] Warning: could not read ~/.claude.json: ${e.message}\n`);
-    // All ccr slots will get layer2 skipped
-  }
-
   const cache = loadCache();
   const health = {};
 
-  // Group ccr slots by normalized base URL for dedup
-  const urlToSlots = new Map(); // normalizedUrl -> { baseUrl, apiKey, slots[] }
-
   await Promise.all(providers.map(async (p) => {
-    const isCcr = p.display_type === 'claude-code-router';
     const isHttp = p.type === 'http';
 
     // Layer 1: binary probe (CLI slots only — HTTP slots have no binary)
@@ -297,25 +294,19 @@ async function probeHealth(providers) {
       ? Promise.resolve({ ok: true, skipped: true, reason: 'HTTP slot — no CLI binary' })
       : probeBinary(p.cli, p.health_check_args || []);
 
-    // Layer 2: upstream API probe (ccr slots AND http slots)
+    // Layer 2: upstream API probe (HTTP slots only)
     let layer2Promise;
     let baseUrl, apiKey;
     if (isHttp) {
       // HTTP slots have baseUrl and apiKeyEnv directly in providers.json
       baseUrl = p.baseUrl;
       apiKey = p.apiKeyEnv ? process.env[p.apiKeyEnv] : undefined;
-    } else if (isCcr) {
-      // CCR slots: extract from mcpServers env in ~/.claude.json
-      const mcpEntry = mcpServers[p.name];
-      const env = mcpEntry?.env ?? {};
-      baseUrl = env.ANTHROPIC_BASE_URL;
-      apiKey = env.ANTHROPIC_API_KEY;
     }
 
-    if (!isCcr && !isHttp) {
+    if (!isHttp) {
       layer2Promise = Promise.resolve({ ok: true, skipped: true, reason: 'no upstream API' });
     } else if (!baseUrl) {
-      layer2Promise = Promise.resolve({ ok: true, skipped: true, reason: isHttp ? 'baseUrl not configured' : 'ANTHROPIC_BASE_URL not configured' });
+      layer2Promise = Promise.resolve({ ok: true, skipped: true, reason: 'baseUrl not configured' });
     } else {
       const normalizedUrl = normalizeBaseUrl(baseUrl);
       // Check cache first
@@ -514,7 +505,7 @@ async function main() {
       const typeMap = new Map(activeProviders.map(p => [p.name, p.type]));
       const originalOrder = new Map(output.available_slots.map((s, i) => [s, i]));
 
-      // Sort available_slots: CLI/CCR primary (type !== 'http') before HTTP backup (type === 'http')
+      // Sort available_slots: CLI primary (type !== 'http') before HTTP backup (type === 'http')
       output.available_slots.sort((a, b) => {
         const aIsBackup = typeMap.get(a) === 'http' ? 1 : 0;
         const bIsBackup = typeMap.get(b) === 'http' ? 1 : 0;
@@ -523,10 +514,8 @@ async function main() {
       });
 
       // ─── Model dedup guard (DEDUP-01) ────────────────────────────────────
-      // When the same model appears in both CCR and API tiers (e.g., a user-added
-      // ccr-* slot and an api-* slot both → DeepSeek-V3.1), keep the first occurrence
-      // (higher-tier slot due to sort order: CLI/CCR before HTTP) and move the
-      // duplicate to backup.
+      // When the same model appears in both CLI and HTTP tiers, keep the first
+      // occurrence (CLI tier by sort order) and move duplicates to backup.
       const modelMap = new Map(activeProviders.map(p => [p.name, p.model]));
       const seenModels = new Set();
       const deduped = [];
@@ -552,7 +541,7 @@ async function main() {
 
       // Emit stderr log when backup slots exist
       if (output.backup_slots.length > 0) {
-        process.stderr.write(`[preflight] Tiered ordering: ${output.primary_slots.length} primary (CLI/CCR) + ${output.backup_slots.length} backup (HTTP API)\n`);
+        process.stderr.write(`[preflight] Tiered ordering: ${output.primary_slots.length} primary (CLI) + ${output.backup_slots.length} backup (HTTP API)\n`);
       }
     }
 
