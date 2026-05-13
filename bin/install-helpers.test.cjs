@@ -95,7 +95,7 @@ test('MERGE-03: repo-shipped slot is refreshed from repo (metadata bumps propaga
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-// MERGE-04: User has multiple custom slots (e.g. ccr-* added after repo retired them) → all preserved
+// MERGE-04: User has multiple custom slots (e.g. user-added MCP slots not in repo) → all preserved
 test('MERGE-04: multiple user-added slots preserved', () => {
   const dir = tmpDir('m04');
   try {
@@ -105,8 +105,8 @@ test('MERGE-04: multiple user-added slots preserved', () => {
     writeJson(userPath, {
       providers: [
         { name: 'claude-1' },
-        { name: 'ccr-1', provider: 'together' }, // user re-added after repo retired
-        { name: 'ccr-2', provider: 'together' },
+        { name: 'custom-together-1', provider: 'together' }, // user-added slot
+        { name: 'custom-together-2', provider: 'together' },
         { name: 'claude-z-ai', daintree_preset_id: 'abc' },
         { name: 'my-custom-slot' }, // hand-rolled
       ],
@@ -115,11 +115,11 @@ test('MERGE-04: multiple user-added slots preserved', () => {
     const result = mergeProvidersJson(repoPath, userPath);
 
     assert.equal(result.preservedCount, 4);
-    assert.deepEqual(result.preservedNames.sort(), ['ccr-1', 'ccr-2', 'claude-z-ai', 'my-custom-slot']);
+    assert.deepEqual(result.preservedNames.sort(), ['custom-together-1', 'custom-together-2', 'claude-z-ai', 'my-custom-slot']);
     const merged = readJson(userPath).providers;
     assert.equal(merged.length, 5);
     assert.equal(merged[0].name, 'claude-1', 'repo entries come first');
-    assert.deepEqual(merged.slice(1).map(p => p.name), ['ccr-1', 'ccr-2', 'claude-z-ai', 'my-custom-slot']);
+    assert.deepEqual(merged.slice(1).map(p => p.name), ['custom-together-1', 'custom-together-2', 'claude-z-ai', 'my-custom-slot']);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
