@@ -48,7 +48,7 @@ node << 'EOF'
 const fs=require('fs'), path=require('path'), os=require('os');
 
 // Scoreboard
-const sbPath=path.join(process.cwd(),'.planning','quorum-scoreboard.json');
+const sbPath=path.join(process.cwd(),'.planning','quorum','scoreboard.json');
 let totalRounds=0, lastUpdate=null;
 if(fs.existsSync(sbPath)){
   const d=JSON.parse(fs.readFileSync(sbPath,'utf8'));
