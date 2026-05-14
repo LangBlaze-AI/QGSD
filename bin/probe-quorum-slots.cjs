@@ -22,12 +22,14 @@ const { spawn } = require('child_process');
 const fs         = require('fs');
 const path       = require('path');
 const os         = require('os');
+const { resolveCli } = require('./resolve-cli.cjs');
 
 // ─── Find providers.json (mirrors call-quorum-slot.cjs logic) ────────────────
 function findProviders() {
   const searchPaths = [
-    path.join(__dirname, 'providers.json'),
-    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),
+    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),   // canonical (slash)
+    path.join(__dirname, 'providers.json'),                              // same dir (nf-bin)
+    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),      // installed fallback
   ];
   try {
     const claudeJson = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
@@ -36,7 +38,13 @@ function findProviders() {
     if (serverScript) searchPaths.unshift(path.join(path.dirname(serverScript), 'providers.json'));
   } catch (_) {}
   for (const p of searchPaths) {
-    try { if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8')).providers; } catch (_) {}
+    try {
+      if (fs.existsSync(p)) {
+        const providers = JSON.parse(fs.readFileSync(p, 'utf8')).providers;
+        // Skip empty files (the shipped repo source is empty by design); fall through to next path
+        if (Array.isArray(providers) && providers.length > 0) return providers;
+      }
+    } catch (_) { /* try next */ }
   }
   return null;
 }
@@ -62,9 +70,22 @@ function probeSlot(provider, timeoutMs, spawnCwd) {
     const args = provider.args_template.map(a => (a === '{prompt}' ? 'OK' : a));
     const env  = { ...process.env, ...(provider.env ?? {}) };
 
+    // Mirror call-quorum-slot.cjs CLI resolution (PR #164): `cli` is optional in
+    // providers.json; fall back to `mainTool` so spawn() never receives null.
+    const cliSource = provider.cli || provider.mainTool;
+    if (cliSource && !provider.resolvedCli) {
+      const bareName = cliSource.split('/').pop();
+      provider.resolvedCli = resolveCli(bareName);
+    }
+    const spawnTarget = provider.resolvedCli || provider.cli || provider.mainTool;
+    if (!spawnTarget) {
+      resolve({ slot: provider.name, healthy: false, latencyMs: Date.now() - start, error: 'spawn: no resolvable CLI (cli, resolvedCli, and mainTool all empty)' });
+      return;
+    }
+
     let child;
     try {
-      child = spawn(provider.cli, args, {
+      child = spawn(spawnTarget, args, {
         env,
         cwd:      spawnCwd,
         stdio:    ['pipe', 'pipe', 'pipe'],
