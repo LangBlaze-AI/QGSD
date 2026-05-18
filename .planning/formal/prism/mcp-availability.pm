@@ -30,11 +30,15 @@
 dtmc
 
 // Per-slot steady-state availability rates (overridden by run-prism.cjs at runtime)
-// Rate interpretation: observed probability that slot responds in a given quorum round
+// Rate interpretation: observed (marginal) probability that slot responds in a given quorum round
 const double codex_1_avail;     // injected by run-prism.cjs from scoreboard (prior: 0.85)
 const double gemini_1_avail;    // injected by run-prism.cjs from scoreboard (prior: 0.85)
 const double opencode_1_avail;  // injected by run-prism.cjs from scoreboard (prior: 0.85)
 const double copilot_1_avail;   // injected by run-prism.cjs from scoreboard (prior: 0.85)
+
+// Derived: OpenAI provider availability (conservative estimate = max of domain rates)
+// Used as both P(provider up) and the denominator for conditional rates
+formula double openai_up = max(codex_1_avail, copilot_1_avail);
 
 // ── Failure-domain provider state (Issue #171) ──────────────────────────────
 // Provider-level shared state. When provider_state=0 (outage), all slots in
@@ -43,12 +47,11 @@ const double copilot_1_avail;   // injected by run-prism.cjs from scoreboard (pr
 // openai domain: codex-1 + copilot-1 share the OpenAI provider
 module openai_provider
   openai_s : [0..1] init 1;
-  // Provider availability = max of domain slot rates (conservative estimate)
-  // When up, stays up; when down, recovers at same rate
-  [] (openai_s=1) -> max(codex_1_avail, copilot_1_avail) : (openai_s'=1)
-                   + (1 - max(codex_1_avail, copilot_1_avail)) : (openai_s'=0);
-  [] (openai_s=0) -> max(codex_1_avail, copilot_1_avail) : (openai_s'=1)
-                   + (1 - max(codex_1_avail, copilot_1_avail)) : (openai_s'=0);
+  // Provider availability = openai_up (derived formula above)
+  [] (openai_s=1) -> openai_up : (openai_s'=1)
+                   + (1 - openai_up) : (openai_s'=0);
+  [] (openai_s=0) -> openai_up : (openai_s'=1)
+                   + (1 - openai_up) : (openai_s'=0);
 endmodule
 
 // ── Slot modules (conditionally independent given provider state) ────────────
@@ -57,22 +60,25 @@ endmodule
 
 module codex
   codex_s : [0..1] init 1;
-  // Conditional rate: codex_1_avail / P(openai up), clamped to [0,1]
-  // When provider is down, slot is unavailable regardless of individual rate
-  [] (openai_s=1) & (codex_s=1) -> codex_1_avail : (codex_s'=1)
-                                  + (1 - codex_1_avail) : (codex_s'=0);
-  [] (openai_s=1) & (codex_s=0) -> codex_1_avail : (codex_s'=1)
-                                  + (1 - codex_1_avail) : (codex_s'=0);
+  // Conditional rate: observed / P(provider up), clamped to [0,1]
+  // Guard: when openai_up=0, both slots are 0 and conditional rate is undefined → use 1.0
+  // (provider-down case handles forced unavailability via the openai_s=0 guard below)
+  [] (openai_s=1) & (openai_up>0) & (codex_s=1) -> min(1, codex_1_avail / openai_up) : (codex_s'=1)
+                                                   + (1 - min(1, codex_1_avail / openai_up)) : (codex_s'=0);
+  [] (openai_s=1) & (openai_up>0) & (codex_s=0) -> min(1, codex_1_avail / openai_up) : (codex_s'=1)
+                                                   + (1 - min(1, codex_1_avail / openai_up)) : (codex_s'=0);
+  [] (openai_s=1) & (openai_up=0) -> 1.0 : (codex_s'=0); // all rates zero → force down
   [] (openai_s=0) -> 1.0 : (codex_s'=0); // forced unavailable when provider down
 endmodule
 
 module copilot
   copilot_s : [0..1] init 1;
-  // Shares OpenAI provider with codex-1 — correlated failure
-  [] (openai_s=1) & (copilot_s=1) -> copilot_1_avail : (copilot_s'=1)
-                                   + (1 - copilot_1_avail) : (copilot_s'=0);
-  [] (openai_s=1) & (copilot_s=0) -> copilot_1_avail : (copilot_s'=1)
-                                   + (1 - copilot_1_avail) : (copilot_s'=0);
+  // Shares OpenAI provider with codex-1 — uses conditional rate
+  [] (openai_s=1) & (openai_up>0) & (copilot_s=1) -> min(1, copilot_1_avail / openai_up) : (copilot_s'=1)
+                                                    + (1 - min(1, copilot_1_avail / openai_up)) : (copilot_s'=0);
+  [] (openai_s=1) & (openai_up>0) & (copilot_s=0) -> min(1, copilot_1_avail / openai_up) : (copilot_s'=1)
+                                                    + (1 - min(1, copilot_1_avail / openai_up)) : (copilot_s'=0);
+  [] (openai_s=1) & (openai_up=0) -> 1.0 : (copilot_s'=0); // all rates zero → force down
   [] (openai_s=0) -> 1.0 : (copilot_s'=0); // forced unavailable when provider down
 endmodule
 
