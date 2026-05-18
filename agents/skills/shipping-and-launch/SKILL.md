@@ -20,14 +20,15 @@ High-level steps the skill should follow
 ----------------------------------------
 0) Worktree cleanliness check (PRE-FLIGHT — must pass before any other step)
   - Run `git status --porcelain` to list all dirty files
+  - Run `git status --porcelain --ignored=matching` to also surface files matched by gitignore rules (prefixed `!!`)
   - Run `git diff --stat` for unstaged changes summary
   - Run `git diff --cached --stat` for staged-but-uncommitted summary
   - Run `git log --oneline origin/main..HEAD` to see commits not yet in main (verify PR scope)
   - Run `git stash list` to check for stashed work that may be relevant
 
   For each file from `git status --porcelain`, classify using `git check-ignore -v <file>`:
-  - **Untracked (`??`) + matches gitignore pattern** → recommend ADD TO .gitignore
-  - **Untracked (`??`) + no gitignore match** → recommend STAGE + COMMIT (legitimate new file)
+  - **Ignored (`!!`)** → already covered by ignore rules (no action unless rule is too broad)
+  - **Untracked (`??`)** → recommend STAGE + COMMIT (legitimate new file) or ADD TO .gitignore if it matches heuristic patterns below
   - **Modified/unstaged (` M`)** → recommend STAGE + COMMIT (unstaged change)
   - **Staged/uncommitted (`M `, `A `)** → recommend COMMIT (staged but not committed)
   - **Deleted (` D`, `D `)** → recommend STAGE + COMMIT (deletion not tracked)
@@ -37,14 +38,15 @@ High-level steps the skill should follow
   - Editor/OS artifacts: `.DS_Store`, `*.swp`, `*~`, `.idea/`, `.vscode/`
   - Build output: `dist/`, `build/`, `*.o`, `*.pyc`, `node_modules/`
   - Logs and temp files: `*.log`, `*.tmp`, `*.bak`
-  - Run `git check-ignore <file>` to confirm — if it returns 0, the file IS already matched by an existing gitignore rule but git hasn't caught up (likely a caching issue → suggest `git rm -r --cached .`)
+  - Run `git check-ignore -v <file>` to confirm matching ignore rules
+  - If a file is tracked but should now be ignored, untrack only that file: `git rm --cached <file>`, then commit `.gitignore` and the index change
 
   Present findings as a table:
-  ```
+  ```text
   XY  File                            Recommendation
   ??  .env.local                      ADD TO .gitignore (secret pattern)
-  M   src/feature.ts                  STAGE + COMMIT (unstaged change)
-  A   src/new-feature.ts              COMMIT (staged, not committed)
+   M  src/feature.ts                  STAGE + COMMIT (unstaged change)
+  M   src/new-feature.ts              COMMIT (staged, not committed)
   ```
 
   If all clean: proceed to Step 1 immediately (no output needed).
