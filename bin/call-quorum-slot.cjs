@@ -627,6 +627,20 @@ function runHttp(provider, prompt, timeoutMs, slotName) {
   const lock = acquireSlot(providerKey, maxConcurrency, 30000);
 
   return new Promise((resolve, reject) => {
+    // Hold the provider slot for the FULL request lifetime — release it only when
+    // the request genuinely completes (response end, error, timeout, or a
+    // synchronous setup failure). Releasing in a `finally` around the executor
+    // would free the slot the instant req.end() returns, before the response
+    // arrives, defeating the concurrency cap entirely.
+    let lockReleased = false;
+    const releaseLock = () => {
+      if (lockReleased) return;
+      lockReleased = true;
+      try { if (lock && lock.release) lock.release(); } catch (_) {}
+    };
+    const succeed = (value) => { releaseLock(); resolve(value); };
+    const fail = (err) => { releaseLock(); reject(err); };
+
     try {
       // Build messages array — include system message if provider defines one
       const messages = [];
@@ -670,12 +684,12 @@ function runHttp(provider, prompt, timeoutMs, slotName) {
             const parsed  = JSON.parse(data);
             const content = parsed?.choices?.[0]?.message?.content;
             if (content) {
-              resolve(content);
+              succeed(content);
             } else {
-              reject(new Error(`[HTTP error: unexpected response] ${data.slice(0, 500)}`));
+              fail(new Error(`[HTTP error: unexpected response] ${data.slice(0, 500)}`));
             }
           } catch (e) {
-            reject(new Error(`[HTTP error: JSON parse failed] ${data.slice(0, 500)}`));
+            fail(new Error(`[HTTP error: JSON parse failed] ${data.slice(0, 500)}`));
           }
         });
       });
@@ -683,21 +697,23 @@ function runHttp(provider, prompt, timeoutMs, slotName) {
       const timer = setTimeout(() => {
         timedOut = true;
         req.destroy();
-        reject(new Error(`TIMEOUT after ${timeoutMs}ms`));
+        fail(new Error(`TIMEOUT after ${timeoutMs}ms`));
       }, timeoutMs);
 
       req.on('error', (err) => {
         clearTimeout(timer);
-        if (!timedOut) reject(new Error(`[HTTP request error: ${err.message}]`));
+        // After a timeout the timeout path has already settled + released the
+        // slot; releaseLock() is idempotent so this stays correct either way.
+        if (!timedOut) fail(new Error(`[HTTP request error: ${err.message}]`));
+        else releaseLock();
       });
 
       req.write(body);
       req.end();
-    } finally {
-      // Release the provider slot when done (both success and error paths)
-      if (lock && lock.release) {
-        lock.release();
-      }
+    } catch (err) {
+      // Synchronous setup failure (e.g. a malformed baseUrl) — release the slot
+      // and reject so the promise always settles instead of hanging.
+      fail(err instanceof Error ? err : new Error(`[HTTP dispatch error: ${err}]`));
     }
   });
 }
