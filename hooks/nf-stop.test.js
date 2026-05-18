@@ -1960,3 +1960,49 @@ test('TC-FB-9: UNAVAIL cleared by a subsequent fallback dispatch round passes', 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// TC-FB-10: when the dispatch round number cannot be parsed from the slot-worker
+// Task, the gate fails CLOSED — a checkpoint written for some other round must
+// not clear an UNAVAIL whose round is unknown.
+test('TC-FB-10: unparseable dispatch round fails closed even with a checkpoint present', () => {
+  const dir = setupFallbackDir('noround');
+  try {
+    writeCheckpointFile(dir, 1, freshCheckpoint()); // a valid checkpoint for round 1
+    // slot-worker Task whose prompt carries NO --round flag → protocolRound = null
+    const noRoundTask = {
+      type: 'tool_use',
+      id: 'toolu_codex',
+      name: 'Task',
+      input: {
+        subagent_type: 'nf-quorum-slot-worker',
+        model: 'haiku',
+        description: 'codex-1 quorum',
+        prompt: 'node "$HOME/.claude/nf-bin/quorum-slot-dispatch.cjs" --slot codex-1 --mode A --question "test"',
+      },
+    };
+    const lines = [
+      userLine('/nf:plan-phase 1', 'human-fb'),
+      assistantLine([noRoundTask], 'a-dispatch'),
+      toolResultSuccessLine('toolu_codex', 'verdict: UNAVAIL', 'tr-codex'),
+      assistantLine([checkpointBash('toolu_ckpt', 1)], 'a-ckpt'),
+      toolResultSuccessLine('toolu_ckpt', 'FALLBACK-01 checkpoint written', 'tr-ckpt'),
+      assistantLine([{ type: 'text', text: 'Quorum complete.\n\n<!-- NF_DECISION -->' }], 'a-final'),
+    ];
+    const tmpFile = writeTempTranscript(lines);
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0);
+      const parsed = JSON.parse(stdout);
+      assert.strictEqual(parsed.decision, 'block',
+        'unknown dispatch round must fail closed, not borrow another round\'s checkpoint');
+      assert.ok(/could not be determined/.test(parsed.reason), parsed.reason);
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

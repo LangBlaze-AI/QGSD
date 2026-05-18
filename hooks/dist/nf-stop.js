@@ -474,13 +474,21 @@ function evaluateCheckpoint(cwd, protocolRound, checkpointRoundsWritten, turnSta
     };
   }
 
-  // Candidate rounds to inspect: the matched protocol round if known, else
-  // every round checkpointed this turn (highest first — latest state wins).
-  const candidates = (protocolRound !== null)
-    ? [protocolRound]
-    : [...checkpointRoundsWritten].sort((a, b) => b - a);
+  // The dispatch round number MUST be known to key the checkpoint to it.
+  // quorum-slot-dispatch.cjs always passes --round; if it could not be parsed,
+  // fail CLOSED rather than accepting a checkpoint written for some other round
+  // — a checkpoint that cannot be tied to this dispatch must not clear the gate.
+  if (protocolRound === null) {
+    return {
+      satisfied: false,
+      reason: `FALLBACK-01 VIOLATION: dispatch round ${displayRound} returned UNAVAIL but its ` +
+        `quorum round number could not be determined, so no structured checkpoint could be ` +
+        `matched to it.` + reSuffix,
+    };
+  }
 
-  if (protocolRound !== null && !checkpointRoundsWritten.has(protocolRound)) {
+  // The checkpoint for this exact round must have been written this turn.
+  if (!checkpointRoundsWritten.has(protocolRound)) {
     return {
       satisfied: false,
       reason: `FALLBACK-01 VIOLATION: dispatch round ${displayRound} returned UNAVAIL but no ` +
@@ -488,41 +496,34 @@ function evaluateCheckpoint(cwd, protocolRound, checkpointRoundsWritten, turnSta
     };
   }
 
-  let lastReason = '';
-  for (const round of candidates) {
-    const res = checkpointModule.readCheckpoint(cwd, round);
-    if (!res.exists) {
-      lastReason = `checkpoint file for round ${round} not found`;
-      continue;
-    }
-    if (!res.valid) {
-      // Malformed checkpoint — schema validation rejects it; treat as no checkpoint.
-      lastReason = `checkpoint round ${round} failed schema validation (${res.errors.join('; ')})`;
-      continue;
-    }
-    if (res.checkpoint.round !== round) {
-      lastReason = `checkpoint round field (${res.checkpoint.round}) does not match file round ${round}`;
-      continue;
-    }
-    // Freshness: reject a checkpoint stamped before the current turn began.
-    if (turnStartTime !== null) {
-      const cpTime = Date.parse(res.checkpoint.timestamp);
-      if (!Number.isNaN(cpTime) && cpTime < turnStartTime) {
-        lastReason = `checkpoint round ${round} is stale (written before the current turn)`;
-        continue;
-      }
-    }
-    if (!res.satisfied) {
-      lastReason = `checkpoint round ${round} has fallback_dispatched=false and all_tiers_exhausted=false`;
-      continue;
-    }
+  // Read + validate the checkpoint file for exactly this round.
+  const res = checkpointModule.readCheckpoint(cwd, protocolRound);
+  let stale = false;
+  if (res.valid && turnStartTime !== null) {
+    const cpTime = Date.parse(res.checkpoint.timestamp);
+    stale = !Number.isNaN(cpTime) && cpTime < turnStartTime;
+  }
+
+  let reason = '';
+  if (!res.exists) {
+    reason = `checkpoint file for round ${protocolRound} not found`;
+  } else if (!res.valid) {
+    // Malformed checkpoint — schema validation rejects it; treat as no checkpoint.
+    reason = `checkpoint round ${protocolRound} failed schema validation (${res.errors.join('; ')})`;
+  } else if (res.checkpoint.round !== protocolRound) {
+    reason = `checkpoint round field (${res.checkpoint.round}) does not match dispatch round ${protocolRound}`;
+  } else if (stale) {
+    reason = `checkpoint round ${protocolRound} is stale (written before the current turn)`;
+  } else if (!res.satisfied) {
+    reason = `checkpoint round ${protocolRound} has fallback_dispatched=false and all_tiers_exhausted=false`;
+  } else {
     return { satisfied: true }; // valid, fresh, and clears the gate
   }
 
   return {
     satisfied: false,
     reason: `FALLBACK-01 VIOLATION: dispatch round ${displayRound} returned UNAVAIL but no valid ` +
-      `structured checkpoint cleared the gate (${lastReason}).` + reSuffix,
+      `structured checkpoint cleared the gate (${reason}).` + reSuffix,
   };
 }
 
