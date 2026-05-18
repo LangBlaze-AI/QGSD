@@ -664,6 +664,82 @@ function detectUnavailWithoutFallback(currentTurnLines, cwd) {
   return { violated: false };
 }
 
+// Counts the number of live slot-worker voters in the current turn. Walks assistant
+// messages for Task(nf-quorum-slot-worker) dispatches, then inspects the matching
+// tool_result blocks. A result counts as a live voter only if it carries an explicit
+// APPROVE or BLOCK verdict — UNAVAIL, FLAG_TRUNCATED, error, and empty results are
+// non-votes and excluded. Returns the count of valid votes in the last dispatch round.
+function countLiveSlotWorkers(currentTurnLines) {
+  // Track dispatch rounds (groups of parallel slot-worker Tasks per assistant message)
+  const roundIds = [];       // Array of Sets, one per dispatch round
+  const taskResults = new Map(); // tool_use_id → result text
+
+  let currentRoundIds = null;
+
+  for (const line of currentTurnLines) {
+    try {
+      const entry = JSON.parse(line);
+
+      if (entry.type === 'assistant') {
+        const content = entry.message && entry.message.content;
+        if (!Array.isArray(content)) continue;
+        let hasSlotWorker = false;
+        for (const block of content) {
+          if (block.type === 'tool_use' && block.name === 'Task') {
+            const inputStr = JSON.stringify(block.input || {});
+            if (inputStr.includes('nf-quorum-slot-worker') && block.id) {
+              if (!currentRoundIds) currentRoundIds = new Set();
+              currentRoundIds.add(block.id);
+              hasSlotWorker = true;
+            }
+          }
+        }
+        // End of assistant message — if it had slot-workers, close the round
+        if (hasSlotWorker && currentRoundIds) {
+          roundIds.push(currentRoundIds);
+          currentRoundIds = null;
+        }
+      }
+
+      // Collect tool_result text keyed by tool_use_id
+      if (entry.type === 'user') {
+        const content = entry.message && entry.message.content;
+        if (!Array.isArray(content)) continue;
+        for (const block of content) {
+          if (block.type === 'tool_result' && block.tool_use_id) {
+            const resultText = Array.isArray(block.content)
+              ? block.content.map(c => c.text || '').join('')
+              : (typeof block.content === 'string' ? block.content : '');
+            taskResults.set(block.tool_use_id, resultText);
+          }
+        }
+      }
+    } catch { /* skip malformed */ }
+  }
+
+  // Only count live voters from the LAST dispatch round (the consensus round)
+  if (roundIds.length === 0) return 0;
+  const lastRound = roundIds[roundIds.length - 1];
+
+  let liveCount = 0;
+  for (const id of lastRound) {
+    const result = taskResults.get(id) || '';
+    // A live voter carries an explicit APPROVE/BLOCK verdict. Matching the verdict
+    // positively (rather than excluding UNAVAIL/FLAG_TRUNCATED) avoids counting error
+    // results as votes, and avoids dropping a valid vote whose reasoning text merely
+    // mentions the word "UNAVAIL". Fails safe: an unrecognized result is not a vote.
+    if (/verdict:\s*(?:APPROVE|BLOCK)\b/i.test(result)) liveCount++;
+  }
+  return liveCount;
+}
+
+// Extracts min_live_voters from config with safe default.
+function getMinLiveVoters(config) {
+  return (config.quorum && Number.isInteger(config.quorum.min_live_voters) && config.quorum.min_live_voters >= 1)
+    ? config.quorum.min_live_voters
+    : 2;
+}
+
 // The exact token Claude must include in its final output to mark a decision turn.
 // Used by hasDecisionMarker (Stop hook) and injected into Claude's context (Prompt hook).
 const DECISION_MARKER = '<!-- NF_DECISION -->';
@@ -843,6 +919,7 @@ function main() {
       // Extract --n N flag from current-turn user prompt (if present)
       const promptText = extractPromptText(currentTurnLines);
       const quorumSizeOverride = parseQuorumSizeFlag(promptText);
+      const hasForceQuorum = /\b--force-quorum\b/.test(promptText);
       const soloMode = quorumSizeOverride === 1;
 
       // GUARD 6: Solo mode (--n 1) — Claude-only quorum, no external models required
@@ -903,6 +980,28 @@ function main() {
           }));
           process.exit(0);
         }
+
+        // MIN_LIVE_VOTERS floor (issue #170)
+        const minLiveVoters = getMinLiveVoters(config);
+        const liveSlotWorkers = countLiveSlotWorkers(currentTurnLines);
+        if (liveSlotWorkers < minLiveVoters && !hasForceQuorum) {
+          appendConformanceEvent({
+            ts:              new Date().toISOString(),
+            phase:           'DECIDING',
+            action:          'floor_block',
+            live_voters:     liveSlotWorkers,
+            min_live_voters: minLiveVoters,
+            outcome:         'BLOCK',
+            schema_version,
+          });
+          process.stdout.write(JSON.stringify({
+            decision: 'block',
+            reason: 'QUORUM FLOOR NOT MET: Only ' + liveSlotWorkers + ' live voter(s) (min_live_voters = ' + minLiveVoters + '). ' +
+              'Too many slots are UNAVAIL for reliable consensus. Re-dispatch with extended timeouts, or re-run with --force-quorum to waive.'
+          }));
+          process.exit(0);
+        }
+
         process.exit(0);
       }
 
@@ -938,6 +1037,26 @@ function main() {
           }
           missingAgents.push(toolName);
         }
+      }
+
+      // MIN_LIVE_VOTERS floor — checked when ceiling is met but live voters are too few
+      const minLiveVoters = getMinLiveVoters(config);
+      if (successCount >= maxSize && successCount < minLiveVoters && !hasForceQuorum) {
+        appendConformanceEvent({
+          ts:              new Date().toISOString(),
+          phase:           'DECIDING',
+          action:          'floor_block',
+          live_voters:     successCount,
+          min_live_voters: minLiveVoters,
+          outcome:         'BLOCK',
+          schema_version,
+        });
+        process.stdout.write(JSON.stringify({
+          decision: 'block',
+          reason: 'QUORUM FLOOR NOT MET: ' + successCount + ' live voter(s) (min_live_voters = ' + minLiveVoters + '). ' +
+            'Too few live voters for reliable consensus. Re-run with --force-quorum to waive.'
+        }));
+        process.exit(0);
       }
 
       if (successCount < maxSize) {

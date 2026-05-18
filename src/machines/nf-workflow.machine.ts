@@ -8,6 +8,7 @@ export interface NFContext {
   currentPhase:       string;
   maxDeliberation:    number;
   maxSize:            number;   // cap on voters polled per round (--n N - 1 ceiling)
+  minLiveVoters:      number;   // floor: minimum live voters for valid consensus (issue #170)
   polledCount:        number;   // agents actually recruited this round
 }
 
@@ -30,6 +31,13 @@ export const nfWorkflowMachine = setup({
     unanimityMet: ({ context }) =>
       context.successCount === context.polledCount,
 
+    floorMet: ({ context }) =>
+      context.successCount >= context.minLiveVoters,
+
+    unanimityAndFloorMet: ({ context }) =>
+      context.successCount === context.polledCount &&
+      context.successCount >= context.minLiveVoters,
+
     noInfiniteDeliberation: ({ context }) =>
       context.deliberationRounds < context.maxDeliberation,
 
@@ -45,6 +53,7 @@ export const nfWorkflowMachine = setup({
     currentPhase:       'IDLE',
     maxDeliberation:    9,
     maxSize:            3,
+    minLiveVoters:      2,
     polledCount:        0,
   },
   states: {
@@ -73,7 +82,7 @@ export const nfWorkflowMachine = setup({
       on: {
         VOTES_COLLECTED: [
           {
-            guard:   'unanimityMet',
+            guard:   'unanimityAndFloorMet',
             target:  'DECIDED',
             actions: assign({
               successCount:  ({ event }) => event.successCount,
@@ -104,7 +113,7 @@ export const nfWorkflowMachine = setup({
       on: {
         VOTES_COLLECTED: [
           {
-            guard:   'unanimityMet',
+            guard:   'unanimityAndFloorMet',
             target:  'DECIDED',
             actions: assign({
               successCount:  ({ event }) => event.successCount,
@@ -119,6 +128,7 @@ export const nfWorkflowMachine = setup({
             }),
           },
           {
+            guard:   'floorMet',
             target:  'DECIDED',
             actions: assign({ currentPhase: () => 'DECIDED' }),
           },

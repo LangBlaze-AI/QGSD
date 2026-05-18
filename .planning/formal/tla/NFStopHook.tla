@@ -27,15 +27,17 @@
 EXTENDS Naturals, FiniteSets, TLC
 
 CONSTANTS
-  MaxTurnLines   \* Maximum transcript lines considered (model: 500)
+  MaxTurnLines,  \* Maximum transcript lines considered (model: 500)
+  MinLiveVoters  \* Minimum live voters for valid consensus (issue #170, default: 2)
 
 VARIABLES
   hasCommand,        \* TRUE if a planning command (e.g. /qgsd:plan-phase) was found in current turn
   hasQuorumEvidence, \* TRUE if quorum evidence (slot-worker calls or successful MCP responses) present
+  liveVoterCount,    \* Number of live (non-UNAVAIL) voters detected
   decision,          \* "UNDECIDED" | "BLOCK" | "PASS"
   algorithmDone      \* TRUE when MakeDecision has fired
 
-vars == <<hasCommand, hasQuorumEvidence, decision, algorithmDone>>
+vars == <<hasCommand, hasQuorumEvidence, liveVoterCount, decision, algorithmDone>>
 
 (*
  * TypeOK — type invariant for all variables.
@@ -44,6 +46,7 @@ vars == <<hasCommand, hasQuorumEvidence, decision, algorithmDone>>
 TypeOK ==
   /\ hasCommand        \in BOOLEAN
   /\ hasQuorumEvidence \in BOOLEAN
+  /\ liveVoterCount    \in Nat
   /\ decision          \in {"UNDECIDED", "BLOCK", "PASS"}
   /\ algorithmDone     \in BOOLEAN
 
@@ -54,6 +57,7 @@ TypeOK ==
 Init ==
   /\ hasCommand        = FALSE
   /\ hasQuorumEvidence = FALSE
+  /\ liveVoterCount    = 0
   /\ decision          = "UNDECIDED"
   /\ algorithmDone     = FALSE
 
@@ -68,7 +72,7 @@ DetectCommand ==
   /\ ~algorithmDone
   /\ hasCommand = FALSE
   /\ hasCommand' \in BOOLEAN
-  /\ UNCHANGED <<hasQuorumEvidence, decision, algorithmDone>>
+  /\ UNCHANGED <<hasQuorumEvidence, liveVoterCount, decision, algorithmDone>>
 
 (*
  * DetectQuorumEvidence — nondeterministic: the hook either finds or does not find
@@ -81,7 +85,17 @@ DetectQuorumEvidence ==
   /\ ~algorithmDone
   /\ hasQuorumEvidence = FALSE
   /\ hasQuorumEvidence' \in BOOLEAN
-  /\ UNCHANGED <<hasCommand, decision, algorithmDone>>
+  /\ UNCHANGED <<hasCommand, liveVoterCount, decision, algorithmDone>>
+
+(*
+ * DetectLiveVoters — nondeterministic: the hook detects N live (non-UNAVAIL) voters.
+ * Models: countLiveSlotWorkers() or successCount from MCP call counting.
+ *)
+DetectLiveVoters ==
+  /\ ~algorithmDone
+  /\ liveVoterCount = 0
+  /\ liveVoterCount' \in 0..MaxTurnLines
+  /\ UNCHANGED <<hasCommand, hasQuorumEvidence, decision, algorithmDone>>
 
 (*
  * MakeDecision — applies the Stop hook gate logic once detection is complete.
@@ -98,10 +112,10 @@ MakeDecision ==
   /\ decision = "UNDECIDED"
   /\ decision' =
        IF ~hasCommand THEN "PASS"
-       ELSE IF hasCommand /\ hasQuorumEvidence THEN "PASS"
+       ELSE IF hasCommand /\ hasQuorumEvidence /\ liveVoterCount >= MinLiveVoters THEN "PASS"
        ELSE "BLOCK"
   /\ algorithmDone' = TRUE
-  /\ UNCHANGED <<hasCommand, hasQuorumEvidence>>
+  /\ UNCHANGED <<hasCommand, hasQuorumEvidence, liveVoterCount>>
 
 (*
  * Next — step relation: detection steps or the decision step.
@@ -110,6 +124,7 @@ MakeDecision ==
 Next ==
   \/ DetectCommand
   \/ DetectQuorumEvidence
+  \/ DetectLiveVoters
   \/ MakeDecision
   \/ (algorithmDone /\ UNCHANGED vars)  \* Stuttering in terminal state
 
@@ -127,6 +142,7 @@ Spec ==
   /\ WF_vars(MakeDecision)
   /\ WF_vars(DetectCommand)
   /\ WF_vars(DetectQuorumEvidence)
+  /\ WF_vars(DetectLiveVoters)
 
 \* ── Safety Invariants ──────────────────────────────────────────────────────
 
@@ -140,20 +156,29 @@ SafetyInvariant1 ==
   decision = "BLOCK" => hasCommand
 
 (*
- * SafetyInvariant2: BLOCK can only be decided if quorum evidence is absent.
- * Prevents blocking a turn that already satisfied the quorum requirement.
+ * SafetyInvariant2: BLOCK can only be decided if quorum evidence is absent
+ * OR live voters are below the floor. Allows floor-block even with evidence.
  *)
 \* @requirement STOP-03
 SafetyInvariant2 ==
-  decision = "BLOCK" => ~hasQuorumEvidence
+  decision = "BLOCK" => ~hasQuorumEvidence \/ liveVoterCount < MinLiveVoters
 
 (*
- * SafetyInvariant3: PASS can only be decided on a planning turn if quorum evidence is present.
+ * SafetyInvariant3: PASS can only be decided on a planning turn if quorum evidence is present
+ * AND live voter count meets the floor.
  * (When hasCommand=FALSE, PASS is trivially correct — not a planning turn.)
  *)
 \* @requirement STOP-04
 SafetyInvariant3 ==
   (decision = "PASS" /\ hasCommand) => hasQuorumEvidence
+
+(*
+ * FloorSafety: PASS on a planning turn requires live voters >= MinLiveVoters.
+ * Prevents thin consensus where a single surviving voter declares unanimity.
+ *)
+\* @requirement QUORUM-170
+FloorSafety ==
+  (decision = "PASS" /\ hasCommand) => liveVoterCount >= MinLiveVoters
 
 \* ── Liveness Properties ────────────────────────────────────────────────────
 
@@ -165,17 +190,18 @@ SafetyInvariant3 ==
 LivenessProperty1 == <>algorithmDone
 
 (*
- * LivenessProperty2: If quorum evidence is present, the decision eventually reaches PASS.
- * Ensures the hook doesn't block when quorum is satisfied.
+ * LivenessProperty2: If quorum evidence is present AND live voters meet the floor,
+ * the decision eventually reaches PASS.
+ * Ensures the hook doesn't block when quorum is satisfied with adequate voters.
  *)
 \* @requirement STOP-06
-LivenessProperty2 == hasQuorumEvidence => <>(decision = "PASS")
+LivenessProperty2 == (hasQuorumEvidence /\ liveVoterCount >= MinLiveVoters) => <>(decision = "PASS")
 
 (*
- * LivenessProperty3: If a command is detected with no quorum evidence, the decision
- * eventually reaches BLOCK. Ensures the hook always enforces quorum.
+ * LivenessProperty3: If a command is detected with no quorum evidence OR below-floor
+ * live voters, the decision eventually reaches BLOCK.
  *)
 \* @requirement STOP-07
-LivenessProperty3 == (hasCommand /\ ~hasQuorumEvidence) => <>(decision = "BLOCK")
+LivenessProperty3 == (hasCommand /\ (~hasQuorumEvidence \/ liveVoterCount < MinLiveVoters)) => <>(decision = "BLOCK")
 
 ====

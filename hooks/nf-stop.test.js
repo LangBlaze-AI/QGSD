@@ -1638,6 +1638,318 @@ test('TC-STANDARD-NON-QUORUM-NOT-ENFORCED: standard mode does NOT enforce /nf:ex
   }
 });
 
+// ── TC-FLOOR-*: Minimum live voters floor (issue #170) ──────────────────────────
+//
+// TC-FLOOR-1: Slot-worker path — 1 live voter, floor=2 → BLOCK (thin consensus)
+// TC-FLOOR-2: Slot-worker path — 2 live voters, floor=2 → PASS
+// TC-FLOOR-3: Non-slot-worker path — successCount=1, maxSize=1, floor=2 → BLOCK
+// TC-FLOOR-4: Non-slot-worker path — successCount=2, maxSize=2, floor=2 → PASS
+// TC-FLOOR-5: Floor disabled (min_live_voters=1), 1 live voter → PASS (backward compat)
+
+// Helper: build a slot-worker Task dispatch assistant line
+function slotWorkerTaskLine(slotName, taskId) {
+  return JSON.stringify({
+    type: 'assistant',
+    message: {
+      role: 'assistant',
+      content: [{
+        type: 'tool_use',
+        id: taskId,
+        name: 'Task',
+        input: {
+          subagent_type: 'nf-quorum-slot-worker',
+          model: 'haiku',
+          description: `${slotName} quorum R1`,
+          prompt: 'node quorum-slot-dispatch.cjs --slot ' + slotName,
+        },
+      }],
+      stop_reason: 'tool_use',
+    },
+    timestamp: '2026-02-20T00:05:00Z',
+    uuid: `assistant-sw-${slotName}`,
+  });
+}
+
+// Helper: build a tool_result line for a slot-worker Task
+function slotWorkerResultLine(taskId, resultText, uuid) {
+  return JSON.stringify({
+    type: 'user',
+    message: {
+      role: 'user',
+      content: [{
+        type: 'tool_result',
+        tool_use_id: taskId,
+        content: [{ type: 'text', text: resultText }],
+      }],
+    },
+    timestamp: '2026-02-20T00:05:30Z',
+    uuid: uuid || `tr-sw-${taskId}`,
+  });
+}
+
+// TC-FLOOR-1: Slot-worker path — only 1 live voter out of 2 dispatched, floor=2 → BLOCK
+// Simulates the thin-consensus scenario from issue #170: one slot returns APPROVE,
+// the other returns UNAVAIL. With floor=2, this must BLOCK.
+test('TC-FLOOR-1: slot-worker thin consensus — 1 live voter, floor=2 → BLOCK', () => {
+  const slots = ['slot-a', 'slot-b'];
+  const configPayload = JSON.stringify({
+    quorum_commands: ['quick'],
+    quorum_active: slots,
+    agent_config: {},
+    quorum: { maxSize: 2, min_live_voters: 2 },
+  });
+  const homeDir = path.join(os.tmpdir(), `nf-home-floor1-${Date.now()}`);
+  const claudeDir = path.join(homeDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(path.join(claudeDir, 'nf.json'), configPayload);
+
+  const claudeJsonTmp = path.join(os.tmpdir(), `nf-claude-floor1-${Date.now()}.json`);
+  const mcpServers = {};
+  for (const s of slots) mcpServers[s] = {};
+  fs.writeFileSync(claudeJsonTmp, JSON.stringify({ mcpServers }));
+
+  // Write a checkpoint file signaling all_tiers_exhausted=true so FALLBACK-01 gate passes
+  const cpDir = path.join(homeDir, '.planning', 'quorum', 'checkpoints');
+  fs.mkdirSync(cpDir, { recursive: true });
+  fs.writeFileSync(path.join(cpDir, 'round-1.json'), JSON.stringify({
+    round: 1,
+    unavail_primaries: ['slot-b'],
+    fallback_dispatched: false,
+    t1_slots_tried: [],
+    t2_slots_tried: [],
+    all_tiers_exhausted: true,
+    proceed_reason: 'all tiers exhausted, only 1 live voter',
+    timestamp: '2026-02-20T00:00:01Z',
+    schema_version: 1,
+  }));
+
+  // Transcript: slot-worker dispatch with 1 APPROVE and 1 UNAVAIL + checkpoint Bash call
+  const transcriptLines = [
+    userLine('/qnf:quick add something', 'human-floor1'),
+    assistantLine([bashCommitBlock('node /path/nf-tools.cjs commit "docs: plan" --files quick-115-PLAN.md')], 'assistant-commit'),
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'tool_use', id: 'task-a', name: 'Task', input: { subagent_type: 'nf-quorum-slot-worker', model: 'haiku', description: 'slot-a quorum R1', prompt: 'node "$HOME/.claude/nf-bin/quorum-slot-dispatch.cjs" --slot slot-a --mode A --round 1 --question "test"' } },
+          { type: 'tool_use', id: 'task-b', name: 'Task', input: { subagent_type: 'nf-quorum-slot-worker', model: 'haiku', description: 'slot-b quorum R1', prompt: 'node "$HOME/.claude/nf-bin/quorum-slot-dispatch.cjs" --slot slot-b --mode A --round 1 --question "test"' } },
+        ],
+        stop_reason: 'tool_use',
+      },
+      timestamp: '2026-02-20T00:05:00Z',
+      uuid: 'assistant-sw-dispatch',
+    }),
+    toolResultSuccessLine('task-a', 'verdict: APPROVE\nreasoning: looks good\ndispatch_nonce: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6'),
+    toolResultSuccessLine('task-b', 'verdict: UNAVAIL\nreasoning: provider down'),
+    assistantLine([{
+      type: 'tool_use', id: 'toolu_ckpt', name: 'Bash',
+      input: { command: 'node "$HOME/.claude/nf-bin/quorum-checkpoint.cjs" --round 1 --unavail-primaries "slot-b" --fallback-dispatched false --t1-slots "none" --t2-slots "none" --all-tiers-exhausted true --proceed-reason "all tiers exhausted"' },
+    }], 'a-ckpt'),
+    toolResultSuccessLine('toolu_ckpt', 'FALLBACK-01 checkpoint written: round-1.json'),
+    assistantLine([{ type: 'text', text: 'Quorum complete.\n\n<!-- NF_DECISION -->' }], 'assistant-final'),
+  ];
+  const tmpFile = writeTempTranscript(transcriptLines);
+  try {
+    const { stdout, exitCode } = runHookWithEnv(
+      { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile, last_assistant_message: 'Done.' },
+      { HOME: homeDir, NF_CLAUDE_JSON: claudeJsonTmp },
+      homeDir
+    );
+    assert.strictEqual(exitCode, 0);
+    assert.ok(stdout.length > 0, 'must block — only 1 live voter below floor of 2');
+    const parsed = JSON.parse(stdout);
+    assert.strictEqual(parsed.decision, 'block', 'decision must be block — thin consensus');
+    assert.ok(parsed.reason.includes('QUORUM FLOOR NOT MET'), 'reason must mention floor');
+    assert.ok(parsed.reason.includes('1 live voter'), 'reason must mention 1 live voter');
+    assert.ok(parsed.reason.includes('min_live_voters = 2'), 'reason must mention floor value');
+  } finally {
+    fs.unlinkSync(tmpFile);
+    fs.unlinkSync(claudeJsonTmp);
+  }
+});
+
+// TC-FLOOR-2: Slot-worker path — 2 live voters, floor=2 → PASS
+test('TC-FLOOR-2: slot-worker adequate consensus — 2 live voters, floor=2 → PASS', () => {
+  const slots = ['slot-a', 'slot-b'];
+  const configPayload = JSON.stringify({
+    quorum_commands: ['quick'],
+    quorum_active: slots,
+    agent_config: {},
+    quorum: { maxSize: 2, min_live_voters: 2 },
+  });
+  const homeDir = path.join(os.tmpdir(), `nf-home-floor2-${Date.now()}`);
+  const claudeDir = path.join(homeDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(path.join(claudeDir, 'nf.json'), configPayload);
+
+  const claudeJsonTmp = path.join(os.tmpdir(), `nf-claude-floor2-${Date.now()}.json`);
+  const mcpServers = {};
+  for (const s of slots) mcpServers[s] = {};
+  fs.writeFileSync(claudeJsonTmp, JSON.stringify({ mcpServers }));
+
+  // Transcript: both slot-workers return APPROVE (dispatched as sibling Tasks in one message)
+  const transcriptLines = [
+    userLine('/qnf:quick add something', 'human-floor2'),
+    assistantLine([bashCommitBlock('node /path/nf-tools.cjs commit "docs: plan" --files quick-115-PLAN.md')], 'assistant-commit'),
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'tool_use', id: 'task-a', name: 'Task', input: { subagent_type: 'nf-quorum-slot-worker', prompt: 'node quorum-slot-dispatch.cjs --slot slot-a --mode A --round 1 --question "test"' } },
+          { type: 'tool_use', id: 'task-b', name: 'Task', input: { subagent_type: 'nf-quorum-slot-worker', prompt: 'node quorum-slot-dispatch.cjs --slot slot-b --mode A --round 1 --question "test"' } },
+        ],
+        stop_reason: 'tool_use',
+      },
+      timestamp: '2026-02-20T00:05:00Z',
+      uuid: 'assistant-sw-dispatch',
+    }),
+    toolResultSuccessLine('task-a', 'verdict: APPROVE\nreasoning: looks good\ndispatch_nonce: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6'),
+    toolResultSuccessLine('task-b', 'verdict: APPROVE\nreasoning: solid plan\ndispatch_nonce: f1e2d3c4b5a6978869504132435a6b7c'),
+    assistantLine([{ type: 'text', text: 'Done.' }], 'assistant-final'),
+  ];
+  const tmpFile = writeTempTranscript(transcriptLines);
+  try {
+    const { stdout, exitCode } = runHookWithEnv(
+      { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile, last_assistant_message: 'Done.' },
+      { HOME: homeDir, NF_CLAUDE_JSON: claudeJsonTmp },
+      homeDir
+    );
+    assert.strictEqual(exitCode, 0);
+    assert.strictEqual(stdout, '', '2 live voters meets floor=2 — must not block');
+  } finally {
+    fs.unlinkSync(tmpFile);
+    fs.unlinkSync(claudeJsonTmp);
+  }
+});
+
+// TC-FLOOR-3: Non-slot-worker path — successCount=1, maxSize=1, floor=2 → BLOCK
+// Ceiling is met (1 >= 1) but floor is not (1 < 2).
+test('TC-FLOOR-3: non-slot-worker — ceiling met but floor not met → BLOCK', () => {
+  const slots = ['slot-a'];
+  const configPayload = JSON.stringify({
+    quorum_commands: ['quick'],
+    quorum_active: slots,
+    agent_config: { 'slot-a': { auth_type: 'api' } },
+    quorum: { maxSize: 1, min_live_voters: 2 },
+  });
+  const homeDir = path.join(os.tmpdir(), `nf-home-floor3-${Date.now()}`);
+  const claudeDir = path.join(homeDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(path.join(claudeDir, 'nf.json'), configPayload);
+
+  const claudeJsonTmp = path.join(os.tmpdir(), `nf-claude-floor3-${Date.now()}.json`);
+  fs.writeFileSync(claudeJsonTmp, JSON.stringify({ mcpServers: { 'slot-a': {} } }));
+
+  // Transcript: 1 successful call meets maxSize=1 but not floor=2
+  const transcriptLines = [
+    userLine('/qnf:quick add something', 'human-floor3'),
+    assistantLine([bashCommitBlock('node /path/nf-tools.cjs commit "docs: plan" --files quick-115-PLAN.md')], 'assistant-commit'),
+    assistantLine([toolUseBlock('mcp__slot-a__review')], 'assistant-a'),
+    toolResultSuccessLine('toolu_mcp__slot-a__review', 'slot-a review OK'),
+    assistantLine([{ type: 'text', text: 'Done.' }], 'assistant-final'),
+  ];
+  const tmpFile = writeTempTranscript(transcriptLines);
+  try {
+    const { stdout, exitCode } = runHookWithEnv(
+      { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile, last_assistant_message: 'Done.' },
+      { HOME: homeDir, NF_CLAUDE_JSON: claudeJsonTmp },
+      homeDir
+    );
+    assert.strictEqual(exitCode, 0);
+    assert.ok(stdout.length > 0, 'must block — ceiling met but floor not met');
+    const parsed = JSON.parse(stdout);
+    assert.strictEqual(parsed.decision, 'block', 'decision must be block — below floor');
+    assert.ok(parsed.reason.includes('QUORUM FLOOR NOT MET'), 'reason must mention floor');
+  } finally {
+    fs.unlinkSync(tmpFile);
+    fs.unlinkSync(claudeJsonTmp);
+  }
+});
+
+// TC-FLOOR-4: Non-slot-worker path — successCount=2, maxSize=2, floor=2 → PASS
+test('TC-FLOOR-4: non-slot-worker — ceiling and floor both met → PASS', () => {
+  const slots = ['slot-a', 'slot-b'];
+  const configPayload = JSON.stringify({
+    quorum_commands: ['quick'],
+    quorum_active: slots,
+    agent_config: { 'slot-a': { auth_type: 'api' }, 'slot-b': { auth_type: 'api' } },
+    quorum: { maxSize: 2, min_live_voters: 2 },
+  });
+  const homeDir = path.join(os.tmpdir(), `nf-home-floor4-${Date.now()}`);
+  const claudeDir = path.join(homeDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(path.join(claudeDir, 'nf.json'), configPayload);
+
+  const claudeJsonTmp = path.join(os.tmpdir(), `nf-claude-floor4-${Date.now()}.json`);
+  const mcpServers = {};
+  for (const s of slots) mcpServers[s] = {};
+  fs.writeFileSync(claudeJsonTmp, JSON.stringify({ mcpServers }));
+
+  const transcriptLines = [
+    userLine('/qnf:quick add something', 'human-floor4'),
+    assistantLine([bashCommitBlock('node /path/nf-tools.cjs commit "docs: plan" --files quick-115-PLAN.md')], 'assistant-commit'),
+    assistantLine([toolUseBlock('mcp__slot-a__review')], 'assistant-a'),
+    toolResultSuccessLine('toolu_mcp__slot-a__review', 'slot-a OK'),
+    assistantLine([toolUseBlock('mcp__slot-b__review')], 'assistant-b'),
+    toolResultSuccessLine('toolu_mcp__slot-b__review', 'slot-b OK'),
+    assistantLine([{ type: 'text', text: 'Done.' }], 'assistant-final'),
+  ];
+  const tmpFile = writeTempTranscript(transcriptLines);
+  try {
+    const { stdout, exitCode } = runHookWithEnv(
+      { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile, last_assistant_message: 'Done.' },
+      { HOME: homeDir, NF_CLAUDE_JSON: claudeJsonTmp },
+      homeDir
+    );
+    assert.strictEqual(exitCode, 0);
+    assert.strictEqual(stdout, '', '2 live voters meets both ceiling=2 and floor=2 — must not block');
+  } finally {
+    fs.unlinkSync(tmpFile);
+    fs.unlinkSync(claudeJsonTmp);
+  }
+});
+
+// TC-FLOOR-5: Floor disabled (min_live_voters=1), 1 live voter → PASS (backward compat)
+test('TC-FLOOR-5: floor=1 with 1 live voter → PASS (backward compat)', () => {
+  const slots = ['slot-a'];
+  const configPayload = JSON.stringify({
+    quorum_commands: ['quick'],
+    quorum_active: slots,
+    agent_config: { 'slot-a': { auth_type: 'api' } },
+    quorum: { maxSize: 1, min_live_voters: 1 },
+  });
+  const homeDir = path.join(os.tmpdir(), `nf-home-floor5-${Date.now()}`);
+  const claudeDir = path.join(homeDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(path.join(claudeDir, 'nf.json'), configPayload);
+
+  const claudeJsonTmp = path.join(os.tmpdir(), `nf-claude-floor5-${Date.now()}.json`);
+  fs.writeFileSync(claudeJsonTmp, JSON.stringify({ mcpServers: { 'slot-a': {} } }));
+
+  const transcriptLines = [
+    userLine('/qnf:quick add something', 'human-floor5'),
+    assistantLine([bashCommitBlock('node /path/nf-tools.cjs commit "docs: plan" --files quick-115-PLAN.md')], 'assistant-commit'),
+    assistantLine([toolUseBlock('mcp__slot-a__review')], 'assistant-a'),
+    toolResultSuccessLine('toolu_mcp__slot-a__review', 'slot-a OK'),
+    assistantLine([{ type: 'text', text: 'Done.' }], 'assistant-final'),
+  ];
+  const tmpFile = writeTempTranscript(transcriptLines);
+  try {
+    const { stdout, exitCode } = runHookWithEnv(
+      { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile, last_assistant_message: 'Done.' },
+      { HOME: homeDir, NF_CLAUDE_JSON: claudeJsonTmp },
+      homeDir
+    );
+    assert.strictEqual(exitCode, 0);
+    assert.strictEqual(stdout, '', 'floor=1 with 1 live voter must pass — backward compat');
+  } finally {
+    fs.unlinkSync(tmpFile);
+    fs.unlinkSync(claudeJsonTmp);
+  }
+});
+
 // ── FALLBACK-01 Structured Checkpoint Tests (issue #172) ────────────────────
 //
 // The FALLBACK-01 gate now reads a schema-validated JSON file at
@@ -1683,7 +1995,7 @@ function setupFallbackDir(label) {
   fs.mkdirSync(claudeDir, { recursive: true });
   fs.writeFileSync(
     path.join(claudeDir, 'nf.json'),
-    JSON.stringify({ hook_profile: 'standard', quorum_commands: ['plan-phase'] }),
+    JSON.stringify({ hook_profile: 'standard', quorum_commands: ['plan-phase'], quorum: { min_live_voters: 1 } }),
     'utf8'
   );
   return dir;
