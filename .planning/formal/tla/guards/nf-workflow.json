@@ -2,6 +2,7 @@
   "guards": {
     "minQuorumMet":            "successCount * 2 >= N",
     "unanimityMet":            "successCount = polledCount",
+    "floorMet":                "successCount >= minLiveVoters",
     "noInfiniteDeliberation":  "deliberationRounds < maxDeliberation",
     "phaseMonotonicallyAdvances": "TRUE"
   },
