@@ -24,9 +24,10 @@ const { _pure: { detectInstalledProviders } } = require('./manage-agents-core.cj
 
 // ─── Load providers config ─────────────────────────────────────────────────────
 // Precedence:
-//   1. UNIFIED_PROVIDERS_CONFIG env (explicit override — set by /nf:link-daintree)
-//   2. __dirname/providers.json (repo source — populated when running from a dev checkout)
-//   3. ~/.claude/nf/bin/providers.json (user-installed copy — populated by install.js)
+//   1. UNIFIED_PROVIDERS_CONFIG env (explicit override — set by install.js)
+//   2. __dirname/providers.json (same dir as this script — populated when running
+//      from nf-bin/ after install)
+//   3. ~/.claude/nf-bin/providers.json (user-installed canonical copy)
 // The shipped repo source is empty by design (populated at install time). Without the
 // step-3 fallback, Claude Code MCP entries that lack UNIFIED_PROVIDERS_CONFIG hit the
 // empty repo source and exit with "Unknown PROVIDER_SLOT" on every session start.
@@ -43,7 +44,7 @@ function loadProvidersConfig() {
       return { path: repoPath, data: repoData };
     }
   } catch (_) { /* fall through to user-installed */ }
-  const userPath = join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
+  const userPath = join(os.homedir(), '.claude', 'nf-bin', 'providers.json');
   if (fs.existsSync(userPath)) {
     return { path: userPath, data: JSON.parse(fs.readFileSync(userPath, 'utf8')) };
   }

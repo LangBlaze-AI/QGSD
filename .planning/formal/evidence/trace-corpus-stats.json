@@ -1,171 +1,50 @@
 {
   "schema_version": "1",
-  "generated": "2026-04-22T19:15:47.203Z",
+  "generated": "2026-05-18T14:59:20.666Z",
   "session_gap_ms": 300000,
-  "total_events": 1414,
+  "total_events": 528,
   "date_range": {
-    "earliest": "2026-04-16T20:36:55.599Z",
-    "latest": "2026-04-22T19:15:36.349Z"
+    "earliest": "2026-05-18T14:30:35.099Z",
+    "latest": "2026-05-18T14:56:41.146Z"
   },
   "sessions": [
     {
       "id": "session-001",
-      "start": "2026-04-16T20:36:55.599Z",
-      "end": "2026-04-16T21:06:07.737Z",
-      "event_count": 20,
+      "start": "2026-05-18T14:30:35.099Z",
+      "end": "2026-05-18T14:56:41.146Z",
+      "event_count": 528,
       "actions": {
-        "security_sweep": 20
-      }
-    },
-    {
-      "id": "session-002",
-      "start": "2026-04-19T18:45:32.567Z",
-      "end": "2026-04-19T18:50:20.030Z",
-      "event_count": 248,
-      "actions": {
-        "circuit_break": 40,
-        "quorum_start": 192,
-        "quorum_block": 16
-      }
-    },
-    {
-      "id": "session-003",
-      "start": "2026-04-20T17:51:38.175Z",
-      "end": "2026-04-20T19:58:01.060Z",
-      "event_count": 330,
-      "actions": {
-        "security_sweep": 330
-      }
-    },
-    {
-      "id": "session-004",
-      "start": "2026-04-21T17:27:38.762Z",
-      "end": "2026-04-21T17:31:55.416Z",
-      "event_count": 186,
-      "actions": {
-        "quorum_start": 144,
-        "circuit_break": 30,
-        "quorum_block": 12
-      }
-    },
-    {
-      "id": "session-005",
-      "start": "2026-04-21T19:50:27.640Z",
-      "end": "2026-04-21T19:52:00.339Z",
-      "event_count": 4,
-      "actions": {
-        "security_sweep": 4
-      }
-    },
-    {
-      "id": "session-006",
-      "start": "2026-04-21T20:00:24.767Z",
-      "end": "2026-04-21T20:38:40.991Z",
-      "event_count": 100,
-      "actions": {
-        "security_sweep": 100
-      }
-    },
-    {
-      "id": "session-007",
-      "start": "2026-04-21T20:45:08.066Z",
-      "end": "2026-04-21T21:39:14.313Z",
-      "event_count": 143,
-      "actions": {
-        "security_sweep": 143
-      }
-    },
-    {
-      "id": "session-008",
-      "start": "2026-04-21T21:47:04.641Z",
-      "end": "2026-04-21T22:00:26.830Z",
-      "event_count": 12,
-      "actions": {
-        "security_sweep": 12
-      }
-    },
-    {
-      "id": "session-009",
-      "start": "2026-04-22T11:07:27.033Z",
-      "end": "2026-04-22T11:10:40.909Z",
-      "event_count": 73,
-      "actions": {
-        "security_sweep": 7,
-        "circuit_break": 10,
-        "quorum_start": 52,
-        "quorum_block": 4
-      }
-    },
-    {
-      "id": "session-010",
-      "start": "2026-04-22T11:17:53.565Z",
-      "end": "2026-04-22T11:45:04.073Z",
-      "event_count": 296,
-      "actions": {
-        "security_sweep": 36,
-        "circuit_break": 40,
-        "quorum_start": 208,
-        "quorum_block": 12
-      }
-    },
-    {
-      "id": "session-011",
-      "start": "2026-04-22T19:15:24.632Z",
-      "end": "2026-04-22T19:15:36.349Z",
-      "event_count": 2,
-      "actions": {
-        "security_sweep": 2
+        "quorum_start": 400,
+        "circuit_break": 80,
+        "quorum_block": 48
       }
     }
   ],
   "action_index": {
-    "security_sweep": {
-      "total": 654,
+    "quorum_start": {
+      "total": 400,
       "sessions": [
-        "session-001",
-        "session-003",
-        "session-005",
-        "session-006",
-        "session-007",
-        "session-008",
-        "session-009",
-        "session-010",
-        "session-011"
+        "session-001"
       ]
     },
     "circuit_break": {
-      "total": 120,
+      "total": 80,
       "sessions": [
-        "session-002",
-        "session-004",
-        "session-009",
-        "session-010"
-      ]
-    },
-    "quorum_start": {
-      "total": 596,
-      "sessions": [
-        "session-002",
-        "session-004",
-        "session-009",
-        "session-010"
+        "session-001"
       ]
     },
     "quorum_block": {
-      "total": 44,
+      "total": 48,
       "sessions": [
-        "session-002",
-        "session-004",
-        "session-009",
-        "session-010"
+        "session-001"
       ]
     }
   },
   "transition_index": [],
   "vocabulary_validation": {
-    "known": 4,
+    "known": 3,
     "unknown": 0,
     "unknown_actions": []
   },
-  "summary": "1414 events across 11 sessions (2026-04-16T20:36:55.599Z to 2026-04-22T19:15:36.349Z). 4 known actions, 0 unknown. 0 distinct transitions."
+  "summary": "528 events across 1 sessions (2026-05-18T14:30:35.099Z to 2026-05-18T14:56:41.146Z). 3 known actions, 0 unknown. 0 distinct transitions."
 }

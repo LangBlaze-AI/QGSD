@@ -27,9 +27,9 @@ const { resolveCli } = require('./resolve-cli.cjs');
 // ─── Find providers.json (mirrors call-quorum-slot.cjs logic) ────────────────
 function findProviders() {
   const searchPaths = [
-    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),   // canonical (slash)
-    path.join(__dirname, 'providers.json'),                              // same dir (nf-bin)
-    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),      // installed fallback
+    path.join(__dirname, 'providers.json'),                              // same dir (nf-bin) — canonical
+    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),      // installed canonical
+    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),   // legacy (pre-migration)
   ];
   try {
     const claudeJson = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));

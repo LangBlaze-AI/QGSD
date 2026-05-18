@@ -42,6 +42,7 @@ function loadProviders() {
   const searchPaths = [
     path.join(__dirname, 'providers.json'),
     path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),
+    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),
   ];
   for (const p of searchPaths) {
     try { if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8')).providers; } catch (_) {}

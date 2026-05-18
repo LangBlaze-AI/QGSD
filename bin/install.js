@@ -550,7 +550,7 @@ function ensureMcpSlotsFromProviders() {
       // providers.json is empty — sync slots from ~/.claude.json (fan-out slots created by
       // /nf:link-daintree) AND auto-detect PATH CLIs so both sources are available.
       if (hasGlobal) {
-        const globalProvidersJson = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
+        const globalProvidersJson = path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json');
         const merged = { providers: [] };
         try {
           // Preserve existing entries — when reconstructing providers.json from ~/.claude.json
@@ -560,19 +560,16 @@ function ensureMcpSlotsFromProviders() {
           // Daintree metadata from preset-cloned slots and re-running /nf:link-daintree would
           // fail to recognize them as preset-linked, creating duplicate -N slots instead of
           // updating in place.
-          // Build existingByName by reading from two sources, in order of freshness:
-          //   1. nf-local-patches/nf/bin/providers.json — saveLocalPatches() backs up the
-          //      user's pre-wipe providers.json here. Earlier in this same install,
-          //      copyWithPathReplacement wiped ~/.claude/nf/, removing the live nf/bin/
-          //      providers.json. The patches backup is the only place the user's metadata
-          //      (daintree_preset_id, env, model) still lives.
-          //   2. ~/.claude/nf/bin/providers.json — current live file (whatever the mirror
-          //      step just put there, typically stale once nf/ has been wiped).
-          // Patches backup wins where both have the same slot name, because it carries
-          // the metadata the wipe destroyed.
+          // Build existingByName by reading from multiple sources, in order of freshness:
+          //   1. nf-bin/providers.json — canonical live location (current install target)
+          //   2. nf-local-patches/nf-bin/providers.json — saveLocalPatches() backup
+          //   3. nf-local-patches/nf/bin/providers.json — legacy backup path (pre-consolidation)
+          //   4. nf/bin/providers.json — legacy live path (pre-consolidation, may be symlink)
           const existingByName = new Map();
-          const patchedProvidersPath = path.join(os.homedir(), '.claude', PATCHES_DIR_NAME, 'nf', 'bin', 'providers.json');
-          for (const candidatePath of [globalProvidersJson, patchedProvidersPath]) {
+          const patchedProvidersPathNfBin = path.join(os.homedir(), '.claude', PATCHES_DIR_NAME, 'nf-bin', 'providers.json');
+          const patchedProvidersPathLegacy = path.join(os.homedir(), '.claude', PATCHES_DIR_NAME, 'nf', 'bin', 'providers.json');
+          const legacyProvidersPath = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
+          for (const candidatePath of [globalProvidersJson, patchedProvidersPathNfBin, patchedProvidersPathLegacy, legacyProvidersPath]) {
             try {
               if (fs.existsSync(candidatePath)) {
                 const existing = JSON.parse(fs.readFileSync(candidatePath, 'utf8'));
@@ -649,11 +646,13 @@ function ensureMcpSlotsFromProviders() {
             const claudeJsonForBackfill = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8'));
             if (claudeJsonForBackfill?.mcpServers) {
               let backfilled = 0;
+              const legacyProvidersJson = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
               for (const slotName of mcpSlots) {
                 const entry = claudeJsonForBackfill.mcpServers[slotName];
                 if (!entry) continue;
                 entry.env = entry.env || {};
-                if (!entry.env.UNIFIED_PROVIDERS_CONFIG) {
+                // Backfill missing or migrate legacy nf/bin/ path
+                if (!entry.env.UNIFIED_PROVIDERS_CONFIG || entry.env.UNIFIED_PROVIDERS_CONFIG === legacyProvidersJson) {
                   entry.env.UNIFIED_PROVIDERS_CONFIG = globalProvidersJson;
                   backfilled++;
                 }
@@ -717,7 +716,7 @@ function ensureMcpSlotsFromProviders() {
       // pointer it falls back to its own __dirname/providers.json (which ships empty) and
       // exits with "Unknown PROVIDER_SLOT". Set UNIFIED_PROVIDERS_CONFIG on every entry —
       // new entries get it on creation, existing entries get backfilled below.
-      const installedProvidersPath = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
+      const installedProvidersPath = path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json');
       if (!claudeConfig.mcpServers.hasOwnProperty(providerName)) {
         // Create entry for this provider
         claudeConfig.mcpServers[providerName] = {
@@ -732,9 +731,11 @@ function ensureMcpSlotsFromProviders() {
         // Backfill UNIFIED_PROVIDERS_CONFIG on existing entries that are missing it —
         // older /nf:mcp-setup runs created entries without this env, causing the spawned
         // server to look at the empty repo source. Self-heal on every install.
+        // Also migrate entries still pointing to the legacy nf/bin/ path.
         const existing = claudeConfig.mcpServers[providerName];
         existing.env = existing.env || {};
-        if (!existing.env.UNIFIED_PROVIDERS_CONFIG) {
+        const legacyPath = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
+        if (!existing.env.UNIFIED_PROVIDERS_CONFIG || existing.env.UNIFIED_PROVIDERS_CONFIG === legacyPath) {
           existing.env.UNIFIED_PROVIDERS_CONFIG = installedProvidersPath;
           addedCount++;
           console.log(`  ${green}✓${reset} Backfilled UNIFIED_PROVIDERS_CONFIG on ${providerName}`);
@@ -2735,9 +2736,46 @@ function install(isGlobal, runtime = 'claude') {
     // (LLMs often guess ~/.claude/nf/bin/ instead of ~/.claude/nf-bin/)
     // nf/bin/ already has core/bin/ files (nf-tools.cjs); we add nf-bin/ scripts alongside them
     const nfBinDir = path.join(targetDir, 'nf', 'bin');
+    const nfBinProviders = path.join(nfBinDir, 'providers.json');
+    const canonicalProviders = path.join(binDest, 'providers.json');
     if (fs.existsSync(nfBinDir) && !fs.lstatSync(nfBinDir).isSymbolicLink()) {
+      // Migrate legacy nf/bin/providers.json → nf-bin/providers.json if needed
+      if (fs.existsSync(nfBinProviders) && !fs.lstatSync(nfBinProviders).isSymbolicLink()) {
+        try {
+          const legacyData = JSON.parse(fs.readFileSync(nfBinProviders, 'utf8'));
+          const legacyProviders = legacyData.providers || [];
+          // Only migrate if legacy has data and nf-bin copy is empty/missing
+          if (legacyProviders.length > 0) {
+            let canonicalData = { providers: [] };
+            try {
+              if (fs.existsSync(canonicalProviders)) {
+                canonicalData = JSON.parse(fs.readFileSync(canonicalProviders, 'utf8'));
+              }
+            } catch (_) { /* empty/missing — fine */ }
+            const canonicalProvidersList = canonicalData.providers || [];
+            if (canonicalProvidersList.length === 0) {
+              // nf-bin is empty — migrate legacy data here
+              fs.writeFileSync(canonicalProviders, JSON.stringify(legacyData, null, 2) + '\n', 'utf8');
+              console.log(`  ${green}✓${reset} Migrated ${legacyProviders.length} provider(s) from nf/bin/ → nf-bin/`);
+            }
+          }
+        } catch (_) { /* unreadable — skip migration */ }
+
+        // Replace legacy nf/bin/providers.json with symlink to canonical nf-bin/providers.json
+        try {
+          fs.unlinkSync(nfBinProviders);
+          fs.symlinkSync(canonicalProviders, nfBinProviders);
+          console.log(`  ${green}✓${reset} Linked nf/bin/providers.json → nf-bin/providers.json`);
+        } catch (e) {
+          // Symlink failed (e.g. permissions) — leave the old file in place as a fallback
+          log(`  Could not create providers.json symlink: ${e.message}`);
+        }
+      }
+
+      // Mirror remaining nf-bin/ scripts (excluding providers.json) into nf/bin/
       let mirrored = 0;
       for (const entry of fs.readdirSync(binDest)) {
+        if (entry === 'providers.json') continue;
         const srcFile = path.join(binDest, entry);
         if (fs.statSync(srcFile).isFile()) {
           const destFile = path.join(nfBinDir, entry);
@@ -2775,8 +2813,9 @@ function install(isGlobal, runtime = 'claude') {
           fs.copyFileSync(path.join(coreBinSrc, entry), path.join(nfBinDir, entry));
         }
       }
-      // Copy nf-bin/ files
+      // Copy nf-bin/ files (excluding providers.json — symlink it instead)
       for (const entry of fs.readdirSync(binDest)) {
+        if (entry === 'providers.json') continue;
         const srcFile = path.join(binDest, entry);
         if (fs.statSync(srcFile).isFile()) {
           const destFile = path.join(nfBinDir, entry);
@@ -2784,6 +2823,13 @@ function install(isGlobal, runtime = 'claude') {
             fs.copyFileSync(srcFile, destFile);
           }
         }
+      }
+      // Symlink providers.json from nf/bin/ → nf-bin/
+      try {
+        fs.symlinkSync(canonicalProviders, nfBinProviders);
+        console.log(`  ${green}✓${reset} Linked nf/bin/providers.json → nf-bin/providers.json`);
+      } catch (e) {
+        log(`  Could not create providers.json symlink: ${e.message}`);
       }
       log(`  ${green}✓${reset} Restored nf/bin (was symlink) with merged contents`);
     }

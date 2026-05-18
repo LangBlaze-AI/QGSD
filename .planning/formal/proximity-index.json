@@ -1,133 +1,133 @@
 {
   "schema_version": "1",
-  "generated": "2026-04-16T21:04:18.822Z",
+  "generated": "2026-05-18T14:59:20.520Z",
   "node_key_format": "type::id",
   "sources": {
     "scope.json:account-manager": {
-      "mtime": "2026-04-16T19:50:00.781Z",
+      "mtime": "2026-05-18T13:53:39.514Z",
       "hash": "496b4503"
     },
     "scope.json:agent-loop": {
-      "mtime": "2026-04-16T19:50:00.782Z",
+      "mtime": "2026-05-18T13:53:39.514Z",
       "hash": "cec2299d"
     },
     "scope.json:breaker": {
-      "mtime": "2026-04-16T19:50:00.782Z",
+      "mtime": "2026-05-18T13:53:39.514Z",
       "hash": "8af7675c"
     },
     "scope.json:convergence": {
-      "mtime": "2026-04-16T19:50:00.782Z",
+      "mtime": "2026-05-18T13:53:39.515Z",
       "hash": "4af11fdd"
     },
     "scope.json:deliberation": {
-      "mtime": "2026-04-16T19:50:00.783Z",
+      "mtime": "2026-05-18T13:53:39.516Z",
       "hash": "8ad85f0e"
     },
     "scope.json:deliberation-revision": {
-      "mtime": "2026-04-16T19:50:00.782Z",
+      "mtime": "2026-05-18T13:53:39.516Z",
       "hash": "b5e414df"
     },
     "scope.json:disttagalignment": {
-      "mtime": "2026-04-16T19:50:00.783Z",
+      "mtime": "2026-05-18T13:53:39.517Z",
       "hash": "ff7b987b"
     },
     "scope.json:formal-proximity-index": {
-      "mtime": "2026-04-16T19:50:00.784Z",
+      "mtime": "2026-05-18T13:53:39.517Z",
       "hash": "1d85bde2"
     },
     "scope.json:installer": {
-      "mtime": "2026-04-16T19:50:00.784Z",
+      "mtime": "2026-05-18T13:53:39.517Z",
       "hash": "7b254fd9"
     },
     "scope.json:mcp-calls": {
-      "mtime": "2026-04-16T19:50:00.784Z",
+      "mtime": "2026-05-18T13:53:39.517Z",
       "hash": "c4479faa"
     },
     "scope.json:oscillation": {
-      "mtime": "2026-04-16T19:50:00.784Z",
+      "mtime": "2026-05-18T13:53:39.518Z",
       "hash": "6318c2f9"
     },
     "scope.json:planningstate": {
-      "mtime": "2026-04-16T19:50:00.784Z",
+      "mtime": "2026-05-18T13:53:39.518Z",
       "hash": "7c1fdd87"
     },
     "scope.json:prefilter": {
-      "mtime": "2026-04-16T19:50:00.784Z",
+      "mtime": "2026-05-18T13:53:39.518Z",
       "hash": "8db746e5"
     },
     "scope.json:quorum": {
-      "mtime": "2026-04-16T19:50:00.784Z",
+      "mtime": "2026-05-18T13:53:39.518Z",
       "hash": "4ca140a7"
     },
     "scope.json:recruiting": {
-      "mtime": "2026-04-16T19:50:00.785Z",
+      "mtime": "2026-05-18T13:53:39.519Z",
       "hash": "1111802b"
     },
     "scope.json:safety": {
-      "mtime": "2026-04-16T19:50:00.785Z",
+      "mtime": "2026-05-18T13:53:39.519Z",
       "hash": "a9b92676"
     },
     "scope.json:sessionpersistence": {
-      "mtime": "2026-04-16T19:50:00.785Z",
+      "mtime": "2026-05-18T13:53:39.519Z",
       "hash": "716f9017"
     },
     "scope.json:solve-convergence": {
-      "mtime": "2026-04-16T19:50:00.785Z",
+      "mtime": "2026-05-18T13:53:39.520Z",
       "hash": "56697a1b"
     },
     "scope.json:stop-hook": {
-      "mtime": "2026-04-16T19:50:00.789Z",
+      "mtime": "2026-05-18T13:53:39.521Z",
       "hash": "c0796108"
     },
     "scope.json:tui-nav": {
-      "mtime": "2026-04-16T19:50:00.789Z",
+      "mtime": "2026-05-18T13:53:39.521Z",
       "hash": "52b50d64"
     },
     "constants-mapping.json": {
-      "mtime": "2026-04-16T19:50:00.573Z",
+      "mtime": "2026-05-18T13:53:39.407Z",
       "hash": "76910c97"
     },
     "model-registry.json": {
-      "mtime": "2026-04-16T20:39:28.898Z",
-      "hash": "bc1ff299"
+      "mtime": "2026-05-18T14:59:18.255Z",
+      "hash": "067e4ff6"
     },
     "invariant-catalog.json": {
-      "mtime": "2026-04-16T19:50:00.769Z",
+      "mtime": "2026-05-18T13:53:39.506Z",
       "hash": "e27072db"
     },
     "traceability-matrix.json": {
-      "mtime": "2026-04-16T20:45:08.519Z",
-      "hash": "910364c0"
+      "mtime": "2026-05-18T13:53:39.541Z",
+      "hash": "2d71c182"
     },
     "unit-test-coverage.json": {
-      "mtime": "2026-04-16T19:50:00.849Z",
-      "hash": "aa7d48b4"
+      "mtime": "2026-05-18T13:53:39.542Z",
+      "hash": "78cbd0b3"
     },
     "instrumentation-map.json": {
-      "mtime": "2026-04-16T19:50:00.608Z",
-      "hash": "9e909265"
+      "mtime": "2026-05-18T13:53:39.424Z",
+      "hash": "671f9b6c"
     },
     "event-vocabulary.json": {
-      "mtime": "2026-04-16T19:50:00.598Z",
+      "mtime": "2026-05-18T13:53:39.422Z",
       "hash": "fa1b7cf9"
     },
     "observed-fsm.json": {
-      "mtime": "2026-04-16T19:50:00.769Z",
+      "mtime": "2026-05-18T13:53:39.507Z",
       "hash": "72435984"
     },
     "risk-heatmap.json": {
-      "mtime": "2026-04-16T19:50:00.767Z",
+      "mtime": "2026-05-18T13:53:39.505Z",
       "hash": "2df5c0d7"
     },
     "debt.json": {
-      "mtime": "2026-04-16T19:50:00.573Z",
+      "mtime": "2026-05-18T13:53:39.407Z",
       "hash": "4f085cf2"
     },
     "source-annotations": {
-      "mtime": "2026-04-16T20:39:28.056Z"
+      "mtime": "2026-05-18T14:58:32.188Z"
     },
     "code-source-annotations": {
-      "mtime": "2026-04-16T20:41:37.194Z"
+      "mtime": "2026-05-18T14:56:33.309Z"
     }
   },
   "nodes": {
@@ -724,17 +724,17 @@
           "source": "scope.json"
         },
         {
-          "to": "code_line::hooks/nf-prompt.js:713",
+          "to": "code_line::hooks/nf-prompt.js:733",
           "rel": "contains",
           "source": "instrumentation-map"
         },
         {
-          "to": "code_line::hooks/nf-prompt.js:803",
+          "to": "code_line::hooks/nf-prompt.js:823",
           "rel": "contains",
           "source": "instrumentation-map"
         },
         {
-          "to": "code_line::hooks/nf-prompt.js:1030",
+          "to": "code_line::hooks/nf-prompt.js:1072",
           "rel": "contains",
           "source": "instrumentation-map"
         }
@@ -57420,9 +57420,9 @@
         }
       ]
     },
-    "code_line::hooks/nf-prompt.js:713": {
+    "code_line::hooks/nf-prompt.js:733": {
       "type": "code_line",
-      "id": "hooks/nf-prompt.js:713",
+      "id": "hooks/nf-prompt.js:733",
       "edges": [
         {
           "to": "formal_action::cache_hit",
@@ -57441,15 +57441,15 @@
       "id": "cache_hit",
       "edges": [
         {
-          "to": "code_line::hooks/nf-prompt.js:713",
+          "to": "code_line::hooks/nf-prompt.js:733",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         }
       ]
     },
-    "code_line::hooks/nf-prompt.js:803": {
+    "code_line::hooks/nf-prompt.js:823": {
       "type": "code_line",
-      "id": "hooks/nf-prompt.js:803",
+      "id": "hooks/nf-prompt.js:823",
       "edges": [
         {
           "to": "formal_action::quorum_fallback_t1_required",
@@ -57473,15 +57473,15 @@
           "source": "event-vocabulary"
         },
         {
-          "to": "code_line::hooks/nf-prompt.js:803",
+          "to": "code_line::hooks/nf-prompt.js:823",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         }
       ]
     },
-    "code_line::hooks/nf-prompt.js:1030": {
+    "code_line::hooks/nf-prompt.js:1072": {
       "type": "code_line",
-      "id": "hooks/nf-prompt.js:1030",
+      "id": "hooks/nf-prompt.js:1072",
       "edges": [
         {
           "to": "formal_action::quorum_start",
@@ -57505,7 +57505,7 @@
           "source": "event-vocabulary"
         },
         {
-          "to": "code_line::hooks/nf-prompt.js:1030",
+          "to": "code_line::hooks/nf-prompt.js:1072",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         }
@@ -59336,4 +59336,3 @@
     }
   }
 }
-
