@@ -21,6 +21,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const { resolveCli } = require('./resolve-cli.cjs');
 const { _pure: { detectInstalledProviders } } = require('./manage-agents-core.cjs');
+const { resolveEnvPlaceholders, findUnresolvedPlaceholders } = require('./resolve-env.cjs');
+const { extractPlaceholderVar, namespacedSecretKey } = require('./resolve-env.cjs');
 
 // ─── Load providers config ─────────────────────────────────────────────────────
 // Precedence:
@@ -310,7 +312,13 @@ async function runProvider(provider, toolArgs) {
     a === '{prompt}' ? prompt : a
   );
 
-  const env = { ...process.env, ...(provider.env ?? {}) };
+  const env = { ...process.env, ...resolveEnvPlaceholders(provider.env ?? {}) };
+
+  // Check for unresolved ${VAR} placeholders — these indicate missing secrets
+  const unresolved = findUnresolvedPlaceholders(provider.env ?? {});
+  if (unresolved.length > 0) {
+    process.stderr.write(`[unified-mcp-server] WARNING: unresolved placeholder(s) in slot ${provider.name}: ${unresolved.join(', ')} — set in env or run /nf:mcp-setup to store in secrets\n`);
+  }
 
   return new Promise((resolve) => {
     let child;
@@ -374,7 +382,7 @@ async function runProvider(provider, toolArgs) {
 
 /** Run a subprocess with explicit args (used for help, extraTools) */
 async function runSubprocessWithArgs(provider, args, timeoutMs = 30000) {
-  const env = { ...process.env, ...(provider.env ?? {}) };
+  const env = { ...process.env, ...resolveEnvPlaceholders(provider.env ?? {}) };
 
   return new Promise((resolve) => {
     let child;
@@ -959,6 +967,38 @@ async function main() {
     } catch (e) {
       // secrets store unavailable or no entry — continue without it
       process.stderr.write(`[unified-mcp-server] secrets unavailable for slot ${SLOT}: ${e.message}\n`);
+    }
+  }
+
+  // ─── ${VAR} placeholder bootstrap ──────────────────────────────────────────
+  // Load secrets for ${VAR} placeholders in the active slot's provider.env.
+  // The fan-out import (issue 169) writes secret values as ${KEY} placeholders
+  // in providers.json and stores actual values in the secrets store. Without
+  // this bootstrap, spawn-time resolution would fail with a missing env var.
+  // Secrets are namespaced by slot name (<slot>__<key>) to prevent collisions
+  // when multiple providers share the same env key with different values.
+  if (SLOT && slotProvider && slotProvider.env) {
+    try {
+      const { isPlaceholder } = require('./resolve-env.cjs');
+      const secrets = require('./secrets.cjs');
+      let loaded = 0;
+      for (const [k, v] of Object.entries(slotProvider.env)) {
+        const envVarName = extractPlaceholderVar(v);
+        if (envVarName !== null && process.env[envVarName] === undefined) {
+          // Try namespaced key first, then fall back to unnamespaced
+          const secret = await secrets.get('nforma', namespacedSecretKey(SLOT, envVarName))
+                        ?? await secrets.get('nforma', envVarName);
+          if (secret) {
+            process.env[envVarName] = secret;
+            loaded++;
+          }
+        }
+      }
+      if (loaded > 0) {
+        process.stderr.write(`[unified-mcp-server] Loaded ${loaded} secret(s) for slot ${SLOT} from secrets store\n`);
+      }
+    } catch (e) {
+      process.stderr.write(`[unified-mcp-server] secrets bootstrap for slot ${SLOT}: ${e.message}\n`);
     }
   }
 
