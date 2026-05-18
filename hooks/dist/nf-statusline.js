@@ -128,7 +128,7 @@ function buildToolsLine(homeDir, dir) {
 // cache written by nf-slot-health-probe.js. Statusline rendering must stay fast,
 // so this is purely cache-read — the probe runs out-of-band (e.g. SessionStart).
 function buildSlotsLine(homeDir) {
-  const providersPath = path.join(homeDir, '.claude', 'nf', 'bin', 'providers.json');
+  const providersPath = path.join(homeDir, '.claude', 'nf-bin', 'providers.json');
   const claudeJsonPath = path.join(homeDir, '.claude.json');
   const cachePath = path.join(homeDir, '.claude', 'nf', 'slot-health.json');
 
