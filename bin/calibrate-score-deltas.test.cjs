@@ -233,6 +233,9 @@ test('CAL-TC14: deriveCalibratedDeltas clamps extreme values to [-10, +10]', () 
   const { deltas } = deriveCalibratedDeltas(rounds, DEFAULT_SCORE_DELTAS, { minRounds: 30, scaleFactor: 100 });
   assert.ok(deltas.TP >= -10, `TP delta must be >= -10, got ${deltas.TP}`);
   assert.ok(deltas.TP <= 10, `TP delta must be <= 10, got ${deltas.TP}`);
+  // Derived types also clamped
+  assert.ok(deltas['TP+'] >= -10, `TP+ delta must be >= -10, got ${deltas['TP+']}`);
+  assert.ok(deltas['TP+'] <= 10, `TP+ delta must be <= 10, got ${deltas['TP+']}`);
 });
 
 // ---------------------------------------------------------------------------

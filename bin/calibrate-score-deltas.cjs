@@ -182,8 +182,8 @@ function deriveCalibratedDeltas(rounds, defaults, options) {
   }
 
   // Derived types: TP+ = TP + improvement bonus, TN+ = TN + improvement bonus
-  deltas['TP+'] = deltas.TP + IMPROVEMENT_BONUS;
-  deltas['TN+'] = deltas.TN + IMPROVEMENT_BONUS;
+  deltas['TP+'] = Math.max(CLAMP_MIN, Math.min(CLAMP_MAX, deltas.TP + IMPROVEMENT_BONUS));
+  deltas['TN+'] = Math.max(CLAMP_MIN, Math.min(CLAMP_MAX, deltas.TN + IMPROVEMENT_BONUS));
   perType['TP+'] = { signal: null, empiricalDelta: deltas['TP+'], rounds: 0, usedDefault: false, derived: true, note: `TP(${deltas.TP}) + ${IMPROVEMENT_BONUS}` };
   perType['TN+'] = { signal: null, empiricalDelta: deltas['TN+'], rounds: 0, usedDefault: false, derived: true, note: `TN(${deltas.TN}) + ${IMPROVEMENT_BONUS}` };
 
@@ -259,7 +259,7 @@ async function main() {
 
   const source = metadata.usedFallback ? 'DEFAULT (insufficient data)' : 'CALIBRATED';
   process.stdout.write(
-    `[calibrate] ${source} | ${metadata.classifiedRounds || rounds.length}/${rounds.length} rounds | output: ${outputPath}\n`
+    `[calibrate] ${source} | ${metadata.classifiedRounds ?? rounds.length}/${rounds.length} rounds | output: ${outputPath}\n`
   );
 
   // Print delta summary
