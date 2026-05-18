@@ -1,16 +1,355 @@
 {
   "schema_version": "1",
-  "generated": "2026-05-18T14:59:20.730Z",
-  "total_failures": 0,
+  "generated": "2026-05-18T14:59:43.325Z",
+  "total_failures": 16,
   "categories": {
-    "crash": [],
+    "crash": [
+      {
+        "tool": "run-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:40.953Z",
+        "check_id": "tla:mcagentloop",
+        "surface": "agent-loop",
+        "property": "MCAgentLoop",
+        "runtime_ms": 0,
+        "summary": "error: state-space guard blocked MCAgentLoop (HIGH risk, ~null states)",
+        "triage_tags": [
+          "state-space-blocked"
+        ],
+        "requirement_ids": [],
+        "metadata": {
+          "config": "MCAgentLoop",
+          "estimated_states": null,
+          "risk": "HIGH"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: state-space guard blocked MCAgentLoop (HIGH risk, ~null states)"
+      },
+      {
+        "tool": "run-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:41.311Z",
+        "check_id": "tla:mcbugmodellookup",
+        "surface": "tla",
+        "property": "MCBugModelLookup",
+        "runtime_ms": 0,
+        "summary": "error: state-space guard blocked MCBugModelLookup (HIGH risk, ~null states)",
+        "triage_tags": [
+          "state-space-blocked"
+        ],
+        "requirement_ids": [],
+        "metadata": {
+          "config": "MCBugModelLookup",
+          "estimated_states": null,
+          "risk": "HIGH"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: state-space guard blocked MCBugModelLookup (HIGH risk, ~null states)"
+      },
+      {
+        "tool": "run-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:41.665Z",
+        "check_id": "tla:mcconvergencetest",
+        "surface": "convergence",
+        "property": "MCConvergenceTest",
+        "runtime_ms": 0,
+        "summary": "error: state-space guard blocked MCConvergenceTest (HIGH risk, ~null states)",
+        "triage_tags": [
+          "state-space-blocked"
+        ],
+        "requirement_ids": [],
+        "metadata": {
+          "config": "MCConvergenceTest",
+          "estimated_states": null,
+          "risk": "HIGH"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: state-space guard blocked MCConvergenceTest (HIGH risk, ~null states)"
+      },
+      {
+        "tool": "run-installer-alloy",
+        "formalism": "alloy",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:41.691Z",
+        "check_id": "alloy:install-scope",
+        "surface": "alloy",
+        "property": "Installer rollback soundness and config sync completeness",
+        "runtime_ms": 0,
+        "summary": "error: alloy:install-scope (Java not found)",
+        "triage_tags": [],
+        "requirement_ids": [
+          "INST-01",
+          "INST-02",
+          "INST-03",
+          "INST-04",
+          "INST-05"
+        ],
+        "metadata": {
+          "spec": "install-scope"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: alloy:install-scope (Java not found)"
+      },
+      {
+        "tool": "run-oauth-rotation-prism",
+        "formalism": "prism",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:41.714Z",
+        "check_id": "prism:oauth-rotation",
+        "surface": "prism",
+        "property": "OAuth token rotation probability — successful rotation under expiry and concurrency",
+        "runtime_ms": 0,
+        "summary": "error: prism:oauth-rotation (binary not found)",
+        "triage_tags": [],
+        "requirement_ids": [
+          "CRED-01"
+        ],
+        "metadata": {},
+        "observation_window": {
+          "window_start": "2026-05-18T14:59:41.713Z",
+          "window_end": "2026-05-18T14:59:41.714Z",
+          "n_traces": 0,
+          "n_events": 0,
+          "window_days": 0
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: prism:oauth-rotation (binary not found)"
+      },
+      {
+        "tool": "run-oauth-rotation-prism",
+        "formalism": "prism",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:41.791Z",
+        "check_id": "prism:oauth-rotation",
+        "surface": "prism",
+        "property": "OAuth token rotation probability — successful rotation under expiry and concurrency",
+        "runtime_ms": 0,
+        "summary": "error: prism:oauth-rotation (binary not found)",
+        "triage_tags": [],
+        "requirement_ids": [
+          "CRED-01"
+        ],
+        "metadata": {},
+        "observation_window": {
+          "window_start": "2026-05-18T14:59:41.788Z",
+          "window_end": "2026-05-18T14:59:41.791Z",
+          "n_traces": 0,
+          "n_events": 0,
+          "window_days": 0
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: prism:oauth-rotation (binary not found)"
+      },
+      {
+        "tool": "run-installer-alloy",
+        "formalism": "alloy",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:41.820Z",
+        "check_id": "alloy:bogus",
+        "surface": "alloy",
+        "property": "bogus",
+        "runtime_ms": 0,
+        "summary": "error: alloy:bogus (invalid spec)",
+        "triage_tags": [],
+        "requirement_ids": [],
+        "metadata": {
+          "spec": "bogus"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: alloy:bogus (invalid spec)"
+      },
+      {
+        "tool": "run-installer-alloy",
+        "formalism": "alloy",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:41.881Z",
+        "check_id": "alloy:invalid",
+        "surface": "alloy",
+        "property": "invalid",
+        "runtime_ms": 0,
+        "summary": "error: alloy:invalid (invalid spec)",
+        "triage_tags": [],
+        "requirement_ids": [],
+        "metadata": {
+          "spec": "invalid"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: alloy:invalid (invalid spec)"
+      },
+      {
+        "tool": "run-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:41.980Z",
+        "check_id": "tla:mcdeliberationrevision",
+        "surface": "deliberation-revision",
+        "property": "MCDeliberationRevision",
+        "runtime_ms": 0,
+        "summary": "error: state-space guard blocked MCDeliberationRevision (HIGH risk, ~null states)",
+        "triage_tags": [
+          "state-space-blocked"
+        ],
+        "requirement_ids": [],
+        "metadata": {
+          "config": "MCDeliberationRevision",
+          "estimated_states": null,
+          "risk": "HIGH"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: state-space guard blocked MCDeliberationRevision (HIGH risk, ~null states"
+      },
+      {
+        "tool": "run-oscillation-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:41.987Z",
+        "check_id": "tla:oscillation",
+        "surface": "tla",
+        "property": "Run-collapse oscillation detection algorithm correctness",
+        "runtime_ms": 0,
+        "summary": "error: Java not found in 0ms",
+        "triage_tags": [],
+        "requirement_ids": [
+          "DETECT-04",
+          "DETECT-05",
+          "DETECT-06"
+        ],
+        "metadata": {
+          "config": "MCoscillation"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: Java not found in 0ms"
+      },
+      {
+        "tool": "run-oscillation-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:42.151Z",
+        "check_id": "tla:bogus",
+        "surface": "tla",
+        "property": "bogus",
+        "runtime_ms": 0,
+        "summary": "error: unknown config in 0ms",
+        "triage_tags": [],
+        "requirement_ids": [],
+        "metadata": {
+          "config": "bogus"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: unknown config in 0ms"
+      },
+      {
+        "tool": "run-oscillation-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:42.301Z",
+        "check_id": "tla:invalid",
+        "surface": "tla",
+        "property": "invalid",
+        "runtime_ms": 0,
+        "summary": "error: unknown config in 0ms",
+        "triage_tags": [],
+        "requirement_ids": [],
+        "metadata": {
+          "config": "invalid"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: unknown config in 0ms"
+      },
+      {
+        "tool": "run-oscillation-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:42.378Z",
+        "check_id": "tla:solve-convergence",
+        "surface": "tla",
+        "property": "Outer solve loop convergence under Option C",
+        "runtime_ms": 0,
+        "summary": "error: Java not found in 0ms",
+        "triage_tags": [],
+        "requirement_ids": [
+          "FV-01",
+          "FV-02",
+          "FV-03"
+        ],
+        "metadata": {
+          "config": "MCsolve-convergence"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: Java not found in 0ms"
+      },
+      {
+        "tool": "run-protocol-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:42.668Z",
+        "check_id": "tla:deliberation",
+        "surface": "tla",
+        "property": "R3 deliberation loop — max 10 rounds + 10 improvement iterations",
+        "runtime_ms": 0,
+        "summary": "error: Java not found in 0ms",
+        "triage_tags": [],
+        "requirement_ids": [
+          "PLAN-01",
+          "PLAN-02",
+          "SAFE-03",
+          "IMPR-01",
+          "LOOP-02"
+        ],
+        "metadata": {
+          "config": "MCdeliberation"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: Java not found in 0ms"
+      },
+      {
+        "tool": "run-protocol-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:42.827Z",
+        "check_id": "tla:bogus",
+        "surface": "tla",
+        "property": "bogus",
+        "runtime_ms": 0,
+        "summary": "error: unknown config in 0ms",
+        "triage_tags": [],
+        "requirement_ids": [],
+        "metadata": {
+          "config": "bogus"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: unknown config in 0ms"
+      },
+      {
+        "tool": "run-protocol-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-05-18T14:59:42.937Z",
+        "check_id": "tla:invalid",
+        "surface": "tla",
+        "property": "invalid",
+        "runtime_ms": 0,
+        "summary": "error: unknown config in 0ms",
+        "triage_tags": [],
+        "requirement_ids": [],
+        "metadata": {
+          "config": "invalid"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: unknown config in 0ms"
+      }
+    ],
     "timeout": [],
     "logic_violation": [],
     "drift": [],
     "degradation": []
   },
   "category_counts": {
-    "crash": 0,
+    "crash": 16,
     "timeout": 0,
     "logic_violation": 0,
     "drift": 0,
@@ -18,5 +357,5 @@
   },
   "degradation_fallback_note": "When no baseline exists, potential degradation entries are classified as logic_violation",
   "unclassified": [],
-  "summary": "0 failures classified: crash=0, timeout=0, logic_violation=0, drift=0, degradation=0. 0 unclassified."
+  "summary": "16 failures classified: crash=16, timeout=0, logic_violation=0, drift=0, degradation=0. 0 unclassified."
 }

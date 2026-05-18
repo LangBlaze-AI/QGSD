@@ -1,22 +1,23 @@
 {
   "schema_version": "1",
-  "generated": "2026-05-18T14:59:20.666Z",
+  "generated": "2026-05-18T14:59:43.179Z",
   "session_gap_ms": 300000,
-  "total_events": 528,
+  "total_events": 530,
   "date_range": {
     "earliest": "2026-05-18T14:30:35.099Z",
-    "latest": "2026-05-18T14:56:41.146Z"
+    "latest": "2026-05-18T14:59:36.941Z"
   },
   "sessions": [
     {
       "id": "session-001",
       "start": "2026-05-18T14:30:35.099Z",
-      "end": "2026-05-18T14:56:41.146Z",
-      "event_count": 528,
+      "end": "2026-05-18T14:59:36.941Z",
+      "event_count": 530,
       "actions": {
         "quorum_start": 400,
         "circuit_break": 80,
-        "quorum_block": 48
+        "quorum_block": 48,
+        "security_sweep": 2
       }
     }
   ],
@@ -38,13 +39,19 @@
       "sessions": [
         "session-001"
       ]
+    },
+    "security_sweep": {
+      "total": 2,
+      "sessions": [
+        "session-001"
+      ]
     }
   },
   "transition_index": [],
   "vocabulary_validation": {
-    "known": 3,
+    "known": 4,
     "unknown": 0,
     "unknown_actions": []
   },
-  "summary": "528 events across 1 sessions (2026-05-18T14:30:35.099Z to 2026-05-18T14:56:41.146Z). 3 known actions, 0 unknown. 0 distinct transitions."
+  "summary": "530 events across 1 sessions (2026-05-18T14:30:35.099Z to 2026-05-18T14:59:36.941Z). 4 known actions, 0 unknown. 0 distinct transitions."
 }

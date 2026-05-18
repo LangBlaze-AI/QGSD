@@ -1,8 +1,21 @@
 {
   "schema_version": "1",
-  "generated": "2026-05-18T14:59:20.885Z",
+  "generated": "2026-05-18T14:59:56.262Z",
   "total_unmapped_events": 0,
   "candidates": [],
-  "missing_transitions": [],
-  "summary": "0 unmapped events found. 0 candidate(s): . 0 potentially missing transitions."
+  "missing_transitions": [
+    {
+      "from_action": "quorum_start",
+      "to_action": "security_sweep",
+      "count": 1,
+      "note": "XState mapping missing: from=[object Object], to=null"
+    },
+    {
+      "from_action": "security_sweep",
+      "to_action": "security_sweep",
+      "count": 1,
+      "note": "XState mapping missing: from=null, to=null"
+    }
+  ],
+  "summary": "0 unmapped events found. 0 candidate(s): . 2 potentially missing transitions."
 }
