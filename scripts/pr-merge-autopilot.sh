@@ -754,8 +754,15 @@ if [[ "$MERGE_READY" == "true" ]]; then
       status_green "Merged PR #$PR_NUMBER via squash merge"
       status_green "Branch deleted"
     else
-      status_red "Failed to merge PR #$PR_NUMBER"
-      exit 1
+      # gh pr merge may fail when GitHub auto-merged the PR during the polling
+      # loop. Re-query server state before reporting failure.
+      POST_MERGE_STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt,mergeCommit --jq '.state' 2>/dev/null || echo "UNKNOWN")
+      if [[ "$POST_MERGE_STATE" == "MERGED" ]]; then
+        status_green "PR #$PR_NUMBER was already merged (likely via GitHub auto-merge)"
+      else
+        status_red "Failed to merge PR #$PR_NUMBER (state: $POST_MERGE_STATE)"
+        exit 1
+      fi
     fi
   else
     status_yellow "Would merge PR #$PR_NUMBER via squash and delete branch"
