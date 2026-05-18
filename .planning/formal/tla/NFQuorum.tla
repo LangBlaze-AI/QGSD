@@ -4,7 +4,7 @@
  * GENERATED — do not edit by hand.
  * Source of truth: src/machines/nf-workflow.machine.ts
  * Regenerate:      node bin/generate-formal-specs.cjs
- * Generated:       2026-04-30
+ * Generated:       2026-05-13
 
  * Models the quorum workflow defined in src/machines/nf-workflow.machine.ts.
  * Guard translations (from GUARD_REGISTRY in bin/generate-formal-specs.cjs):
