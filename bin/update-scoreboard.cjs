@@ -31,7 +31,7 @@ const https = require('https');
 // Score delta lookup
 // ---------------------------------------------------------------------------
 
-const SCORE_DELTAS = {
+const DEFAULT_SCORE_DELTAS = {
   TP:      1,
   TN:      5,
   FP:     -3,
@@ -41,6 +41,31 @@ const SCORE_DELTAS = {
   UNAVAIL: 0,
   '':      0,
 };
+
+/**
+ * Load calibrated deltas from config file if available.
+ * Falls back to DEFAULT_SCORE_DELTAS if no config or invalid config.
+ */
+function loadScoreDeltas() {
+  try {
+    const pp = require('./planning-paths.cjs');
+    const configPath = pp.resolveWithFallback(process.cwd(), 'calibrated-deltas');
+    if (fs.existsSync(configPath)) {
+      const raw = fs.readFileSync(configPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.deltas && typeof parsed.deltas === 'object') {
+        const required = ['TP', 'TN', 'FP', 'FN', 'TP+', 'TN+', 'UNAVAIL', ''];
+        const allPresent = required.every(k => typeof parsed.deltas[k] === 'number');
+        if (allPresent) {
+          return { deltas: parsed.deltas, source: 'calibrated' };
+        }
+      }
+    }
+  } catch (_) {
+    // Any error — fail-open to defaults
+  }
+  return { deltas: DEFAULT_SCORE_DELTAS, source: 'default' };
+}
 
 const VALID_MODELS   = ['claude', 'gemini', 'opencode', 'copilot', 'codex', 'deepseek', 'minimax', 'qwen-coder', 'kimi', 'llama4'];
 const VALID_RESULTS  = ['TP', 'TN', 'FP', 'FN', 'TP+', 'TN+', 'UNAVAIL', ''];
@@ -210,7 +235,8 @@ function loadData(scoreboard) {
 // Cumulative stats recompute (from-scratch to avoid drift)
 // ---------------------------------------------------------------------------
 
-function recomputeStats(data) {
+function recomputeStats(data, deltas) {
+  deltas = deltas || DEFAULT_SCORE_DELTAS;
   // Reset all model stats
   for (const model of VALID_MODELS) {
     if (!data.models[model]) data.models[model] = emptyModelStats();
@@ -233,7 +259,7 @@ function recomputeStats(data) {
       const m = data.models[model];
       m.invocations += 1;
 
-      const delta = SCORE_DELTAS[vote];
+      const delta = deltas[vote];
       if (delta === undefined) continue; // unknown vote code — skip
 
       m.score += delta;
@@ -255,7 +281,8 @@ function emptySlotStats(slot, modelId) {
   return { slot, model: modelId, score: 0, tp: 0, tn: 0, fp: 0, fn: 0, impr: 0, invocations: 0 };
 }
 
-function recomputeSlots(data) {
+function recomputeSlots(data, deltas) {
+  deltas = deltas || DEFAULT_SCORE_DELTAS;
   // Reset all slot stats in data.slots
   for (const key of Object.keys(data.slots)) {
     const s = data.slots[key];
@@ -270,7 +297,7 @@ function recomputeSlots(data) {
       if (!data.slots[key]) continue;  // key not in slots map — skip
       const s = data.slots[key];
       s.invocations += 1;
-      const delta = SCORE_DELTAS[vote];
+      const delta = deltas[vote];
       if (delta === undefined) continue;
       s.score += delta;
       if (vote === 'TP' || vote === 'TP+')  s.tp   += 1;
@@ -826,6 +853,7 @@ async function getAvailability(argv) {
 // ---------------------------------------------------------------------------
 
 async function mergeWave(argv) {
+  const { deltas: activeDeltas } = loadScoreDeltas();
   const args           = parseArgs(argv);
   const scoreboardPath = args.scoreboard || defaultScoreboardPath();
   const dir            = args.dir        || '.planning/scoreboard-tmp';
@@ -961,8 +989,8 @@ async function mergeWave(argv) {
   }
 
   // Recompute stats from scratch
-  recomputeStats(data);
-  recomputeSlots(data);
+  recomputeStats(data, activeDeltas);
+  recomputeSlots(data, activeDeltas);
   computeDeliveryStats(data);
   computeFlakiness(data);
 
@@ -989,6 +1017,7 @@ async function main() {
   if (rawArgs[0] === 'get-availability') return getAvailability(rawArgs.slice(1));
   if (rawArgs[0] === 'merge-wave')       return mergeWave(rawArgs.slice(1));
 
+  const { deltas: activeDeltas, source: deltaSource } = loadScoreDeltas();
   const parsed  = parseArgs(rawArgs);
   const cfg     = validate(parsed);
 
@@ -1019,7 +1048,7 @@ async function main() {
     data.rounds.push(roundEntry);
 
     // Recompute slot stats only (do NOT call recomputeStats — that is for --model path)
-    recomputeSlots(data);
+    recomputeSlots(data, activeDeltas);
 
     // Write back
     const absPath = path.resolve(process.cwd(), cfg.scoreboard);
@@ -1109,7 +1138,7 @@ async function main() {
   }
 
   // Recompute all cumulative stats from scratch
-  recomputeStats(data);
+  recomputeStats(data, activeDeltas);
 
   // Write back
   const absPath = path.resolve(process.cwd(), cfg.scoreboard);
@@ -1119,7 +1148,7 @@ async function main() {
   fs.renameSync(tmpPath3, absPath);
 
   // Print confirmation
-  const delta    = SCORE_DELTAS[cfg.result] || 0;
+  const delta    = activeDeltas[cfg.result] || 0;
   const sign     = delta >= 0 ? '+' : '';
   const newScore = data.models[cfg.model].score;
   const deltaStr = cfg.result === '' ? '(not scored)' : `${cfg.result} (${sign}${delta})`;
@@ -1132,7 +1161,7 @@ async function main() {
 
 // Guard pattern: only export when require()d by tests, not when run as a CLI script
 if (typeof module !== 'undefined') {
-  module.exports = { computeDeliveryStats, computeFlakiness, emptyData };
+  module.exports = { computeDeliveryStats, computeFlakiness, emptyData, loadScoreDeltas, DEFAULT_SCORE_DELTAS };
 }
 
 // Only run main() when invoked as a script, not when require()d by tests

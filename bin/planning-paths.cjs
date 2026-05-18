@@ -51,6 +51,10 @@ const TYPES = {
     canonical: (root, p) => path.join(root, '.planning', 'quorum', 'debates', p.filename),
     legacy:    (root, p) => path.join(root, '.planning', 'debates', p.filename),
   },
+  'calibrated-deltas': {
+    canonical: (root) => path.join(root, '.planning', 'quorum', 'calibrated-deltas.json'),
+    legacy:    (root) => path.join(root, '.planning', 'calibrated-deltas.json'),
+  },
 
   // Telemetry
   'conformance-events': {
