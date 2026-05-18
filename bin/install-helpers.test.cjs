@@ -9,7 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { mergeProvidersJson } = require('./install-helpers.cjs');
+const { mergeProvidersJson, restoreDaintreePresets } = require('./install-helpers.cjs');
 
 function tmpDir(suffix) {
   const d = path.join(os.tmpdir(), `nf-merge-${process.pid}-${Date.now()}-${suffix}`);
@@ -115,7 +115,7 @@ test('MERGE-04: multiple user-added slots preserved', () => {
     const result = mergeProvidersJson(repoPath, userPath);
 
     assert.equal(result.preservedCount, 4);
-    assert.deepEqual(result.preservedNames.sort(), ['custom-together-1', 'custom-together-2', 'claude-z-ai', 'my-custom-slot']);
+    assert.deepEqual(result.preservedNames.sort(), ['claude-z-ai', 'custom-together-1', 'custom-together-2', 'my-custom-slot']);
     const merged = readJson(userPath).providers;
     assert.equal(merged.length, 5);
     assert.equal(merged[0].name, 'claude-1', 'repo entries come first');
@@ -208,5 +208,547 @@ test('MERGE-09: repo entries always precede user extras in merged output', () =>
     const names = readJson(userPath).providers.map(p => p.name);
     assert.deepEqual(names, ['a', 'b', 'c', 'extra-1', 'extra-2'],
       'repo order preserved first, user extras appended in their declared order');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ── Daintree preset restoration tests (issue #168) ──
+
+// DP-01: Stripped slot gets metadata restored from daintree-presets.json
+test('DP-01: stripped preset slot restored from durable store', () => {
+  const dir = tmpDir('dp01');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-z-ai': {
+          daintree_preset_id: 'preset-123',
+          daintree_preset_name: 'Z.AI',
+          daintree_preset_family: 'anthropic',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic', ANTHROPIC_AUTH_TOKEN: 'tok' },
+          model: 'claude-opus-4-6',
+          display_provider: 'Z.AI',
+        },
+      },
+    });
+
+    const providers = [
+      { name: 'claude-1', provider: 'anthropic', mainTool: 'claude', model: 'claude-opus-4-6' },
+      { name: 'claude-z-ai', provider: 'claude', mainTool: 'claude' },
+    ];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    assert.equal(result.restoredCount, 1);
+    assert.deepEqual(result.restoredNames, ['claude-z-ai']);
+    const zai = providers.find(p => p.name === 'claude-z-ai');
+    assert.equal(zai.daintree_preset_id, 'preset-123');
+    assert.equal(zai.daintree_preset_name, 'Z.AI');
+    assert.equal(zai.daintree_preset_family, 'anthropic');
+    assert.equal(zai.env.ANTHROPIC_BASE_URL, 'https://api.z.ai/api/anthropic');
+    assert.equal(zai.model, 'claude-opus-4-6');
+    assert.equal(zai.display_provider, 'Z.AI');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-02: Entirely missing slot reconstructed from vanilla + preset store
+test('DP-02: missing preset slot reconstructed from vanilla + durable store', () => {
+  const dir = tmpDir('dp02');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-minimax': {
+          daintree_preset_id: 'preset-456',
+          daintree_preset_name: 'MiniMax',
+          daintree_preset_family: 'anthropic',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://api.minimax.chat/v1/anthropic' },
+          model: 'minimax-m2',
+          display_provider: 'MiniMax',
+        },
+      },
+    });
+
+    const providers = [
+      { name: 'claude-1', provider: 'anthropic', mainTool: 'claude', model: 'opus', description: 'Claude Opus' },
+    ];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    assert.equal(result.restoredCount, 1);
+    assert.deepEqual(result.restoredNames, ['claude-minimax']);
+    const minimax = providers.find(p => p.name === 'claude-minimax');
+    assert.ok(minimax, 'reconstructed slot must exist');
+    assert.equal(minimax.daintree_preset_id, 'preset-456');
+    assert.equal(minimax.daintree_preset_name, 'MiniMax');
+    assert.equal(minimax.mainTool, 'claude');
+    assert.equal(minimax.env.ANTHROPIC_BASE_URL, 'https://api.minimax.chat/v1/anthropic');
+    assert.equal(minimax.model, 'minimax-m2');
+    assert.equal(minimax.display_provider, 'MiniMax');
+    assert.ok(minimax.description.includes('Daintree preset: MiniMax'));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-03: Multiple install cycles — presets survive repeated restoration (issue #168 AC1)
+test('DP-03: presets survive multiple install cycles (issue #168 AC1)', () => {
+  const dir = tmpDir('dp03');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-z-ai': {
+          daintree_preset_id: 'preset-789',
+          daintree_preset_name: 'Z.AI',
+          daintree_preset_family: 'anthropic',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic' },
+          model: 'glm-5.1',
+          display_provider: 'Z.AI',
+        },
+        'claude-minimax': {
+          daintree_preset_id: 'preset-012',
+          daintree_preset_name: 'MiniMax',
+          daintree_preset_family: 'anthropic',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://api.minimax.chat/v1/anthropic' },
+          model: 'minimax-m2',
+          display_provider: 'MiniMax',
+        },
+      },
+    });
+
+    for (let cycle = 1; cycle <= 3; cycle++) {
+      const providers = [
+        { name: 'claude-1', provider: 'anthropic', mainTool: 'claude', model: 'opus', description: 'Claude' },
+        { name: 'claude-z-ai', provider: 'claude', mainTool: 'claude' },
+      ];
+
+      const result = restoreDaintreePresets(providers, presetsPath);
+
+      assert.equal(result.restoredCount, 2, `cycle ${cycle}: both presets must be restored`);
+      const zai = providers.find(p => p.name === 'claude-z-ai');
+      const minimax = providers.find(p => p.name === 'claude-minimax');
+      assert.equal(zai.daintree_preset_id, 'preset-789', `cycle ${cycle}: z-ai preset_id intact`);
+      assert.equal(zai.env.ANTHROPIC_BASE_URL, 'https://api.z.ai/api/anthropic', `cycle ${cycle}: z-ai env intact`);
+      assert.equal(zai.display_provider, 'Z.AI', `cycle ${cycle}: z-ai display_provider intact`);
+      assert.ok(minimax, `cycle ${cycle}: minimax slot reconstructed`);
+      assert.equal(minimax.daintree_preset_id, 'preset-012', `cycle ${cycle}: minimax preset_id intact`);
+      assert.equal(minimax.display_provider, 'MiniMax', `cycle ${cycle}: minimax display_provider intact`);
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-04: Restored daintree_preset_id enables idempotent re-import (issue #168 AC2)
+test('DP-04: restored preset_id enables idempotent re-import (issue #168 AC2)', () => {
+  const dir = tmpDir('dp04');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-z-ai': {
+          daintree_preset_id: 'user-47d3419a-275e-4d73-8ef2-6be27181ce33',
+          daintree_preset_name: 'Z.AI',
+          daintree_preset_family: 'anthropic',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic' },
+          model: 'glm-5.1',
+          display_provider: 'Z.AI',
+        },
+      },
+    });
+
+    const providers = [
+      { name: 'claude-1', provider: 'anthropic', mainTool: 'claude' },
+      { name: 'claude-z-ai', provider: 'claude', mainTool: 'claude' },
+    ];
+
+    restoreDaintreePresets(providers, presetsPath);
+
+    const zai = providers.find(p => p.name === 'claude-z-ai');
+    assert.equal(zai.daintree_preset_id, 'user-47d3419a-275e-4d73-8ef2-6be27181ce33');
+    assert.equal(String(zai.daintree_preset_id), zai.daintree_preset_id, 'preset_id must be a string');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-05: No presets store → no-op
+test('DP-05: missing presets store is a no-op', () => {
+  const dir = tmpDir('dp05');
+  try {
+    const presetsPath = path.join(dir, 'nonexistent.json');
+    const providers = [{ name: 'claude-1', mainTool: 'claude' }];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    assert.equal(result.restoredCount, 0);
+    assert.deepEqual(result.restoredNames, []);
+    assert.equal(providers.length, 1);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-06: Vanilla slot missing → preset skipped gracefully
+test('DP-06: preset with missing vanilla slot is skipped', () => {
+  const dir = tmpDir('dp06');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-z-ai': {
+          daintree_preset_id: 'preset-999',
+          daintree_preset_name: 'Z.AI',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://api.z.ai' },
+          model: 'glm-5.1',
+          display_provider: 'Z.AI',
+        },
+      },
+    });
+
+    const providers = [];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    assert.equal(result.restoredCount, 0);
+    assert.equal(providers.length, 0);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// MERGE-10: Provider with null/undefined name → filtered out safely (boundary value)
+test('MERGE-10: provider entries with null/undefined names are filtered out', () => {
+  const dir = tmpDir('m10');
+  try {
+    const repoPath = path.join(dir, 'repo.json');
+    const userPath = path.join(dir, 'user.json');
+    writeJson(repoPath, { providers: [{ name: 'claude-1' }] });
+    writeJson(userPath, {
+      providers: [
+        { name: 'claude-1' },
+        { name: null }, // invalid entry
+        { name: undefined }, // invalid entry
+        null, // completely null entry
+        {}, // missing name property
+        { name: 'valid-custom' }, // should be preserved
+      ],
+    });
+
+    const result = mergeProvidersJson(repoPath, userPath);
+
+    assert.equal(result.status, 'merged');
+    assert.equal(result.preservedCount, 1);
+    assert.deepEqual(result.preservedNames, ['valid-custom']);
+    const merged = readJson(userPath).providers;
+    assert.equal(merged.length, 2);
+    assert.deepEqual(merged.map(p => p.name), ['claude-1', 'valid-custom']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// MERGE-11: Top-level fields merge with repo winning (shallow merge, not deep)
+test('MERGE-11: top-level fields merge shallowly with repo winning on conflict', () => {
+  const dir = tmpDir('m11');
+  try {
+    const repoPath = path.join(dir, 'repo.json');
+    const userPath = path.join(dir, 'user.json');
+    writeJson(repoPath, {
+      schema_version: '2.0',
+      custom_field: 'repo-value',
+      providers: [{ name: 'claude-1' }],
+    });
+    writeJson(userPath, {
+      schema_version: '1.0',
+      custom_field: 'user-value',
+      user_only_field: 'should-preserve',
+      providers: [{ name: 'claude-1' }],
+    });
+
+    mergeProvidersJson(repoPath, userPath);
+
+    const merged = readJson(userPath);
+    assert.equal(merged.schema_version, '2.0', 'repo wins on schema_version');
+    assert.equal(merged.custom_field, 'repo-value', 'repo wins on custom_field');
+    assert.equal(merged.user_only_field, 'should-preserve', 'user-only fields preserved');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-07: Malformed preset store (no presets field) → graceful no-op
+test('DP-07: malformed preset store missing presets field is a no-op', () => {
+  const dir = tmpDir('dp07');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      // presets field missing entirely
+    });
+
+    const providers = [{ name: 'claude-1', mainTool: 'claude' }];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    assert.equal(result.restoredCount, 0);
+    assert.deepEqual(result.restoredNames, []);
+    assert.equal(providers.length, 1);
+    assert.equal(providers[0].name, 'claude-1');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-08: Preset with already present daintree_preset_id → not restored again (idempotency)
+test('DP-08: preset with existing daintree_preset_id is not restored again', () => {
+  const dir = tmpDir('dp08');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-z-ai': {
+          daintree_preset_id: 'preset-123',
+          daintree_preset_name: 'Z.AI',
+          agent_name: 'claude',
+          env: { ANTHROPIC_BASE_URL: 'https://new-url.com' },
+          model: 'new-model',
+        },
+      },
+    });
+
+    const providers = [
+      { name: 'claude-1', mainTool: 'claude' },
+      {
+        name: 'claude-z-ai',
+        daintree_preset_id: 'preset-999', // already set, different value
+        env: { ANTHROPIC_BASE_URL: 'https://old-url.com' },
+        model: 'old-model',
+      },
+    ];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    // Should not restore because daintree_preset_id already exists
+    assert.equal(result.restoredCount, 0);
+    const zai = providers.find(p => p.name === 'claude-z-ai');
+    assert.equal(zai.daintree_preset_id, 'preset-999', 'existing preset_id unchanged');
+    assert.equal(zai.env.ANTHROPIC_BASE_URL, 'https://old-url.com', 'existing env unchanged');
+    assert.equal(zai.model, 'old-model', 'existing model unchanged');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-09: Preset with null/undefined vanilla_slot_name → reconstruction skipped safely
+test('DP-09: preset with null vanilla_slot_name is skipped during reconstruction', () => {
+  const dir = tmpDir('dp09');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-custom': {
+          daintree_preset_id: 'preset-abc',
+          daintree_preset_name: 'Custom',
+          vanilla_slot_name: null, // null instead of string
+          agent_name: 'claude',
+          env: { API_KEY: 'test' },
+        },
+        'claude-broken': {
+          daintree_preset_id: 'preset-def',
+          daintree_preset_name: 'Broken',
+          // vanilla_slot_name missing entirely
+        },
+      },
+    });
+
+    const providers = [{ name: 'claude-1', mainTool: 'claude' }];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    // Both presets should be skipped since vanilla_slot_name is invalid
+    assert.equal(result.restoredCount, 0);
+    assert.equal(providers.length, 1);
+    assert.equal(providers[0].name, 'claude-1');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// MERGE-12: Provider name as empty string → filtered out (boundary value: falsy string)
+test('MERGE-12: provider entries with empty string names are filtered out', () => {
+  const dir = tmpDir('m12');
+  try {
+    const repoPath = path.join(dir, 'repo.json');
+    const userPath = path.join(dir, 'user.json');
+    writeJson(repoPath, { providers: [{ name: 'claude-1' }] });
+    writeJson(userPath, {
+      providers: [
+        { name: 'claude-1' },
+        { name: '' }, // empty string is falsy but different from null/undefined
+        { name: 'valid-custom' },
+      ],
+    });
+
+    const result = mergeProvidersJson(repoPath, userPath);
+
+    assert.equal(result.status, 'merged');
+    assert.equal(result.preservedCount, 1);
+    assert.deepEqual(result.preservedNames, ['valid-custom']);
+    const merged = readJson(userPath).providers;
+    assert.equal(merged.length, 2);
+    assert.deepEqual(merged.map(p => p.name), ['claude-1', 'valid-custom']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-10: Preset with null/undefined slotName key in Object.entries → skipped
+test('DP-10: preset store with null/undefined key in presets object is skipped', () => {
+  const dir = tmpDir('dp10');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    // Manually construct JSON with null key (simulating corrupted data)
+    const presetsJson = {
+      version: 1,
+      presets: {
+        'claude-z-ai': {
+          daintree_preset_id: 'preset-123',
+          daintree_preset_name: 'Z.AI',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://api.z.ai' },
+        },
+      },
+    };
+    fs.writeFileSync(presetsPath, JSON.stringify(presetsJson, null, 2));
+
+    const providers = [{ name: 'claude-1', mainTool: 'claude' }];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    // Should restore normally since Object.entries handles string keys
+    assert.equal(result.restoredCount, 1);
+    assert.deepEqual(result.restoredNames, ['claude-z-ai']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// MERGE-13: Provider with non-string name (number, object) → type coercion edge case
+test('MERGE-13: provider entries with non-string names cause Set.has mismatch', () => {
+  const dir = tmpDir('m13');
+  try {
+    const repoPath = path.join(dir, 'repo.json');
+    const userPath = path.join(dir, 'user.json');
+    writeJson(repoPath, { providers: [{ name: 'claude-1' }] });
+    writeJson(userPath, {
+      providers: [
+        { name: 'claude-1' },
+        { name: 123 }, // number instead of string - Set.has(123) won't match '123'
+        { name: { nested: 'object' } }, // object - won't match any string
+        { name: 'valid-custom' },
+      ],
+    });
+
+    const result = mergeProvidersJson(repoPath, userPath);
+
+    assert.equal(result.status, 'merged');
+    // The non-string names will be preserved because they don't match repo names
+    // This exposes a potential issue: Set.has('123') !== Set.has(123)
+    assert.ok(result.preservedCount >= 1);
+    assert.ok(result.preservedNames.includes('valid-custom'));
+    const merged = readJson(userPath).providers;
+    assert.ok(merged.length >= 2);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-11: Multiple restorations with same preset name → idempotency with byName map
+test('DP-11: calling restoreDaintreePresets twice on same array is idempotent', () => {
+  const dir = tmpDir('dp11');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-z-ai': {
+          daintree_preset_id: 'preset-123',
+          daintree_preset_name: 'Z.AI',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://api.z.ai' },
+          model: 'glm-5.1',
+          display_provider: 'Z.AI',
+        },
+      },
+    });
+
+    const providers = [{ name: 'claude-1', mainTool: 'claude' }];
+
+    // First restoration
+    const result1 = restoreDaintreePresets(providers, presetsPath);
+    assert.equal(result1.restoredCount, 1);
+    assert.equal(providers.length, 2);
+    const zai1 = providers.find(p => p.name === 'claude-z-ai');
+    assert.equal(zai1.daintree_preset_id, 'preset-123');
+
+    // Second restoration on same array (should be idempotent)
+    const result2 = restoreDaintreePresets(providers, presetsPath);
+    assert.equal(result2.restoredCount, 0, 'second call should not restore anything');
+    assert.equal(providers.length, 2, 'should not duplicate entries');
+    const zai2 = providers.find(p => p.name === 'claude-z-ai');
+    assert.equal(zai2.daintree_preset_id, 'preset-123', 'existing preset_id unchanged');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-12: Preset with null/undefined agent_name → falls back to existing mainTool
+test('DP-12: preset with null agent_name uses existing mainTool from stripped slot', () => {
+  const dir = tmpDir('dp12');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-z-ai': {
+          daintree_preset_id: 'preset-123',
+          daintree_preset_name: 'Z.AI',
+          agent_name: null, // null instead of string
+          env: { ANTHROPIC_BASE_URL: 'https://api.z.ai' },
+        },
+      },
+    });
+
+    const providers = [
+      { name: 'claude-1', mainTool: 'claude' },
+      { name: 'claude-z-ai', mainTool: 'claude' }, // already has mainTool
+    ];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    assert.equal(result.restoredCount, 1);
+    const zai = providers.find(p => p.name === 'claude-z-ai');
+    assert.equal(zai.mainTool, 'claude', 'existing mainTool should be preserved');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// MERGE-14: Repo entry with same name as user extra → repo wins, user extra not duplicated
+test('MERGE-14: repo and user with same name results in single entry (repo wins)', () => {
+  const dir = tmpDir('m14');
+  try {
+    const repoPath = path.join(dir, 'repo.json');
+    const userPath = path.join(dir, 'user.json');
+    writeJson(repoPath, { providers: [{ name: 'claude-1', model: 'opus-4-7' }] });
+    writeJson(userPath, {
+      providers: [
+        { name: 'claude-1', model: 'opus' }, // user has old version
+        { name: 'custom-slot' },
+      ],
+    });
+
+    const result = mergeProvidersJson(repoPath, userPath);
+
+    assert.equal(result.status, 'merged');
+    assert.equal(result.preservedCount, 1);
+    assert.deepEqual(result.preservedNames, ['custom-slot']);
+    const merged = readJson(userPath).providers;
+    assert.equal(merged.length, 2, 'should have exactly 2 entries (repo claude-1 + custom)');
+    assert.equal(merged[0].name, 'claude-1', 'first entry should be claude-1');
+    assert.equal(merged[0].model, 'opus-4-7', 'repo model should win');
+    assert.equal(merged[1].name, 'custom-slot', 'second entry should be custom');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

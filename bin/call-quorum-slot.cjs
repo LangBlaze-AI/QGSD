@@ -29,6 +29,7 @@ const path      = require('path');
 const os        = require('os');
 const { resolveCli } = require('./resolve-cli.cjs');
 const { acquireSlot, releaseSlot, providerKeyFromUrl } = require('./provider-concurrency.cjs');
+const { resolveEnvPlaceholders, findUnresolvedPlaceholders, isPlaceholder, extractPlaceholderVar, namespacedSecretKey } = require('./resolve-env.cjs');
 
 // ─── Utilities ──────────────────────────────────────────────────────────────
 function sleep(ms) {
@@ -276,16 +277,15 @@ if (!slot && require.main === module) {
 }
 
 // ─── Find providers.json ───────────────────────────────────────────────────────
-// Path precedence: the slash path (~/.claude/nf/bin/) is where /nf:link-daintree writes
-// preset-cloned slots and what mcpServers UNIFIED_PROVIDERS_CONFIG references — it's the
-// canonical runtime source. The dash path (~/.claude/nf-bin/) lags behind for Daintree
-// fan-out additions. Without preferring slash, the quorum dispatcher silently omits
-// Daintree slots (e.g. claude-z-ai, claude-minimax).
+// Canonical path is ~/.claude/nf-bin/providers.json — all code reads/writes this location.
+// __dirname/providers.json (same dir as this script, which lives in nf-bin/) is the first
+// fallback. The legacy ~/.claude/nf/bin/ path is checked last for backwards compatibility
+// (it may be a symlink to nf-bin/ after migration).
 function findProviders() {
   const searchPaths = [
-    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),   // canonical (slash)
-    path.join(__dirname, 'providers.json'),                              // same dir (nf-bin)
-    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),      // installed fallback
+    path.join(__dirname, 'providers.json'),                              // same dir (nf-bin) — canonical
+    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),      // installed canonical
+    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),   // legacy (pre-migration)
   ];
 
   // Also derive path from unified-1 MCP server config in ~/.claude.json
@@ -374,7 +374,7 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     }
   }
 
-  const env  = { ...process.env, ...(provider.env ?? {}) };
+  const env  = { ...process.env, ...resolveEnvPlaceholders(provider.env ?? {}) };
 
   return new Promise((resolve, reject) => {
     let child;
@@ -726,6 +726,41 @@ async function main() {
   if (!prompt) {
     process.stderr.write('[call-quorum-slot] No prompt received on stdin\n');
     process.exit(1);
+  }
+
+  // ─── ${VAR} placeholder bootstrap ────────────────────────────────────────────
+  // Load secrets for ${VAR} placeholders in the provider's env. The fan-out
+  // import (issue 169) writes secret values as ${KEY} placeholders and stores
+  // actual values in the secrets store (~/.claude/nf-secrets.json).
+  // Secrets are namespaced by slot name (<slot>__<key>) to prevent collisions
+  // when multiple providers share the same env key with different values.
+  if (provider.env) {
+    try {
+      const secrets = require('./secrets.cjs');
+      let loaded = 0;
+      for (const [k, v] of Object.entries(provider.env)) {
+        const envVarName = extractPlaceholderVar(v);
+        if (envVarName !== null && process.env[envVarName] === undefined) {
+          // Try namespaced key first, then fall back to unnamespaced
+          const secret = await secrets.get('nforma', namespacedSecretKey(slot, envVarName))
+                        ?? await secrets.get('nforma', envVarName);
+          if (secret) {
+            process.env[envVarName] = secret;
+            loaded++;
+          }
+        }
+      }
+      if (loaded > 0) {
+        process.stderr.write(`[call-quorum-slot] Loaded ${loaded} secret(s) for slot ${slot} from secrets store\n`);
+      }
+      // Warn on unresolved placeholders
+      const unresolved = findUnresolvedPlaceholders(provider.env);
+      if (unresolved.length > 0) {
+        process.stderr.write(`[call-quorum-slot] WARNING: unresolved placeholder(s): ${unresolved.join(', ')} — set in env or run /nf:mcp-setup to store in secrets\n`);
+      }
+    } catch (e) {
+      process.stderr.write(`[call-quorum-slot] secrets bootstrap for slot ${slot}: ${e.message}\n`);
+    }
   }
 
   // ─── Layer 3: Pre-dispatch scoreboard cooldown check ────────────────────────

@@ -85,4 +85,69 @@ function mergeProvidersJson(repoPath, userPath, opts = {}) {
   return { status: 'merged', preservedCount: preservedNames.length, preservedNames };
 }
 
-module.exports = { mergeProvidersJson };
+/**
+ * Restore daintree preset entries from the install-immune store (~/.claude/daintree-presets.json).
+ *
+ * During install, ensureMcpSlotsFromProviders reconstructs providers.json from ~/.claude.json
+ * mcpServers — but that source lacks daintree-specific metadata (daintree_preset_id, env overrides,
+ * model overrides, display_provider). This function overlays the preset metadata from the durable
+ * store onto the reconstructed providers array.
+ *
+ * Two restoration modes:
+ *   1. Slot exists but is stripped (missing daintree_preset_id) → overlay metadata
+ *   2. Slot is entirely missing → reconstruct from vanilla + preset store
+ *
+ * @param {Array} providers - the reconstructed providers array (mutated in place)
+ * @param {string} presetsStorePath - path to ~/.claude/daintree-presets.json
+ * @returns {{ restoredCount: number, restoredNames: string[] }}
+ */
+function restoreDaintreePresets(providers, presetsStorePath) {
+  if (!Array.isArray(providers)) return { restoredCount: 0, restoredNames: [] };
+
+  let presetsStore;
+  try {
+    presetsStore = JSON.parse(fs.readFileSync(presetsStorePath, 'utf8'));
+  } catch (_) {
+    return { restoredCount: 0, restoredNames: [] };
+  }
+  if (!presetsStore || !presetsStore.presets) return { restoredCount: 0, restoredNames: [] };
+
+  const byName = new Map(providers.map(p => [p.name, p]));
+  const restoredNames = [];
+
+  for (const [slotName, preset] of Object.entries(presetsStore.presets)) {
+    const existing = byName.get(slotName);
+    if (existing) {
+      if (!existing.daintree_preset_id && preset.daintree_preset_id) {
+        existing.daintree_preset_id = preset.daintree_preset_id;
+        existing.daintree_preset_name = preset.daintree_preset_name;
+        if (preset.daintree_preset_family) existing.daintree_preset_family = preset.daintree_preset_family;
+        if (preset.env) existing.env = { ...(existing.env || {}), ...preset.env };
+        if (preset.model) existing.model = preset.model;
+        if (preset.display_provider) existing.display_provider = preset.display_provider;
+        restoredNames.push(slotName);
+      }
+    } else {
+      const vanilla = preset.vanilla_slot_name ? byName.get(preset.vanilla_slot_name) : null;
+      if (vanilla) {
+        const reconstructed = JSON.parse(JSON.stringify(vanilla));
+        reconstructed.name = slotName;
+        reconstructed.mainTool = preset.agent_name || reconstructed.mainTool;
+        reconstructed.daintree_preset_id = preset.daintree_preset_id;
+        reconstructed.daintree_preset_name = preset.daintree_preset_name;
+        if (preset.daintree_preset_family) reconstructed.daintree_preset_family = preset.daintree_preset_family;
+        reconstructed.env = { ...(vanilla.env || {}), ...(preset.env || {}) };
+        if (preset.model) reconstructed.model = preset.model;
+        if (preset.display_provider) reconstructed.display_provider = preset.display_provider;
+        reconstructed.description = (vanilla.description || '') + ' — Daintree preset: ' + preset.daintree_preset_name;
+        providers.push(reconstructed);
+        byName.set(slotName, reconstructed);
+        restoredNames.push(slotName);
+      }
+    }
+  }
+
+  return { restoredCount: restoredNames.length, restoredNames };
+}
+
+module.exports = { mergeProvidersJson, restoreDaintreePresets };

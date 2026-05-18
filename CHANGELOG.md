@@ -6,6 +6,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- fix(quorum): replace the fragile HTML-comment `FALLBACK_CHECKPOINT` transcript marker with a schema-validated structured checkpoint file (`.planning/quorum/checkpoints/round-<N>.json`). `/nf:quorum` now runs `quorum-checkpoint.cjs` to write the checkpoint; `nf-stop.js` reads and JSON-schema-validates that file instead of regex-parsing the transcript, so LLM stylistic variation in the comment can no longer bypass or trigger the FALLBACK-01 gate. The human-readable HTML comment is still emitted for the transcript but is no longer the gating mechanism. (#172)
+
 ## [0.43.1] - 2026-05-03
 
 ### Fixed
