@@ -135,6 +135,7 @@ const DEFAULT_CONFIG = {
   quorum: {
     maxSize: 4,
     preferSub: false,
+    min_live_voters: 2,  // minimum live voters for valid consensus (issue #170)
   },
   // agent_config: per-slot metadata.
   //   auth_type: "sub" (subscription, flat-fee) | "api" (pay-per-token)
