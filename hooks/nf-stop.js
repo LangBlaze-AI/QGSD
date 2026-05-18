@@ -158,6 +158,39 @@ function extractCommandTag(entry) {
   return m ? m[1].trim() : null;
 }
 
+// Extracts the value of the <command-args> XML tag injected by Claude Code for real slash
+// command invocations. Slash-command flags (e.g. --force-quorum, --n N) land here — NOT in
+// <command-name>. Returns the trimmed args content, or null if the tag is absent.
+function extractCommandArgs(entry) {
+  let text = '';
+  const content = entry.message?.content;
+  if (typeof content === 'string') {
+    text = content;
+  } else if (Array.isArray(content)) {
+    const first = content.find(c => c?.type === 'text');
+    text = first ? (first.text || '') : '';
+  }
+  const m = text.match(/<command-args>([\s\S]*?)<\/command-args>/);
+  return m ? m[1].trim() : null;
+}
+
+// Detects the --force-quorum waiver flag. Checks the extracted prompt text AND every
+// <command-args> tag in the turn — for a tagged slash command, extractPromptText returns
+// only the command name, so flags live in <command-args>. Scoped to user command args
+// (never hook-injected text) so a prior block reason mentioning the flag cannot self-waive.
+function hasForceQuorumFlag(currentTurnLines, promptText) {
+  if (/\b--force-quorum\b/.test(promptText)) return true;
+  for (const line of currentTurnLines) {
+    try {
+      const entry = JSON.parse(line);
+      if (entry.type !== 'user') continue;
+      const args = extractCommandArgs(entry);
+      if (args !== null && /\b--force-quorum\b/.test(args)) return true;
+    } catch { /* skip malformed lines */ }
+  }
+  return false;
+}
+
 // Returns true if any user entry in currentTurnLines contains an NF quorum command.
 // Uses XML-tag-first strategy: if a <command-name> tag is present, only that tag is tested
 // against cmdPattern (never the full body). Falls back to first 300 chars of message text
@@ -685,9 +718,13 @@ function countLiveSlotWorkers(currentTurnLines) {
         if (!Array.isArray(content)) continue;
         let hasSlotWorker = false;
         for (const block of content) {
-          if (block.type === 'tool_use' && block.name === 'Task') {
-            const inputStr = JSON.stringify(block.input || {});
-            if (inputStr.includes('nf-quorum-slot-worker') && block.id) {
+          if (block.type === 'tool_use' && block.name === 'Task' && block.id) {
+            // Match the structured subagent_type field — consistent with
+            // wasSlotWorkerUsed / detectUnavailWithoutFallback, and avoids matching
+            // the string in an unrelated Task's prompt/description.
+            const input = block.input || {};
+            const subagentType = input.subagent_type || input.subagentType || '';
+            if (subagentType === 'nf-quorum-slot-worker') {
               if (!currentRoundIds) currentRoundIds = new Set();
               currentRoundIds.add(block.id);
               hasSlotWorker = true;
@@ -707,6 +744,9 @@ function countLiveSlotWorkers(currentTurnLines) {
         if (!Array.isArray(content)) continue;
         for (const block of content) {
           if (block.type === 'tool_result' && block.tool_use_id) {
+            // Errored tool results are non-votes — leave them unrecorded so they
+            // are not counted toward the live-voter total.
+            if (block.is_error === true) continue;
             const resultText = Array.isArray(block.content)
               ? block.content.map(c => c.text || '').join('')
               : (typeof block.content === 'string' ? block.content : '');
@@ -919,7 +959,7 @@ function main() {
       // Extract --n N flag from current-turn user prompt (if present)
       const promptText = extractPromptText(currentTurnLines);
       const quorumSizeOverride = parseQuorumSizeFlag(promptText);
-      const hasForceQuorum = /\b--force-quorum\b/.test(promptText);
+      const hasForceQuorum = hasForceQuorumFlag(currentTurnLines, promptText);
       const soloMode = quorumSizeOverride === 1;
 
       // GUARD 6: Solo mode (--n 1) — Claude-only quorum, no external models required

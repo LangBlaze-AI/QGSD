@@ -164,8 +164,8 @@ SafetyInvariant2 ==
   decision = "BLOCK" => ~hasQuorumEvidence \/ liveVoterCount < MinLiveVoters
 
 (*
- * SafetyInvariant3: PASS can only be decided on a planning turn if quorum evidence is present
- * AND live voter count meets the floor.
+ * SafetyInvariant3: PASS can only be decided on a planning turn if quorum evidence is present.
+ * The live-voter floor is enforced separately by the FloorSafety invariant (below).
  * (When hasCommand=FALSE, PASS is trivially correct — not a planning turn.)
  *)
 \* @requirement STOP-04

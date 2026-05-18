@@ -31,12 +31,14 @@ export const nfWorkflowMachine = setup({
     unanimityMet: ({ context }) =>
       context.successCount === context.polledCount,
 
-    floorMet: ({ context }) =>
-      context.successCount >= context.minLiveVoters,
+    floorMet: ({ context, event }) =>
+      event.type === 'VOTES_COLLECTED' &&
+      event.successCount >= context.minLiveVoters,
 
-    unanimityAndFloorMet: ({ context }) =>
-      context.successCount === context.polledCount &&
-      context.successCount >= context.minLiveVoters,
+    unanimityAndFloorMet: ({ context, event }) =>
+      event.type === 'VOTES_COLLECTED' &&
+      event.successCount === context.polledCount &&
+      event.successCount >= context.minLiveVoters,
 
     noInfiniteDeliberation: ({ context }) =>
       context.deliberationRounds < context.maxDeliberation,

@@ -1646,47 +1646,6 @@ test('TC-STANDARD-NON-QUORUM-NOT-ENFORCED: standard mode does NOT enforce /nf:ex
 // TC-FLOOR-4: Non-slot-worker path — successCount=2, maxSize=2, floor=2 → PASS
 // TC-FLOOR-5: Floor disabled (min_live_voters=1), 1 live voter → PASS (backward compat)
 
-// Helper: build a slot-worker Task dispatch assistant line
-function slotWorkerTaskLine(slotName, taskId) {
-  return JSON.stringify({
-    type: 'assistant',
-    message: {
-      role: 'assistant',
-      content: [{
-        type: 'tool_use',
-        id: taskId,
-        name: 'Task',
-        input: {
-          subagent_type: 'nf-quorum-slot-worker',
-          model: 'haiku',
-          description: `${slotName} quorum R1`,
-          prompt: 'node quorum-slot-dispatch.cjs --slot ' + slotName,
-        },
-      }],
-      stop_reason: 'tool_use',
-    },
-    timestamp: '2026-02-20T00:05:00Z',
-    uuid: `assistant-sw-${slotName}`,
-  });
-}
-
-// Helper: build a tool_result line for a slot-worker Task
-function slotWorkerResultLine(taskId, resultText, uuid) {
-  return JSON.stringify({
-    type: 'user',
-    message: {
-      role: 'user',
-      content: [{
-        type: 'tool_result',
-        tool_use_id: taskId,
-        content: [{ type: 'text', text: resultText }],
-      }],
-    },
-    timestamp: '2026-02-20T00:05:30Z',
-    uuid: uuid || `tr-sw-${taskId}`,
-  });
-}
-
 // TC-FLOOR-1: Slot-worker path — only 1 live voter out of 2 dispatched, floor=2 → BLOCK
 // Simulates the thin-consensus scenario from issue #170: one slot returns APPROVE,
 // the other returns UNAVAIL. With floor=2, this must BLOCK.
