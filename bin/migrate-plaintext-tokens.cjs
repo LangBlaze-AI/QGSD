@@ -68,7 +68,7 @@ if (allSecrets.length === 0) {
 
 process.stderr.write(`[migrate-plaintext-tokens] Found ${allSecrets.length} plaintext secret(s):\n`);
 for (const s of allSecrets) {
-  process.stderr.write(`  ${s.provider}.env.${s.key} = ${s.value.slice(0, 8)}...\n`);
+  process.stderr.write(`  ${s.provider}.env.${s.key} = [REDACTED]\n`);
 }
 
 if (DRY_RUN) {
@@ -82,7 +82,7 @@ let secretsStore = {};
 try { secretsStore = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {}; } catch (_) {}
 
 for (const s of allSecrets) {
-  secretsStore[s.key] = s.value;
+  secretsStore[s.provider + '__' + s.key] = s.value;
 }
 
 fs.mkdirSync(path.dirname(secretsPath), { recursive: true });

@@ -629,8 +629,20 @@ for (const item of plan) {
 // (~/.claude/nf-secrets.json) so they never appear on disk in providers.json or
 // its backups. Dispatch-time resolution in unified-mcp-server.mjs and
 // call-quorum-slot.cjs loads from the secrets store into process.env.
+//
+// Only providers touched by this fan-out (added or updated in the plan) are
+// masked — pre-existing vanilla slots and hand-written entries are left intact.
+// Secrets are namespaced by provider name (<name>__<key>) to prevent collisions
+// when multiple providers share the same env key with different token values.
 const SECRET_KEY_RE = /_(API_KEY|AUTH_TOKEN|TOKEN)$/;
 const PLACEHOLDER_RE = /^\$\{([^}]+)\}$/;
+
+// Collect names of providers that were actually touched by this fan-out
+const touchedNames = new Set();
+for (const item of plan) {
+  if (item.kind === 'add') touchedNames.add(item.newName);
+  else if (item.kind === 'update') touchedNames.add(item.existingName);
+}
 
 let secretsStore = {};
 const secretsPath = path.join(os.homedir(), '.claude', 'nf-secrets.json');
@@ -639,12 +651,14 @@ let secretsUpdated = false;
 
 for (const provider of providersData.providers) {
   if (!provider.env) continue;
+  if (!touchedNames.has(provider.name)) continue;
   for (const k of Object.keys(provider.env)) {
     if (SECRET_KEY_RE.test(k) && !PLACEHOLDER_RE.test(String(provider.env[k]))) {
-      // Store the plaintext value in secrets store under the key name
-      secretsStore[k] = provider.env[k];
+      // Store with namespaced key to prevent multi-provider collisions
+      const storeKey = provider.name + '__' + k;
+      secretsStore[storeKey] = provider.env[k];
       secretsUpdated = true;
-      // Replace with placeholder
+      // Replace with placeholder (uses the CLI-expected env key name)
       provider.env[k] = '${' + k + '}';
     }
   }

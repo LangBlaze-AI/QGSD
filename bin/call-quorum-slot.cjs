@@ -29,7 +29,7 @@ const path      = require('path');
 const os        = require('os');
 const { resolveCli } = require('./resolve-cli.cjs');
 const { acquireSlot, releaseSlot, providerKeyFromUrl } = require('./provider-concurrency.cjs');
-const { resolveEnvPlaceholders, findUnresolvedPlaceholders, isPlaceholder } = require('./resolve-env.cjs');
+const { resolveEnvPlaceholders, findUnresolvedPlaceholders, isPlaceholder, extractPlaceholderVar, namespacedSecretKey } = require('./resolve-env.cjs');
 
 // ─── Utilities ──────────────────────────────────────────────────────────────
 function sleep(ms) {
@@ -733,15 +733,20 @@ async function main() {
   // Load secrets for ${VAR} placeholders in the provider's env. The fan-out
   // import (issue 169) writes secret values as ${KEY} placeholders and stores
   // actual values in the secrets store (~/.claude/nf-secrets.json).
+  // Secrets are namespaced by slot name (<slot>__<key>) to prevent collisions
+  // when multiple providers share the same env key with different values.
   if (provider.env) {
     try {
       const secrets = require('./secrets.cjs');
       let loaded = 0;
       for (const [k, v] of Object.entries(provider.env)) {
-        if (isPlaceholder(v) && process.env[k] === undefined) {
-          const secret = await secrets.get('nforma', k);
+        const envVarName = extractPlaceholderVar(v);
+        if (envVarName !== null && process.env[envVarName] === undefined) {
+          // Try namespaced key first, then fall back to unnamespaced
+          const secret = await secrets.get('nforma', namespacedSecretKey(slot, envVarName))
+                        ?? await secrets.get('nforma', envVarName);
           if (secret) {
-            process.env[k] = secret;
+            process.env[envVarName] = secret;
             loaded++;
           }
         }

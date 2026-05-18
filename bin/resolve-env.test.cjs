@@ -5,6 +5,7 @@ const {
   isSecretKey, toPlaceholder, isPlaceholder,
   resolveEnvPlaceholders, resolveSinglePlaceholder,
   findPlaintextSecrets, maskSecrets, findUnresolvedPlaceholders,
+  extractPlaceholderVar, namespacedSecretKey,
   SECRET_KEY_RE, PLACEHOLDER_RE,
 } = require('./resolve-env.cjs');
 
@@ -193,4 +194,33 @@ test('findUnresolvedPlaceholders: empty when all resolved', () => {
   const env = { TOKEN: '${_NF_TEST_RESOLVE_ALL}' };
   assert.deepEqual(findUnresolvedPlaceholders(env), []);
   delete process.env._NF_TEST_RESOLVE_ALL;
+});
+
+// ---------------------------------------------------------------------------
+// extractPlaceholderVar
+// ---------------------------------------------------------------------------
+
+test('extractPlaceholderVar: extracts variable name from ${VAR}', () => {
+  assert.equal(extractPlaceholderVar('${ANTHROPIC_API_KEY}'), 'ANTHROPIC_API_KEY');
+  assert.equal(extractPlaceholderVar('${FOO_BAR}'), 'FOO_BAR');
+});
+
+test('extractPlaceholderVar: returns null for non-placeholder strings', () => {
+  assert.equal(extractPlaceholderVar('plain-value'), null);
+  assert.equal(extractPlaceholderVar(''), null);
+  assert.equal(extractPlaceholderVar('text${VAR}text'), null);
+});
+
+test('extractPlaceholderVar: returns null for null/undefined', () => {
+  assert.equal(extractPlaceholderVar(null), null);
+  assert.equal(extractPlaceholderVar(undefined), null);
+});
+
+// ---------------------------------------------------------------------------
+// namespacedSecretKey
+// ---------------------------------------------------------------------------
+
+test('namespacedSecretKey: combines slot and env key', () => {
+  assert.equal(namespacedSecretKey('claude-z-ai', 'ANTHROPIC_AUTH_TOKEN'), 'claude-z-ai__ANTHROPIC_AUTH_TOKEN');
+  assert.equal(namespacedSecretKey('claude-minimax', 'ANTHROPIC_API_KEY'), 'claude-minimax__ANTHROPIC_API_KEY');
 });

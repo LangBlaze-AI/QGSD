@@ -22,6 +22,7 @@ const require = createRequire(import.meta.url);
 const { resolveCli } = require('./resolve-cli.cjs');
 const { _pure: { detectInstalledProviders } } = require('./manage-agents-core.cjs');
 const { resolveEnvPlaceholders, findUnresolvedPlaceholders } = require('./resolve-env.cjs');
+const { extractPlaceholderVar, namespacedSecretKey } = require('./resolve-env.cjs');
 
 // ─── Load providers config ─────────────────────────────────────────────────────
 // Precedence:
@@ -973,16 +974,21 @@ async function main() {
   // The fan-out import (issue 169) writes secret values as ${KEY} placeholders
   // in providers.json and stores actual values in the secrets store. Without
   // this bootstrap, spawn-time resolution would fail with a missing env var.
+  // Secrets are namespaced by slot name (<slot>__<key>) to prevent collisions
+  // when multiple providers share the same env key with different values.
   if (SLOT && slotProvider && slotProvider.env) {
     try {
       const { isPlaceholder } = require('./resolve-env.cjs');
       const secrets = require('./secrets.cjs');
       let loaded = 0;
       for (const [k, v] of Object.entries(slotProvider.env)) {
-        if (isPlaceholder(v) && process.env[k] === undefined) {
-          const secret = await secrets.get('nforma', k);
+        const envVarName = extractPlaceholderVar(v);
+        if (envVarName !== null && process.env[envVarName] === undefined) {
+          // Try namespaced key first, then fall back to unnamespaced
+          const secret = await secrets.get('nforma', namespacedSecretKey(SLOT, envVarName))
+                        ?? await secrets.get('nforma', envVarName);
           if (secret) {
-            process.env[k] = secret;
+            process.env[envVarName] = secret;
             loaded++;
           }
         }

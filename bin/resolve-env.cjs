@@ -83,6 +83,20 @@ function findUnresolvedPlaceholders(envObj) {
   return unresolved;
 }
 
+// Extract the variable name from a ${VAR} placeholder string.
+// Returns null if not a placeholder.
+function extractPlaceholderVar(value) {
+  const m = String(value).match(PLACEHOLDER_RE);
+  return m ? m[1] : null;
+}
+
+// Build a namespaced secrets store key: "<slotName>__<envKey>"
+// This prevents collisions when multiple providers use the same env key
+// with different values (e.g., two presets both using ANTHROPIC_AUTH_TOKEN).
+function namespacedSecretKey(slotName, envKey) {
+  return slotName + '__' + envKey;
+}
+
 module.exports = {
   isSecretKey,
   toPlaceholder,
@@ -92,6 +106,8 @@ module.exports = {
   findPlaintextSecrets,
   maskSecrets,
   findUnresolvedPlaceholders,
+  extractPlaceholderVar,
+  namespacedSecretKey,
   SECRET_KEY_RE,
   PLACEHOLDER_RE,
 };
