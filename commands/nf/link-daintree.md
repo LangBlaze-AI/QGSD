@@ -703,7 +703,12 @@ const currentSlotNames = new Set(providersData.providers.map(p => p.name));
 for (const slotName of Object.keys(presetsStore.presets)) {
   if (!currentSlotNames.has(slotName)) delete presetsStore.presets[slotName];
 }
-fs.writeFileSync(presetsStorePath, JSON.stringify(presetsStore, null, 2) + '\n');
+// Atomic write with restrictive permissions — presets store may contain auth tokens
+// (ANTHROPIC_AUTH_TOKEN, *_API_KEY) in the env field. Mode 0o600 limits to owner-only read/write.
+fs.mkdirSync(path.dirname(presetsStorePath), { recursive: true });
+const _presetsTmp = presetsStorePath + '.tmp';
+fs.writeFileSync(_presetsTmp, JSON.stringify(presetsStore, null, 2) + '\n', { mode: 0o600 });
+fs.renameSync(_presetsTmp, presetsStorePath);
 
 // ── Apply to ~/.claude.json (clone vanilla MCP server entry per new slot) ──
 const claudeJsonPath = path.join(os.homedir(), '.claude.json');
