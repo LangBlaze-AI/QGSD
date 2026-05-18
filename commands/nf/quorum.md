@@ -62,6 +62,14 @@ These three rules govern ALL consensus determination in both Mode A and Mode B. 
 - UNAVAIL voters are excluded from the denominator (they are not valid voters for this round).
 - If only 1 external voter is valid and they APPROVE, that is consensus (1/1 = 100%).
 
+**RULE CE-4: Minimum Live Voters Floor**
+- After tier fallback, if the number of live (non-UNAVAIL) external voters is below `min_live_voters` (default: 2), consensus MUST NOT be declared — even if all remaining voters agree.
+- `min_live_voters` is read from `quorum.min_live_voters` in config (default: 2). The floor prevents thin consensus where a single surviving voter satisfies unanimity after mass UNAVAIL.
+- The orchestrator must either:
+  1. Re-dispatch with extended timeouts to recover UNAVAIL slots, OR
+  2. Surface the degraded-roster state to the user for an explicit waiver via `--force-quorum`
+- Below-floor consensus is BLOCKED by `nf-stop.js` with a clear error — it does not silently pass.
+
 ---
 
 <mode_detection>

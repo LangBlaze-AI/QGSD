@@ -25,9 +25,10 @@ VARIABLES
     deliberationRounds,  \* default: 0  annotation: deliberationRounds + 1
     maxDeliberation,  \* default: 9  annotation: const
     maxSize,  \* default: 3  annotation: (no annotation)
+    minLiveVoters,  \* default: 2  annotation: floor for valid consensus (issue #170)
     polledCount  \* default: 0  annotation: (no annotation)
 
-vars == <<state, slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+vars == <<state, slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* ── Type invariant ────────────────────────────────────────────────────────────
 \* @requirement QUORUM-01
@@ -38,6 +39,7 @@ TypeOK ==
     /\ deliberationRounds \in Nat  \* FIXME: tighten bound if needed
     /\ maxDeliberation \in Nat  \* FIXME: tighten bound if needed
     /\ maxSize \in Nat  \* FIXME: tighten bound if needed
+    /\ minLiveVoters \in Nat
     /\ polledCount \in Nat  \* FIXME: tighten bound if needed
 
 \* ── Initial state ─────────────────────────────────────────────────────────────
@@ -48,6 +50,7 @@ Init ==
     /\ deliberationRounds = 0
     /\ maxDeliberation = 9
     /\ maxSize = 3
+    /\ minLiveVoters = 2
     /\ polledCount = 0
 
 \* ── Actions ────────────────────────────────────────────────────────────────────
@@ -58,33 +61,34 @@ IdleQuorumStart(a) ==
     /\ state' = "COLLECTING_VOTES"
     /\ slotsAvailable' = a  \* param from event
     /\ polledCount' = polledCount  \* FIXME: XState assign for polledCount
-    /\ UNCHANGED <<successCount, deliberationRounds, maxDeliberation, maxSize>>
+    /\ UNCHANGED <<successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters>>
 
 \* IDLE -[CIRCUIT_BREAK]-> IDLE
 IdleCircuitBreak ==
     /\ state = "IDLE"
     /\ state' = "IDLE"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* IDLE -[DECIDE]-> IDLE
 IdleDecide ==
     /\ state = "IDLE"
     /\ state' = "IDLE"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* IDLE -[VOTES_COLLECTED]-> IDLE
 IdleVotesCollected ==
     /\ state = "IDLE"
     /\ state' = "IDLE"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
-\* COLLECTING_VOTES -[VOTES_COLLECTED / unanimityMet]-> DECIDED
+\* COLLECTING_VOTES -[VOTES_COLLECTED / unanimityMet AND floorMet]-> DECIDED
 CollectingVotesVotesCollectedToDECIDED(c) ==
     /\ state = "COLLECTING_VOTES"
     /\ c = polledCount
+    /\ c >= minLiveVoters
     /\ state' = "DECIDED"
     /\ successCount' = c  \* param from event
-    /\ UNCHANGED <<slotsAvailable, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* COLLECTING_VOTES -[VOTES_COLLECTED]-> DELIBERATING
 CollectingVotesVotesCollectedToDELIBERATING(c) ==
@@ -92,33 +96,34 @@ CollectingVotesVotesCollectedToDELIBERATING(c) ==
     /\ state' = "DELIBERATING"
     /\ successCount' = c  \* param from event
     /\ deliberationRounds' = deliberationRounds + 1
-    /\ UNCHANGED <<slotsAvailable, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* COLLECTING_VOTES -[QUORUM_START]-> COLLECTING_VOTES
 CollectingVotesQuorumStart ==
     /\ state = "COLLECTING_VOTES"
     /\ state' = "COLLECTING_VOTES"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* COLLECTING_VOTES -[CIRCUIT_BREAK]-> COLLECTING_VOTES
 CollectingVotesCircuitBreak ==
     /\ state = "COLLECTING_VOTES"
     /\ state' = "COLLECTING_VOTES"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* COLLECTING_VOTES -[DECIDE]-> COLLECTING_VOTES
 CollectingVotesDecide ==
     /\ state = "COLLECTING_VOTES"
     /\ state' = "COLLECTING_VOTES"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
-\* DELIBERATING -[VOTES_COLLECTED / unanimityMet]-> DECIDED
+\* DELIBERATING -[VOTES_COLLECTED / unanimityMet AND floorMet]-> DECIDED
 DeliberatingVotesCollectedToDECIDED(c) ==
     /\ state = "DELIBERATING"
     /\ c = polledCount
+    /\ c >= minLiveVoters
     /\ state' = "DECIDED"
     /\ successCount' = c  \* param from event
-    /\ UNCHANGED <<slotsAvailable, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* DELIBERATING -[VOTES_COLLECTED / noInfiniteDeliberation]-> DELIBERATING
 DeliberatingVotesCollectedToDELIBERATING ==
@@ -126,61 +131,61 @@ DeliberatingVotesCollectedToDELIBERATING ==
     /\ deliberationRounds < maxDeliberation
     /\ state' = "DELIBERATING"
     /\ deliberationRounds' = deliberationRounds + 1
-    /\ UNCHANGED <<slotsAvailable, successCount, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* DELIBERATING -[VOTES_COLLECTED]-> DECIDED
 DeliberatingVotesCollectedFallbackToDECIDED ==
     /\ state = "DELIBERATING"
     /\ state' = "DECIDED"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* DELIBERATING -[DECIDE]-> DECIDED
 DeliberatingDecide ==
     /\ state = "DELIBERATING"
     /\ state' = "DECIDED"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* DELIBERATING -[QUORUM_START]-> DELIBERATING
 DeliberatingQuorumStart ==
     /\ state = "DELIBERATING"
     /\ state' = "DELIBERATING"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* DELIBERATING -[CIRCUIT_BREAK]-> DELIBERATING
 DeliberatingCircuitBreak ==
     /\ state = "DELIBERATING"
     /\ state' = "DELIBERATING"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* DECIDED -[DECIDE]-> DECIDED (self-loop in final state)
 DecidedDecide ==
     /\ state = "DECIDED"
     /\ state' = "DECIDED"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* DECIDED -[CIRCUIT_BREAK]-> DECIDED (self-loop in final state)
 DecidedCircuitBreak ==
     /\ state = "DECIDED"
     /\ state' = "DECIDED"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* DECIDED -[QUORUM_START]-> DECIDED (self-loop in final state)
 DecidedQuorumStart ==
     /\ state = "DECIDED"
     /\ state' = "DECIDED"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* DECIDED -[VOTES_COLLECTED]-> DECIDED (self-loop in final state)
 DecidedVotesCollected ==
     /\ state = "DECIDED"
     /\ state' = "DECIDED"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* DECIDED is a final (absorbing) state
 StayDECIDED ==
     /\ state = "DECIDED"
     /\ state' = "DECIDED"
-    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, polledCount>>
+    /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
 \* ── Next ──────────────────────────────────────────────────────────────────────
 Next ==
@@ -210,5 +215,11 @@ Spec == Init /\ [][Next]_vars
 
 \* ── Invariants (add domain-specific properties here) ──────────────────────────
 \* TypeOK is the structural baseline. Add semantic invariants below.
+
+\* @requirement QUORUM-170
+\* FloorSafety: reaching DECIDED requires successCount >= minLiveVoters.
+\* Prevents thin consensus where a single surviving voter declares unanimity.
+FloorSafety ==
+    state = "DECIDED" => successCount >= minLiveVoters
 
 ====

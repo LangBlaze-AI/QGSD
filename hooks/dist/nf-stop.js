@@ -529,6 +529,66 @@ function detectUnavailWithoutFallback(currentTurnLines) {
   return { violated: false };
 }
 
+// Counts the number of live (non-UNAVAIL, non-FLAG_TRUNCATED) slot-worker results in the
+// current turn. Walks assistant messages for Task(nf-quorum-slot-worker) dispatches, then
+// checks matching tool_result blocks for UNAVAIL/FLAG_TRUNCATED verdicts.
+// Returns the count of results that represent valid votes (APPROVE or BLOCK).
+function countLiveSlotWorkers(currentTurnLines) {
+  const taskResults = new Map(); // tool_use_id → result text
+  const slotWorkerIds = new Set();
+
+  for (const line of currentTurnLines) {
+    try {
+      const entry = JSON.parse(line);
+
+      // Collect slot-worker Task tool_use IDs
+      if (entry.type === 'assistant') {
+        const content = entry.message && entry.message.content;
+        if (!Array.isArray(content)) continue;
+        for (const block of content) {
+          if (block.type === 'tool_use' && block.name === 'Task') {
+            const inputStr = JSON.stringify(block.input || {});
+            if (inputStr.includes('nf-quorum-slot-worker') && block.id) {
+              slotWorkerIds.add(block.id);
+            }
+          }
+        }
+      }
+
+      // Collect tool_result text keyed by tool_use_id
+      if (entry.type === 'user') {
+        const content = entry.message && entry.message.content;
+        if (!Array.isArray(content)) continue;
+        for (const block of content) {
+          if (block.type === 'tool_result' && block.tool_use_id) {
+            const resultText = Array.isArray(block.content)
+              ? block.content.map(c => c.text || '').join('')
+              : (typeof block.content === 'string' ? block.content : '');
+            taskResults.set(block.tool_use_id, resultText);
+          }
+        }
+      }
+    } catch { /* skip malformed */ }
+  }
+
+  let liveCount = 0;
+  for (const id of slotWorkerIds) {
+    const result = taskResults.get(id) || '';
+    if (/verdict:\s*UNAVAIL/i.test(result) || /\bUNAVAIL\b/.test(result)) continue;
+    if (/verdict:\s*FLAG_TRUNCATED/i.test(result)) continue;
+    // Has a result file path or substantive content — counts as live
+    if (result.length > 0) liveCount++;
+  }
+  return liveCount;
+}
+
+// Extracts min_live_voters from config with safe default.
+function getMinLiveVoters(config) {
+  return (config.quorum && Number.isInteger(config.quorum.min_live_voters) && config.quorum.min_live_voters >= 1)
+    ? config.quorum.min_live_voters
+    : 2;
+}
+
 // The exact token Claude must include in its final output to mark a decision turn.
 // Used by hasDecisionMarker (Stop hook) and injected into Claude's context (Prompt hook).
 const DECISION_MARKER = '<!-- NF_DECISION -->';
@@ -768,6 +828,28 @@ function main() {
           }));
           process.exit(0);
         }
+
+        // MIN_LIVE_VOTERS floor (issue #170)
+        const minLiveVoters = getMinLiveVoters(config);
+        const liveSlotWorkers = countLiveSlotWorkers(currentTurnLines);
+        if (liveSlotWorkers < minLiveVoters) {
+          appendConformanceEvent({
+            ts:              new Date().toISOString(),
+            phase:           'DECIDING',
+            action:          'floor_block',
+            live_voters:     liveSlotWorkers,
+            min_live_voters: minLiveVoters,
+            outcome:         'BLOCK',
+            schema_version,
+          });
+          process.stdout.write(JSON.stringify({
+            decision: 'block',
+            reason: 'QUORUM FLOOR NOT MET: Only ' + liveSlotWorkers + ' live voter(s) (min_live_voters = ' + minLiveVoters + '). ' +
+              'Too many slots are UNAVAIL for reliable consensus. Re-dispatch with extended timeouts or add --force-quorum.'
+          }));
+          process.exit(0);
+        }
+
         process.exit(0);
       }
 
@@ -803,6 +885,26 @@ function main() {
           }
           missingAgents.push(toolName);
         }
+      }
+
+      // MIN_LIVE_VOTERS floor — checked when ceiling is met but live voters are too few
+      const minLiveVoters = getMinLiveVoters(config);
+      if (successCount >= maxSize && successCount < minLiveVoters) {
+        appendConformanceEvent({
+          ts:              new Date().toISOString(),
+          phase:           'DECIDING',
+          action:          'floor_block',
+          live_voters:     successCount,
+          min_live_voters: minLiveVoters,
+          outcome:         'BLOCK',
+          schema_version,
+        });
+        process.stdout.write(JSON.stringify({
+          decision: 'block',
+          reason: 'QUORUM FLOOR NOT MET: ' + successCount + ' live voter(s) (min_live_voters = ' + minLiveVoters + '). ' +
+            'Too few live voters for reliable consensus.'
+        }));
+        process.exit(0);
       }
 
       if (successCount < maxSize) {
