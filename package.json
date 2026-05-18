@@ -64,7 +64,7 @@
     "inquirer": "^8.2.7"
   },
   "devDependencies": {
-    "@hpcc-js/wasm-graphviz": "^1.21.2",
+    "@hpcc-js/wasm-graphviz": "^1.21.6",
     "@types/node": ">=18",
     "esbuild": "^0.27.3",
     "husky": "^9.1.7",
