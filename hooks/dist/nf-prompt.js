@@ -422,7 +422,7 @@ function buildFalloverRule(cappedSlots, t1Unused, t2Slots, maxSize, modelDedupSl
       `PARALLEL DISPATCH: Dispatch ALL needed fallback replacements as parallel sibling Tasks in ONE message turn — not one per UNAVAIL primary.\n` +
       `DEDUP: Each fallback slot is dispatched AT MOST ONCE per round. Never dispatch the same slot twice even if multiple primaries are UNAVAIL.\n` +
       `NO RESUME: slot-worker Task results are final. Never call resume on a completed slot-worker Task.\n` +
-      `CHECKPOINT: After handling UNAVAIL, you MUST emit a <!-- FALLBACK_CHECKPOINT --> block (see quorum.md). The Stop hook will BLOCK if UNAVAIL is detected without this checkpoint.\n` +
+      `CHECKPOINT: After handling UNAVAIL, you MUST run quorum-checkpoint.cjs to write a structured FALLBACK-01 checkpoint file (see quorum.md). The Stop hook reads + schema-validates that file and will BLOCK if UNAVAIL is detected without it.\n` +
       `UNAVAIL slots do not count toward the ${maxSize} required quorum votes.`
     );
   }

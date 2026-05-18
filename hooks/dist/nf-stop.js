@@ -27,6 +27,14 @@ try {
   cacheModule = require(resolveBin('quorum-cache.cjs'));
 } catch (_) { /* fail-open: cache unavailable */ }
 
+// Checkpoint module — schema + reader for the structured FALLBACK-01 checkpoint
+// file (issue #172). Fail-open: if require fails, checkpoint enforcement is
+// skipped rather than blocking the session.
+let checkpointModule = null;
+try {
+  checkpointModule = require(resolveBin('quorum-checkpoint.cjs'));
+} catch (_) { /* fail-open: checkpoint validation unavailable */ }
+
 // Appends a structured conformance event to .planning/conformance-events.jsonl.
 // Uses appendFileSync (atomic for writes < POSIX PIPE_BUF = 4096 bytes).
 // Always wrapped in try/catch — hooks are fail-open; never crashes on logging failure.
@@ -419,22 +427,120 @@ function hasArtifactCommit(currentTurnLines) {
   return false;
 }
 
+// Returns the current turn's start time (ms epoch) from the boundary human
+// message line, or null if unavailable. getCurrentTurnLines() returns lines
+// sliced from the last human user message, so currentTurnLines[0] is that
+// message and carries the turn-start timestamp.
+function getTurnStartTime(currentTurnLines) {
+  if (!currentTurnLines || currentTurnLines.length === 0) return null;
+  try {
+    const entry = JSON.parse(currentTurnLines[0]);
+    if (entry && typeof entry.timestamp === 'string') {
+      const t = Date.parse(entry.timestamp);
+      return Number.isNaN(t) ? null : t;
+    }
+  } catch { /* fall through */ }
+  return null;
+}
+
+// Evaluates whether a structured FALLBACK-01 checkpoint (issue #172) clears the
+// gate for a dispatch round that contained UNAVAIL. Reads + schema-validates
+// .planning/quorum/checkpoints/round-<N>.json — the transcript regex is gone,
+// so LLM stylistic variation in any HTML comment cannot bypass or trigger the
+// gate. Returns { satisfied: boolean, reason?: string }.
+//
+// Freshness is anchored to the transcript: `checkpointRoundsWritten` is the set
+// of rounds for which a `quorum-checkpoint.cjs` Bash call ran in the CURRENT
+// turn. A stale file from a previous turn/session is therefore ignored. The
+// checkpoint's own timestamp is cross-checked against the turn start as a
+// second guard against a stale file left behind by a failed write.
+function evaluateCheckpoint(cwd, protocolRound, checkpointRoundsWritten, turnStartTime, displayRound) {
+  const reSuffix =
+    ` Run quorum-checkpoint.cjs after dispatching T1/T2 fallback slots, then retry. ` +
+    `Re-read FALLBACK-01 in commands/nf/quorum.md.`;
+
+  // Checkpoint module unavailable — fail-open (do not block on missing tooling).
+  if (!checkpointModule) {
+    process.stderr.write('[nf-stop] WARNING: quorum-checkpoint module unavailable — skipping FALLBACK-01 checkpoint enforcement\n');
+    return { satisfied: true };
+  }
+
+  // No checkpoint script ran this turn — the checkpoint was skipped entirely.
+  if (checkpointRoundsWritten.size === 0) {
+    return {
+      satisfied: false,
+      reason: `FALLBACK-01 VIOLATION: Slot(s) returned UNAVAIL in dispatch round ${displayRound} ` +
+        `but no structured checkpoint was written and no fallback slots were dispatched.` + reSuffix,
+    };
+  }
+
+  // Candidate rounds to inspect: the matched protocol round if known, else
+  // every round checkpointed this turn (highest first — latest state wins).
+  const candidates = (protocolRound !== null)
+    ? [protocolRound]
+    : [...checkpointRoundsWritten].sort((a, b) => b - a);
+
+  if (protocolRound !== null && !checkpointRoundsWritten.has(protocolRound)) {
+    return {
+      satisfied: false,
+      reason: `FALLBACK-01 VIOLATION: dispatch round ${displayRound} returned UNAVAIL but no ` +
+        `structured checkpoint was written for round ${protocolRound}.` + reSuffix,
+    };
+  }
+
+  let lastReason = '';
+  for (const round of candidates) {
+    const res = checkpointModule.readCheckpoint(cwd, round);
+    if (!res.exists) {
+      lastReason = `checkpoint file for round ${round} not found`;
+      continue;
+    }
+    if (!res.valid) {
+      // Malformed checkpoint — schema validation rejects it; treat as no checkpoint.
+      lastReason = `checkpoint round ${round} failed schema validation (${res.errors.join('; ')})`;
+      continue;
+    }
+    if (res.checkpoint.round !== round) {
+      lastReason = `checkpoint round field (${res.checkpoint.round}) does not match file round ${round}`;
+      continue;
+    }
+    // Freshness: reject a checkpoint stamped before the current turn began.
+    if (turnStartTime !== null) {
+      const cpTime = Date.parse(res.checkpoint.timestamp);
+      if (!Number.isNaN(cpTime) && cpTime < turnStartTime) {
+        lastReason = `checkpoint round ${round} is stale (written before the current turn)`;
+        continue;
+      }
+    }
+    if (!res.satisfied) {
+      lastReason = `checkpoint round ${round} has fallback_dispatched=false and all_tiers_exhausted=false`;
+      continue;
+    }
+    return { satisfied: true }; // valid, fresh, and clears the gate
+  }
+
+  return {
+    satisfied: false,
+    reason: `FALLBACK-01 VIOLATION: dispatch round ${displayRound} returned UNAVAIL but no valid ` +
+      `structured checkpoint cleared the gate (${lastReason}).` + reSuffix,
+  };
+}
+
 // Detects UNAVAIL in slot-worker results without corresponding fallback dispatch.
 // Returns { violated: true, reason: string } if fallback was skipped, or { violated: false }.
 //
 // Logic:
-// 1. Walk assistant messages for slot-worker Task dispatches; group by dispatch round
-// 2. Walk tool_result blocks for UNAVAIL verdicts in each round's results
-// 3. If UNAVAIL found in round N, check that round N+1 exists (fallback dispatch)
-//    OR that the FALLBACK_CHECKPOINT marker is present with fallback_dispatched: true
-//    OR all_tiers_exhausted: true
-// 4. If neither condition met, fallback was skipped — return violated
-function detectUnavailWithoutFallback(currentTurnLines) {
-  const dispatchRounds = [];    // Array of { messageIdx, taskIds: Set }
+// 1. Walk assistant messages for slot-worker Task dispatches; group by dispatch
+//    round and record each round's protocol round number (--round N).
+// 2. Walk tool_result blocks for UNAVAIL verdicts in each round's results.
+// 3. If UNAVAIL found in round N, it is cleared by EITHER a later dispatch round
+//    (fallback Tasks) OR a valid structured checkpoint file for that round.
+// 4. If neither condition met, fallback was skipped — return violated.
+function detectUnavailWithoutFallback(currentTurnLines, cwd) {
+  const root = cwd || process.cwd();
+  const dispatchRounds = [];    // Array of { messageIdx, taskIds: Set, protocolRound: number|null }
   const taskResults = new Map(); // taskId → result text
-  let hasCheckpoint = false;
-  let checkpointDispatchedTrue = false;
-  let checkpointExhaustedTrue = false;
+  const checkpointRoundsWritten = new Set(); // protocol rounds checkpointed this turn
 
   for (let i = 0; i < currentTurnLines.length; i++) {
     try {
@@ -445,25 +551,28 @@ function detectUnavailWithoutFallback(currentTurnLines) {
         if (!Array.isArray(content)) continue;
 
         const taskIds = new Set();
+        let protocolRound = null;
         for (const block of content) {
-          // Check for FALLBACK_CHECKPOINT in text blocks
-          if (block.type === 'text' && typeof block.text === 'string') {
-            if (block.text.includes('<!-- FALLBACK_CHECKPOINT')) {
-              hasCheckpoint = true;
-              if (/fallback_dispatched:\s*true/i.test(block.text)) checkpointDispatchedTrue = true;
-              if (/all_tiers_exhausted:\s*true/i.test(block.text)) checkpointExhaustedTrue = true;
-            }
-          }
-          // Track slot-worker dispatches
+          // Track slot-worker dispatches and the round they belong to
           if (block.type === 'tool_use' && block.name === 'Task') {
             const inputStr = JSON.stringify(block.input || {});
             if (inputStr.includes('nf-quorum-slot-worker')) {
               taskIds.add(block.id);
+              const m = inputStr.match(/--round[=\s]+(\d+)/);
+              if (m && protocolRound === null) protocolRound = parseInt(m[1], 10);
+            }
+          }
+          // Track structured-checkpoint writes (freshness anchor for issue #172)
+          if (block.type === 'tool_use' && block.name === 'Bash') {
+            const cmd = block.input && block.input.command;
+            if (typeof cmd === 'string' && cmd.includes('quorum-checkpoint.cjs')) {
+              const m = cmd.match(/--round[=\s]+(\d+)/);
+              if (m) checkpointRoundsWritten.add(parseInt(m[1], 10));
             }
           }
         }
         if (taskIds.size > 0) {
-          dispatchRounds.push({ messageIdx: i, taskIds });
+          dispatchRounds.push({ messageIdx: i, taskIds, protocolRound });
         }
       }
 
@@ -485,6 +594,8 @@ function detectUnavailWithoutFallback(currentTurnLines) {
 
   // No dispatch rounds = not a slot-worker quorum flow
   if (dispatchRounds.length === 0) return { violated: false };
+
+  const turnStartTime = getTurnStartTime(currentTurnLines);
 
   // Check each round: if any task returned UNAVAIL, was there a next round or valid checkpoint?
   for (let r = 0; r < dispatchRounds.length; r++) {
@@ -511,18 +622,14 @@ function detectUnavailWithoutFallback(currentTurnLines) {
 
     if (!hasUnavail) continue;
 
-    // UNAVAIL detected in round r — check for fallback evidence
+    // UNAVAIL in round r is cleared by a later dispatch round (fallback Tasks).
     const hasNextRound = r + 1 < dispatchRounds.length;
-    const hasValidCheckpoint = hasCheckpoint && (checkpointDispatchedTrue || checkpointExhaustedTrue);
+    if (hasNextRound) continue;
 
-    if (!hasNextRound && !hasValidCheckpoint) {
-      return {
-        violated: true,
-        reason: `FALLBACK-01 VIOLATION: Slot(s) returned UNAVAIL in dispatch round ${r + 1} ` +
-          `but no fallback slots were dispatched and no FALLBACK_CHECKPOINT was emitted. ` +
-          `You must dispatch T1/T2 fallback slots before fail-open. ` +
-          `Re-read FALLBACK-01 in commands/nf/quorum.md and dispatch remaining slots.`
-      };
+    // Last dispatch round with UNAVAIL — require a structured checkpoint file.
+    const ck = evaluateCheckpoint(root, round.protocolRound, checkpointRoundsWritten, turnStartTime, r + 1);
+    if (!ck.satisfied) {
+      return { violated: true, reason: ck.reason };
     }
   }
 

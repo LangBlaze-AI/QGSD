@@ -214,24 +214,37 @@ Task(
 
 **STOP.** Before evaluating consensus, you MUST complete this checkpoint if ANY primary slot returned UNAVAIL. Skipping this checkpoint is a protocol violation.
 
-Emit the following block verbatim, filling in the values:
+Run `quorum-checkpoint.cjs` to write a **structured JSON checkpoint** to `.planning/quorum/checkpoints/round-<N>.json`. The script schema-validates the values, writes the file, and prints a human-readable `<!-- FALLBACK_CHECKPOINT -->` block to stdout for the transcript. The Stop hook reads and schema-validates that file — it no longer regex-parses the HTML comment, so LLM formatting variation cannot bypass or trigger the gate.
 
 ```
-<!-- FALLBACK_CHECKPOINT
-  unavail_primaries: [list of primary slots that returned UNAVAIL, or "none"]
-  fallback_dispatched: [true/false — did you dispatch T1 or T2 fallback Tasks?]
-  t1_slots_tried: [list of T1 slots dispatched, or "none" / "empty pool"]
-  t2_slots_tried: [list of T2 slots dispatched, or "none" / "not needed"]
-  all_tiers_exhausted: [true/false — are all tiers exhausted or did a fallback succeed?]
-  proceed_reason: [why it is now safe to evaluate consensus]
--->
+node "$HOME/.claude/nf-bin/quorum-checkpoint.cjs" \
+  --round <round_number> \
+  --cwd <absolute path to working directory> \
+  --unavail-primaries "<comma-separated primaries that returned UNAVAIL, or none>" \
+  --fallback-dispatched <true|false> \
+  --t1-slots "<comma-separated T1 slots dispatched, or none>" \
+  --t2-slots "<comma-separated T2 slots dispatched, or none>" \
+  --all-tiers-exhausted <true|false> \
+  --proceed-reason "<why it is now safe to evaluate consensus>"
 ```
+
+The checkpoint file fields:
+
+| Field | Meaning |
+|---|---|
+| `round` | Quorum round number — MUST match the `--round` passed to slot-worker Tasks |
+| `unavail_primaries` | Primary slots that returned UNAVAIL (`[]` if none) |
+| `fallback_dispatched` | Whether T1 or T2 fallback Tasks were dispatched |
+| `t1_slots_tried` / `t2_slots_tried` | Fallback slots dispatched per tier (`[]` if none) |
+| `all_tiers_exhausted` | True only if every T1 AND T2 slot was dispatched-and-UNAVAIL or the pool was empty |
+| `proceed_reason` | Why it is now safe to evaluate consensus |
 
 **Rules:**
-- If `unavail_primaries` is not "none" AND `fallback_dispatched` is "false", you MUST go back and dispatch fallback Tasks before continuing. Do NOT proceed to consensus.
-- `all_tiers_exhausted` can only be "true" if every slot in T1 AND T2 was either dispatched and returned UNAVAIL, or the pool was empty.
-- If a T1 fallback succeeded (returned APPROVE/BLOCK), `all_tiers_exhausted` is "false" but `proceed_reason` is valid because you have a replacement vote.
+- If primaries returned UNAVAIL AND `fallback_dispatched` is false, you MUST go back and dispatch fallback Tasks before continuing. Do NOT proceed to consensus.
+- `all_tiers_exhausted` can only be true if every slot in T1 AND T2 was either dispatched and returned UNAVAIL, or the pool was empty.
+- If a T1 fallback succeeded (returned APPROVE/BLOCK), `all_tiers_exhausted` is false but `proceed_reason` is valid because you have a replacement vote.
 - **Ordering: T1 fully UNAVAIL → dispatch T2 → THEN check consensus.** Do not short-circuit to consensus after T1 when T2 slots remain undispatched.
+- The Stop hook clears the gate only when the checkpoint file for the round exists, passes schema validation, and has `fallback_dispatched: true` OR `all_tiers_exhausted: true`.
 
 ---
 
@@ -414,7 +427,7 @@ Only include `## Improvements` section when `request_improvements: true` AND imp
 6. If ANY slot UNAVAIL → FALLBACK-01:
    ├─ Dispatch T1 (unused auth_type=sub slots, parallel)
    ├─ If T1 empty or fully UNAVAIL → Dispatch T2 (auth_type≠sub slots, parallel)
-   └─ Emit FALLBACK_CHECKPOINT block (mandatory)
+   └─ Run quorum-checkpoint.cjs → structured checkpoint file (mandatory)
 7. Check consensus (CE-1, CE-2, CE-3) — only after FALLBACK-01 complete
    ├─ If CONSENSUS: Output consensus, update scoreboard, create debate file
    ├─ If NO CONSENSUS: Deliberation rounds 2-10

@@ -164,6 +164,7 @@ function migrate(root, dryRun) {
       'quorum/scoreboard.json',
       'quorum/failures.json',
       'quorum/slot-results/',
+      'quorum/checkpoints/',
       'quorum-rounds-session-*.jsonl',
       '',
       '# Telemetry and ephemeral planning state',

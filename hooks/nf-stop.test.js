@@ -1637,3 +1637,326 @@ test('TC-STANDARD-NON-QUORUM-NOT-ENFORCED: standard mode does NOT enforce /nf:ex
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+// ── FALLBACK-01 Structured Checkpoint Tests (issue #172) ────────────────────
+//
+// The FALLBACK-01 gate now reads a schema-validated JSON file at
+// .planning/quorum/checkpoints/round-<N>.json instead of regex-parsing an
+// HTML comment in the transcript. These tests confirm:
+//   - a valid structured checkpoint clears the gate,
+//   - a missing / malformed / unsatisfying / stale checkpoint blocks,
+//   - HTML-comment stylistic variation can neither bypass nor trigger the gate.
+
+// A slot-worker Task dispatch block for a given slot + round.
+function slotWorkerTask(id, slot, round) {
+  return {
+    type: 'tool_use',
+    id,
+    name: 'Task',
+    input: {
+      subagent_type: 'nf-quorum-slot-worker',
+      model: 'haiku',
+      description: `${slot} quorum R${round}`,
+      prompt: `node "$HOME/.claude/nf-bin/quorum-slot-dispatch.cjs" --slot ${slot} --mode A --round ${round} --question "test"`,
+    },
+  };
+}
+
+// A Bash block that runs quorum-checkpoint.cjs for a given round.
+function checkpointBash(id, round) {
+  return {
+    type: 'tool_use',
+    id,
+    name: 'Bash',
+    input: {
+      command: `node "$HOME/.claude/nf-bin/quorum-checkpoint.cjs" --round ${round} ` +
+        `--unavail-primaries "codex-1" --fallback-dispatched true --t1-slots "opencode-1" ` +
+        `--t2-slots "none" --all-tiers-exhausted false --proceed-reason "T1 fallback succeeded"`,
+    },
+  };
+}
+
+// Create a temp project dir with a standard-profile nf.json.
+function setupFallbackDir(label) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `nf-stop-fb-${label}-`));
+  const claudeDir = path.join(dir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(claudeDir, 'nf.json'),
+    JSON.stringify({ hook_profile: 'standard', quorum_commands: ['plan-phase'] }),
+    'utf8'
+  );
+  return dir;
+}
+
+// Write a checkpoint file under a project dir.
+function writeCheckpointFile(dir, round, obj) {
+  const cpDir = path.join(dir, '.planning', 'quorum', 'checkpoints');
+  fs.mkdirSync(cpDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(cpDir, `round-${round}.json`),
+    typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2),
+    'utf8'
+  );
+}
+
+function freshCheckpoint(overrides) {
+  return Object.assign({
+    round: 1,
+    unavail_primaries: ['codex-1'],
+    fallback_dispatched: true,
+    t1_slots_tried: ['opencode-1'],
+    t2_slots_tried: [],
+    all_tiers_exhausted: false,
+    proceed_reason: 'T1 fallback opencode-1 returned APPROVE',
+    timestamp: '2026-02-20T00:05:00Z', // after userLine() turn-start timestamp
+    schema_version: 1,
+  }, overrides || {});
+}
+
+// Transcript: /nf:plan-phase, one slot-worker round with a UNAVAIL verdict,
+// optionally a checkpoint Bash call, then a decision-marker final message.
+function fallbackTranscript({ withCheckpointBash = true, extraTextBlock = null } = {}) {
+  const lines = [
+    userLine('/nf:plan-phase 1', 'human-fb'),
+    assistantLine([
+      slotWorkerTask('toolu_codex', 'codex-1', 1),
+      slotWorkerTask('toolu_gemini', 'gemini-1', 1),
+    ], 'a-dispatch'),
+    toolResultSuccessLine('toolu_codex', 'verdict: UNAVAIL\nreasoning: slot unavailable', 'tr-codex'),
+    toolResultSuccessLine('toolu_gemini', 'verdict: APPROVE\nreasoning: looks good', 'tr-gemini'),
+  ];
+  if (withCheckpointBash) {
+    lines.push(
+      assistantLine([checkpointBash('toolu_ckpt', 1)], 'a-ckpt'),
+      toolResultSuccessLine('toolu_ckpt', 'FALLBACK-01 checkpoint written: round-1.json', 'tr-ckpt')
+    );
+  }
+  const finalBlocks = [];
+  if (extraTextBlock) finalBlocks.push({ type: 'text', text: extraTextBlock });
+  finalBlocks.push({ type: 'text', text: 'Quorum complete.\n\n<!-- NF_DECISION -->' });
+  lines.push(assistantLine(finalBlocks, 'a-final'));
+  return lines;
+}
+
+// TC-FB-1: UNAVAIL + valid fresh structured checkpoint → PASS (no block)
+test('TC-FB-1: valid structured checkpoint clears the FALLBACK-01 gate', () => {
+  const dir = setupFallbackDir('ok');
+  try {
+    writeCheckpointFile(dir, 1, freshCheckpoint());
+    const tmpFile = writeTempTranscript(fallbackTranscript());
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0, 'exit code must be 0');
+      assert.strictEqual(stdout, '', 'no block — valid checkpoint clears the gate');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// TC-FB-2: UNAVAIL + no checkpoint at all → BLOCK
+test('TC-FB-2: UNAVAIL with no structured checkpoint blocks', () => {
+  const dir = setupFallbackDir('none');
+  try {
+    const tmpFile = writeTempTranscript(fallbackTranscript({ withCheckpointBash: false }));
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0);
+      const parsed = JSON.parse(stdout);
+      assert.strictEqual(parsed.decision, 'block');
+      assert.ok(/FALLBACK-01 VIOLATION/.test(parsed.reason), parsed.reason);
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// TC-FB-3: UNAVAIL + checkpoint Bash ran but file is malformed JSON → BLOCK
+test('TC-FB-3: malformed checkpoint file blocks (schema validation)', () => {
+  const dir = setupFallbackDir('malformed');
+  try {
+    writeCheckpointFile(dir, 1, '{ not valid json');
+    const tmpFile = writeTempTranscript(fallbackTranscript());
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0);
+      assert.strictEqual(JSON.parse(stdout).decision, 'block');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// TC-FB-4: checkpoint valid but fallback_dispatched=false & all_tiers_exhausted=false → BLOCK
+test('TC-FB-4: unsatisfying checkpoint (no fallback, not exhausted) blocks', () => {
+  const dir = setupFallbackDir('unsat');
+  try {
+    writeCheckpointFile(dir, 1, freshCheckpoint({ fallback_dispatched: false, all_tiers_exhausted: false }));
+    const tmpFile = writeTempTranscript(fallbackTranscript());
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0);
+      assert.strictEqual(JSON.parse(stdout).decision, 'block');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// TC-FB-5: all_tiers_exhausted=true (fallback_dispatched=false) clears the gate
+test('TC-FB-5: all_tiers_exhausted checkpoint clears the gate', () => {
+  const dir = setupFallbackDir('exhausted');
+  try {
+    writeCheckpointFile(dir, 1, freshCheckpoint({ fallback_dispatched: false, all_tiers_exhausted: true }));
+    const tmpFile = writeTempTranscript(fallbackTranscript());
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0);
+      assert.strictEqual(stdout, '', 'all_tiers_exhausted=true clears the gate');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// TC-FB-6: a stale checkpoint (timestamp before the turn started) → BLOCK
+test('TC-FB-6: stale checkpoint from a previous turn does not clear the gate', () => {
+  const dir = setupFallbackDir('stale');
+  try {
+    writeCheckpointFile(dir, 1, freshCheckpoint({ timestamp: '2026-01-01T00:00:00Z' }));
+    const tmpFile = writeTempTranscript(fallbackTranscript());
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0);
+      assert.strictEqual(JSON.parse(stdout).decision, 'block');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// TC-FB-7: HTML-comment stylistic variation cannot BYPASS the gate.
+// A perfectly-formed FALLBACK_CHECKPOINT comment in a text block, with no
+// structured file, must still BLOCK — the comment is no longer the gate.
+test('TC-FB-7: HTML comment in transcript cannot bypass the gate (no file)', () => {
+  const dir = setupFallbackDir('bypass');
+  try {
+    const htmlComment = [
+      '<!-- FALLBACK_CHECKPOINT',
+      '  unavail_primaries: [codex-1]',
+      '  fallback_dispatched: true',
+      '  t1_slots_tried: [opencode-1]',
+      '  all_tiers_exhausted: false',
+      '  proceed_reason: handled',
+      '-->',
+    ].join('\n');
+    // checkpoint Bash present (so the comment looks legitimate) but NO file on disk
+    const tmpFile = writeTempTranscript(fallbackTranscript({ extraTextBlock: htmlComment }));
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0);
+      assert.strictEqual(JSON.parse(stdout).decision, 'block',
+        'a transcript HTML comment must not satisfy the gate without the structured file');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// TC-FB-8: HTML-comment stylistic variation cannot TRIGGER a false block.
+// Fallback was handled correctly (valid structured file); the transcript also
+// carries a code-fenced, oddly-spaced HTML comment that the old regex would
+// have failed to parse. The gate must still PASS.
+test('TC-FB-8: mangled HTML comment cannot trigger a false block when file is valid', () => {
+  const dir = setupFallbackDir('falsepos');
+  try {
+    writeCheckpointFile(dir, 1, freshCheckpoint());
+    const mangled = [
+      '```',
+      '<!--   FALLBACK_CHECKPOINT',
+      '  fallback_dispatched : [ true ]',
+      '  all_tiers_exhausted=false',
+      '-->',
+      '```',
+    ].join('\n');
+    const tmpFile = writeTempTranscript(fallbackTranscript({ extraTextBlock: mangled }));
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0);
+      assert.strictEqual(stdout, '',
+        'mangled HTML comment must not over-block when the structured file is valid');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// TC-FB-9: UNAVAIL cleared by a later fallback dispatch round → PASS (no checkpoint needed)
+test('TC-FB-9: UNAVAIL cleared by a subsequent fallback dispatch round passes', () => {
+  const dir = setupFallbackDir('nextround');
+  try {
+    const lines = [
+      userLine('/nf:plan-phase 1', 'human-fb'),
+      assistantLine([slotWorkerTask('toolu_codex', 'codex-1', 1)], 'a-r1'),
+      toolResultSuccessLine('toolu_codex', 'verdict: UNAVAIL', 'tr-codex'),
+      // fallback dispatch — a later round with a successful verdict, no UNAVAIL
+      assistantLine([slotWorkerTask('toolu_oc', 'opencode-1', 1)], 'a-r2'),
+      toolResultSuccessLine('toolu_oc', 'verdict: APPROVE\nreasoning: ok', 'tr-oc'),
+      assistantLine([{ type: 'text', text: 'Quorum complete.\n\n<!-- NF_DECISION -->' }], 'a-final'),
+    ];
+    const tmpFile = writeTempTranscript(lines);
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0);
+      assert.strictEqual(stdout, '', 'fallback dispatched as a later round clears the gate');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
