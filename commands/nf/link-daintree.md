@@ -381,7 +381,7 @@ Display the REVIEW FAN-OUT IMPORT banner:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Allowlist (preset env keys must match):
-  ^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$)
+  ^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$|.*_AUTH_TOKEN$|.*_TOKEN$)
 
 New slots (one per Daintree preset):
   ◆ {agentName}: vanilla = {vanillaSlotName} (preserved unchanged)
@@ -453,7 +453,7 @@ const SLOT_NAME_RE = /^[a-z][a-z0-9-]*$/;
 function slugify(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
-const ALLOWLIST = /^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$)/;
+const ALLOWLIST = /^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$|.*_AUTH_TOKEN$|.*_TOKEN$)/;
 function filterAllowlisted(envObj) {
   const out = {};
   for (const [k, v] of Object.entries(envObj || {})) if (ALLOWLIST.test(k)) out[k] = v;
@@ -621,6 +621,42 @@ for (const item of plan) {
     const envKeys = [...new Set([...Object.keys(item.globalEnv || {}), ...Object.keys(item.presetEnv || {})])];
     written.providers.updated.push({ name: existing.name, presetName: item.preset.name, presetId: existingId, envKeys });
   }
+}
+
+// ── Mask secret values in providers.json (issue 169) ────────────────────────
+// Secret keys (*_API_KEY, *_AUTH_TOKEN, *_TOKEN) are written as ${VAR} placeholders
+// in providers.json. Actual values are stored in the secrets store
+// (~/.claude/nf-secrets.json) so they never appear on disk in providers.json or
+// its backups. Dispatch-time resolution in unified-mcp-server.mjs and
+// call-quorum-slot.cjs loads from the secrets store into process.env.
+const SECRET_KEY_RE = /_(API_KEY|AUTH_TOKEN|TOKEN)$/;
+const PLACEHOLDER_RE = /^\$\{([^}]+)\}$/;
+
+let secretsStore = {};
+const secretsPath = path.join(os.homedir(), '.claude', 'nf-secrets.json');
+try { secretsStore = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {}; } catch (_) {}
+let secretsUpdated = false;
+
+for (const provider of providersData.providers) {
+  if (!provider.env) continue;
+  for (const k of Object.keys(provider.env)) {
+    if (SECRET_KEY_RE.test(k) && !PLACEHOLDER_RE.test(String(provider.env[k]))) {
+      // Store the plaintext value in secrets store under the key name
+      secretsStore[k] = provider.env[k];
+      secretsUpdated = true;
+      // Replace with placeholder
+      provider.env[k] = '${' + k + '}';
+    }
+  }
+}
+
+// Persist secrets store (atomic write)
+if (secretsUpdated) {
+  fs.mkdirSync(path.dirname(secretsPath), { recursive: true });
+  const tmpSecrets = secretsPath + '.tmp';
+  fs.writeFileSync(tmpSecrets, JSON.stringify(secretsStore, null, 2), { mode: 0o600 });
+  fs.renameSync(tmpSecrets, secretsPath);
+  process.stderr.write('[nf:link-daintree] Stored ' + Object.keys(secretsStore).length + ' secret(s) in secrets store, replaced with ${VAR} placeholders in providers.json\n');
 }
 
 fs.writeFileSync(providersPath, JSON.stringify(providersData, null, 2) + '\n');
@@ -1154,7 +1190,7 @@ Re-run /nf:link-canopy any time to refresh the link. Idempotency rules:
 - nf.json backup created before any write
 - Import path fans out per-agent presets into new provider entries (matched via provider.mainTool === agentName + family inferred from preset env), overlaying allowlisted env onto the cloned vanilla. Vanilla slots are untouched; preset-linked slots are replaced in place on re-import. (issue 138 AC2 + AC5)
 - providers.json backup created before any env merge write
-- Both preset env and globalEnvironmentVariables merges are gated by allowlist `^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$)` — covers all BRAND_COLORS providers
+- Both preset env and globalEnvironmentVariables merges are gated by allowlist `^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$|.*_AUTH_TOKEN$|.*_TOKEN$)` — covers all BRAND_COLORS providers
 - Registration writes to Canopy's userAgentRegistry with `nf-` prefixed agent IDs
 - Export path writes nForma quorum slots to per-agent Daintree customPresets arrays (agentSettings.agents.<agent>.customPresets[]) with provider-specific brand colors from BRAND_COLORS mapping (issue 138 AC3 + AC4)
 - Canopy config.json backup created before any write

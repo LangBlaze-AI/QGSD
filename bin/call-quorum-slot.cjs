@@ -29,6 +29,7 @@ const path      = require('path');
 const os        = require('os');
 const { resolveCli } = require('./resolve-cli.cjs');
 const { acquireSlot, releaseSlot, providerKeyFromUrl } = require('./provider-concurrency.cjs');
+const { resolveEnvPlaceholders, findUnresolvedPlaceholders, isPlaceholder } = require('./resolve-env.cjs');
 
 // ─── Utilities ──────────────────────────────────────────────────────────────
 function sleep(ms) {
@@ -374,7 +375,7 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     }
   }
 
-  const env  = { ...process.env, ...(provider.env ?? {}) };
+  const env  = { ...process.env, ...resolveEnvPlaceholders(provider.env ?? {}) };
 
   return new Promise((resolve, reject) => {
     let child;
@@ -726,6 +727,36 @@ async function main() {
   if (!prompt) {
     process.stderr.write('[call-quorum-slot] No prompt received on stdin\n');
     process.exit(1);
+  }
+
+  // ─── ${VAR} placeholder bootstrap ────────────────────────────────────────────
+  // Load secrets for ${VAR} placeholders in the provider's env. The fan-out
+  // import (issue 169) writes secret values as ${KEY} placeholders and stores
+  // actual values in the secrets store (~/.claude/nf-secrets.json).
+  if (provider.env) {
+    try {
+      const secrets = require('./secrets.cjs');
+      let loaded = 0;
+      for (const [k, v] of Object.entries(provider.env)) {
+        if (isPlaceholder(v) && process.env[k] === undefined) {
+          const secret = await secrets.get('nforma', k);
+          if (secret) {
+            process.env[k] = secret;
+            loaded++;
+          }
+        }
+      }
+      if (loaded > 0) {
+        process.stderr.write(`[call-quorum-slot] Loaded ${loaded} secret(s) for slot ${slot} from secrets store\n`);
+      }
+      // Warn on unresolved placeholders
+      const unresolved = findUnresolvedPlaceholders(provider.env);
+      if (unresolved.length > 0) {
+        process.stderr.write(`[call-quorum-slot] WARNING: unresolved placeholder(s): ${unresolved.join(', ')} — set in env or run /nf:mcp-setup to store in secrets\n`);
+      }
+    } catch (e) {
+      process.stderr.write(`[call-quorum-slot] secrets bootstrap for slot ${slot}: ${e.message}\n`);
+    }
   }
 
   // ─── Layer 3: Pre-dispatch scoreboard cooldown check ────────────────────────
