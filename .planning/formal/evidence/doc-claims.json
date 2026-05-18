@@ -1,7 +1,7 @@
 {
-  "generated": "2026-04-16T21:04:43.632Z",
+  "generated": "2026-05-18T14:59:56.910Z",
   "total_claims_checked": 188,
-  "doc_files_scanned": 8,
+  "doc_files_scanned": 14,
   "raw_broken_count": 58,
   "weighted_residual": 114,
   "suppressed_fp_count": 7,
@@ -12,7 +12,7 @@
   "broken_claims": [
     {
       "doc_file": "README.md",
-      "line": 173,
+      "line": 179,
       "type": "file_path",
       "value": ".claude/settings.json",
       "reason": "file not found",
@@ -21,7 +21,7 @@
     },
     {
       "doc_file": "README.md",
-      "line": 684,
+      "line": 690,
       "type": "file_path",
       "value": "gates/per-model-gates.json",
       "reason": "file not found",
@@ -30,7 +30,7 @@
     },
     {
       "doc_file": "README.md",
-      "line": 964,
+      "line": 970,
       "type": "dependency",
       "value": "api-and-interface-design",
       "reason": "not in any dependency manifest",
@@ -39,7 +39,7 @@
     },
     {
       "doc_file": "README.md",
-      "line": 965,
+      "line": 971,
       "type": "dependency",
       "value": "deprecation-and-migration",
       "reason": "not in any dependency manifest",
@@ -534,4 +534,3 @@
     }
   ]
 }
-

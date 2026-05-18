@@ -1,15 +1,15 @@
 {
   "metadata": {
-    "generated": "2026-04-22T19:15:38.516Z",
-    "proximity_index_hash": "9a71043e",
+    "generated": "2026-05-18T14:59:40.937Z",
+    "proximity_index_hash": "e5a2c9ba",
     "threshold": 0.7,
     "max_hops": 5,
     "total_pairs_checked": 0,
     "candidates_found": 0,
     "candidates_filtered": 0,
     "orphan_models_count": 1,
-    "orphan_requirements_count": 4,
-    "uncovered_requirements_count": 2,
+    "orphan_requirements_count": 7,
+    "uncovered_requirements_count": 5,
     "non_neighbor_top": 20,
     "fast_path": true
   },
@@ -23,11 +23,23 @@
     ],
     "requirements": [
       {
+        "id": "BENCH-07",
+        "edges": 0
+      },
+      {
+        "id": "BENCH-08",
+        "edges": 0
+      },
+      {
+        "id": "BENCH-09",
+        "edges": 0
+      },
+      {
         "id": "BENCH-DETECT-04",
         "edges": 0
       },
       {
-        "id": "BENCH-FAKE-03",
+        "id": "BF-03",
         "edges": 0
       },
       {
@@ -42,11 +54,23 @@
   },
   "uncovered_requirements": [
     {
+      "id": "BENCH-07",
+      "text": "Provide a generic benchmark runner CLI (bin/nf-benchmark.cjs) that loads fixtures from benchmarks/<skill>/fixtures.json, evaluates pass conditions, and enforces skill-specific baseline floors in CI gates."
+    },
+    {
+      "id": "BENCH-08",
+      "text": "The system detects seeded algorithmic bugs via TLC counterexample discovery and verifies fixes through TLC verification pass conditions, integrated with the nf:debug benchmark track."
+    },
+    {
+      "id": "BENCH-09",
+      "text": "The nf:debug pipeline measures autonomy via a graded benchmark suite scoring 0-100 based on the fraction of seeded bugs (7 stubs across 3 difficulty tiers) that the AI quorum fixes end-to-end."
+    },
+    {
       "id": "BENCH-DETECT-04",
       "text": "nf-solve detects cross-layer mutations, formal model changes, and documentation claim violations in fast mode with active layer sweeps for l1_to_l3, l3_to_tc, formal_lint, and ghost-command scanning for /nf: slash-command references in doc files."
     },
     {
-      "id": "BENCH-FAKE-03",
+      "id": "BF-03",
       "text": "Benchmark requirement with broken provenance"
     }
   ]

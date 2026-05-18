@@ -592,7 +592,7 @@ test('TC26: embed package present shows hollow idle indicator', () => {
 // --- Quorum Slots Line Tests (added in PR #141 follow-up — issue from CodeRabbit on #141) ---
 //
 // buildSlotsLine reads three files (all under HOME) and renders one glyph per provider:
-//   ~/.claude/nf/bin/providers.json  — the configured-slot inventory (required)
+//   ~/.claude/nf-bin/providers.json  — the configured-slot inventory (required)
 //   ~/.claude.json                    — mcpServers (which slots are MCP-registered)
 //   ~/.claude/nf/slot-health.json    — cached probe results (optional; staleness-aware)
 //
@@ -605,7 +605,7 @@ test('TC26: embed package present shows hollow idle indicator', () => {
 // Helper: lay down all three files for a slot scenario.
 function setupSlotsHome(suffix, opts) {
   const tempHome = makeTempDir(suffix);
-  const providersDir = path.join(tempHome, '.claude', 'nf', 'bin');
+  const providersDir = path.join(tempHome, '.claude', 'nf-bin');
   fs.mkdirSync(providersDir, { recursive: true });
   fs.writeFileSync(path.join(providersDir, 'providers.json'),
     JSON.stringify({ providers: opts.providers || [] }), 'utf8');
@@ -614,7 +614,9 @@ function setupSlotsHome(suffix, opts) {
       JSON.stringify({ mcpServers: opts.mcpServers }), 'utf8');
   }
   if (opts.health !== undefined) {
-    fs.writeFileSync(path.join(tempHome, '.claude', 'nf', 'slot-health.json'),
+    const nfDir = path.join(tempHome, '.claude', 'nf');
+    fs.mkdirSync(nfDir, { recursive: true });
+    fs.writeFileSync(path.join(nfDir, 'slot-health.json'),
       JSON.stringify(opts.health), 'utf8');
   }
   return tempHome;
@@ -812,7 +814,9 @@ test('TC37: malformed slot-health.json falls back to ○ (fail-open)', () => {
     mcpServers: { 'claude-1': { command: 'node' } },
   });
   // Corrupt the health file
-  fs.writeFileSync(path.join(tempHome, '.claude', 'nf', 'slot-health.json'), 'not json {{{', 'utf8');
+  const nfDir = path.join(tempHome, '.claude', 'nf');
+  fs.mkdirSync(nfDir, { recursive: true });
+  fs.writeFileSync(path.join(nfDir, 'slot-health.json'), 'not json {{{', 'utf8');
   const tempDir = makeTempDir('tc37-dir');
   try {
     const { stdout, exitCode } = runHook(

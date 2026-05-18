@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // nf-slot-health-probe.js — probe each nForma quorum slot (MCP server) for responsiveness.
 //
-// For each slot present in BOTH ~/.claude.json mcpServers AND ~/.claude/nf/bin/providers.json,
+// For each slot present in BOTH ~/.claude.json mcpServers AND ~/.claude/nf-bin/providers.json,
 // spawn the MCP server with the slot's env and send a JSON-RPC `initialize` over stdio.
 // Success = a well-formed response within the timeout. Writes the cache atomically to
 // ~/.claude/nf/slot-health.json. Statusline reads that cache and renders ●/⊘/○/·.
@@ -122,7 +122,7 @@ function probeSlot(name, mcpEntry, deadlineMs) {
 
 async function main() {
   const claudeJson = readJson(path.join(HOME, '.claude.json')) || { mcpServers: {} };
-  const providersData = readJson(path.join(HOME, '.claude', 'nf', 'bin', 'providers.json')) || { providers: [] };
+  const providersData = readJson(path.join(HOME, '.claude', 'nf-bin', 'providers.json')) || { providers: [] };
 
   // Guard against malformed providers.json (missing/non-array `providers`). Default to []
   // so a malformed file is treated as "nothing to probe" rather than crashing the hook.
