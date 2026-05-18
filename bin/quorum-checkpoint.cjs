@@ -51,7 +51,7 @@ const CHECKPOINT_SCHEMA = {
     t2_slots_tried:      { type: 'array', items: { type: 'string' } },
     all_tiers_exhausted: { type: 'boolean' },
     proceed_reason:      { type: 'string', minLength: 1 },
-    timestamp:           { type: 'string', minLength: 1 },
+    timestamp:           { type: 'string', minLength: 1, format: 'date-time' },
     schema_version:      { type: 'integer', enum: [CHECKPOINT_SCHEMA_VERSION] },
   },
 };
@@ -87,6 +87,9 @@ function validateAgainstSchema(value, schema, p) {
   }
   if (typeof value === 'string' && schema.minLength !== undefined && value.length < schema.minLength) {
     errors.push(`${label}: string shorter than minLength ${schema.minLength}`);
+  }
+  if (typeof value === 'string' && schema.format === 'date-time' && Number.isNaN(Date.parse(value))) {
+    errors.push(`${label}: must be a valid ISO-8601 date-time`);
   }
 
   if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {

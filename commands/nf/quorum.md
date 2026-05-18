@@ -362,7 +362,7 @@ Classification is based on runtime `auth_type` from `providers.json` / config â€
 
 Run `quorum-checkpoint.cjs` to write a **structured JSON checkpoint file** to `.planning/quorum/checkpoints/round-<N>.json`. The script schema-validates the values, writes the file, and prints a human-readable `<!-- FALLBACK_CHECKPOINT -->` block to stdout for the transcript. The Stop hook reads and validates that file â€” it does NOT parse the HTML comment, so formatting variation cannot bypass or trigger the gate.
 
-```
+```bash
 node "$HOME/.claude/nf-bin/quorum-checkpoint.cjs" \
   --round <round_number> \
   --cwd <absolute path to working directory> \

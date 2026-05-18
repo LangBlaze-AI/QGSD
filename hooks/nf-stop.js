@@ -28,12 +28,22 @@ try {
 } catch (_) { /* fail-open: cache unavailable */ }
 
 // Checkpoint module — schema + reader for the structured FALLBACK-01 checkpoint
-// file (issue #172). Fail-open: if require fails, checkpoint enforcement is
-// skipped rather than blocking the session.
+// file (issue #172). A genuinely missing module is fail-open (enforcement is
+// skipped). A syntax/runtime error inside the module is NOT silently swallowed
+// — it is surfaced on stderr so a broken gate does not hide behind fail-open.
 let checkpointModule = null;
 try {
   checkpointModule = require(resolveBin('quorum-checkpoint.cjs'));
-} catch (_) { /* fail-open: checkpoint validation unavailable */ }
+} catch (err) {
+  if (!err || err.code === 'MODULE_NOT_FOUND' || err.code === 'ENOENT') {
+    checkpointModule = null; // genuinely absent — fail-open
+  } else {
+    process.stderr.write(
+      '[nf-stop] WARNING: failed to load quorum-checkpoint module (FALLBACK-01 ' +
+      'enforcement degraded): ' + (err.message || err) + '\n'
+    );
+  }
+}
 
 // Appends a structured conformance event to .planning/conformance-events.jsonl.
 // Uses appendFileSync (atomic for writes < POSIX PIPE_BUF = 4096 bytes).
@@ -501,7 +511,10 @@ function evaluateCheckpoint(cwd, protocolRound, checkpointRoundsWritten, turnSta
   let stale = false;
   if (res.valid && turnStartTime !== null) {
     const cpTime = Date.parse(res.checkpoint.timestamp);
-    stale = !Number.isNaN(cpTime) && cpTime < turnStartTime;
+    // An unparseable timestamp cannot prove freshness — treat it as stale
+    // (fail closed). Schema validation already rejects non-date timestamps;
+    // this is defense-in-depth.
+    stale = Number.isNaN(cpTime) || cpTime < turnStartTime;
   }
 
   let reason = '';
@@ -541,7 +554,8 @@ function detectUnavailWithoutFallback(currentTurnLines, cwd) {
   const root = cwd || process.cwd();
   const dispatchRounds = [];    // Array of { messageIdx, taskIds: Set, protocolRound: number|null }
   const taskResults = new Map(); // taskId → result text
-  const checkpointRoundsWritten = new Set(); // protocol rounds checkpointed this turn
+  const checkpointRoundsWritten = new Set();   // protocol rounds checkpointed this turn
+  const pendingCheckpointBash = new Map();     // Bash tool_use_id → round (committed on success)
 
   for (let i = 0; i < currentTurnLines.length; i++) {
     try {
@@ -554,22 +568,31 @@ function detectUnavailWithoutFallback(currentTurnLines, cwd) {
         const taskIds = new Set();
         let protocolRound = null;
         for (const block of content) {
-          // Track slot-worker dispatches and the round they belong to
-          if (block.type === 'tool_use' && block.name === 'Task') {
-            const inputStr = JSON.stringify(block.input || {});
-            if (inputStr.includes('nf-quorum-slot-worker')) {
+          if (block.type !== 'tool_use') continue;
+          // Track slot-worker dispatches via the structured subagent_type field.
+          if (block.name === 'Task') {
+            const input = block.input || {};
+            const subagentType = input.subagent_type || input.subagentType || '';
+            if (subagentType === 'nf-quorum-slot-worker') {
               taskIds.add(block.id);
-              const m = inputStr.match(/--round[=\s]+(\d+)/);
+              // Round comes from the slot-dispatch invocation in the prompt,
+              // anchored to `node … quorum-slot-dispatch.cjs` so a stray --round
+              // elsewhere in the payload cannot bind the wrong protocol round.
+              const prompt = typeof input.prompt === 'string' ? input.prompt : '';
+              const m = prompt.match(/\bnode\b[^\n]*quorum-slot-dispatch\.cjs[^\n]*?--round[=\s]+(\d+)/);
               if (m && protocolRound === null) protocolRound = parseInt(m[1], 10);
             }
           }
-          // Track structured-checkpoint writes (freshness anchor for issue #172)
-          if (block.type === 'tool_use' && block.name === 'Bash') {
-            const cmd = block.input && block.input.command;
-            if (typeof cmd === 'string' && cmd.includes('quorum-checkpoint.cjs')) {
-              const m = cmd.match(/--round[=\s]+(\d+)/);
-              if (m) checkpointRoundsWritten.add(parseInt(m[1], 10));
-            }
+          // Track structured-checkpoint writes (freshness anchor for issue #172).
+          // Anchored to an actual `node … quorum-checkpoint.cjs … --round N`
+          // invocation; the round is committed only once the Bash tool_result
+          // confirms the write succeeded (see the tool_result handler below).
+          if (block.name === 'Bash') {
+            const cmd = (block.input && block.input.command) || '';
+            const m = typeof cmd === 'string'
+              ? cmd.match(/\bnode\b[^\n]*quorum-checkpoint\.cjs[^\n]*?--round[=\s]+(\d+)/)
+              : null;
+            if (m) pendingCheckpointBash.set(block.id, parseInt(m[1], 10));
           }
         }
         if (taskIds.size > 0) {
@@ -587,6 +610,10 @@ function detectUnavailWithoutFallback(currentTurnLines, cwd) {
               ? block.content.map(c => c.text || '').join('')
               : (typeof block.content === 'string' ? block.content : '');
             taskResults.set(block.tool_use_id, resultText);
+            // A checkpoint round counts only when its Bash call actually succeeded.
+            if (pendingCheckpointBash.has(block.tool_use_id) && block.is_error !== true) {
+              checkpointRoundsWritten.add(pendingCheckpointBash.get(block.tool_use_id));
+            }
           }
         }
       }

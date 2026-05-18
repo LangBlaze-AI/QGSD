@@ -1940,8 +1940,8 @@ test('TC-FB-9: UNAVAIL cleared by a subsequent fallback dispatch round passes', 
       userLine('/nf:plan-phase 1', 'human-fb'),
       assistantLine([slotWorkerTask('toolu_codex', 'codex-1', 1)], 'a-r1'),
       toolResultSuccessLine('toolu_codex', 'verdict: UNAVAIL', 'tr-codex'),
-      // fallback dispatch — a later round with a successful verdict, no UNAVAIL
-      assistantLine([slotWorkerTask('toolu_oc', 'opencode-1', 1)], 'a-r2'),
+      // a later dispatch round (round 2) with a successful verdict, no UNAVAIL
+      assistantLine([slotWorkerTask('toolu_oc', 'opencode-1', 2)], 'a-r2'),
       toolResultSuccessLine('toolu_oc', 'verdict: APPROVE\nreasoning: ok', 'tr-oc'),
       assistantLine([{ type: 'text', text: 'Quorum complete.\n\n<!-- NF_DECISION -->' }], 'a-final'),
     ];
@@ -1999,6 +1999,37 @@ test('TC-FB-10: unparseable dispatch round fails closed even with a checkpoint p
       assert.strictEqual(parsed.decision, 'block',
         'unknown dispatch round must fail closed, not borrow another round\'s checkpoint');
       assert.ok(/could not be determined/.test(parsed.reason), parsed.reason);
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// TC-FB-11: a checkpoint Bash call that FAILED (error tool_result) does not
+// count as a written checkpoint — the round is not freshness-anchored → BLOCK.
+test('TC-FB-11: failed checkpoint Bash call does not clear the gate', () => {
+  const dir = setupFallbackDir('ckptfail');
+  try {
+    writeCheckpointFile(dir, 1, freshCheckpoint()); // a valid file may exist on disk
+    const lines = [
+      userLine('/nf:plan-phase 1', 'human-fb'),
+      assistantLine([slotWorkerTask('toolu_codex', 'codex-1', 1)], 'a-dispatch'),
+      toolResultSuccessLine('toolu_codex', 'verdict: UNAVAIL', 'tr-codex'),
+      assistantLine([checkpointBash('toolu_ckpt', 1)], 'a-ckpt'),
+      toolResultErrorLine('toolu_ckpt', 'checkpoint script exited 1', 'tr-ckpt'),
+      assistantLine([{ type: 'text', text: 'Quorum complete.\n\n<!-- NF_DECISION -->' }], 'a-final'),
+    ];
+    const tmpFile = writeTempTranscript(lines);
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0);
+      assert.strictEqual(JSON.parse(stdout).decision, 'block',
+        'a failed checkpoint write must not freshness-anchor the round');
     } finally {
       fs.unlinkSync(tmpFile);
     }

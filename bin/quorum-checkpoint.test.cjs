@@ -77,6 +77,18 @@ test('validateCheckpoint: unknown schema_version fails (enum)', () => {
   assert.strictEqual(valid, false);
 });
 
+test('validateCheckpoint: non-date timestamp fails (format: date-time)', () => {
+  for (const bad of ['not-a-date', 'soon', '2026-13-99', '']) {
+    const { valid } = mod.validateCheckpoint(validCheckpoint({ timestamp: bad }));
+    assert.strictEqual(valid, false, `timestamp ${JSON.stringify(bad)} should be rejected`);
+  }
+  // A real ISO-8601 timestamp passes.
+  assert.strictEqual(
+    mod.validateCheckpoint(validCheckpoint({ timestamp: '2026-05-18T12:00:00.000Z' })).valid,
+    true
+  );
+});
+
 test('validateCheckpoint: non-object input fails cleanly', () => {
   for (const bad of [null, 'string', 42, [1, 2]]) {
     const { valid } = mod.validateCheckpoint(bad);

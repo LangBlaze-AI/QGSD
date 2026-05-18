@@ -216,7 +216,7 @@ Task(
 
 Run `quorum-checkpoint.cjs` to write a **structured JSON checkpoint** to `.planning/quorum/checkpoints/round-<N>.json`. The script schema-validates the values, writes the file, and prints a human-readable `<!-- FALLBACK_CHECKPOINT -->` block to stdout for the transcript. The Stop hook reads and schema-validates that file — it no longer regex-parses the HTML comment, so LLM formatting variation cannot bypass or trigger the gate.
 
-```
+```bash
 node "$HOME/.claude/nf-bin/quorum-checkpoint.cjs" \
   --round <round_number> \
   --cwd <absolute path to working directory> \
