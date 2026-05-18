@@ -1,0 +1,9 @@
+{
+  "providers": [
+    { "name": "codex-1", "provider": "openai" },
+    { "name": "copilot-1", "provider": "openai" },
+    { "name": "claude-1", "provider": "anthropic" },
+    { "name": "claude-2", "provider": "anthropic" },
+    { "name": "gemini-1", "provider": "google" }
+  ]
+}
