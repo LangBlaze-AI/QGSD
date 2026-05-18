@@ -381,7 +381,7 @@ Display the REVIEW FAN-OUT IMPORT banner:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Allowlist (preset env keys must match):
-  ^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$)
+  ^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$|.*_AUTH_TOKEN$|.*_TOKEN$)
 
 New slots (one per Daintree preset):
   ◆ {agentName}: vanilla = {vanillaSlotName} (preserved unchanged)
@@ -453,7 +453,7 @@ const SLOT_NAME_RE = /^[a-z][a-z0-9-]*$/;
 function slugify(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
-const ALLOWLIST = /^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$)/;
+const ALLOWLIST = /^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$|.*_AUTH_TOKEN$|.*_TOKEN$)/;
 function filterAllowlisted(envObj) {
   const out = {};
   for (const [k, v] of Object.entries(envObj || {})) if (ALLOWLIST.test(k)) out[k] = v;
@@ -623,7 +623,92 @@ for (const item of plan) {
   }
 }
 
+// ── Mask secret values in providers.json (issue 169) ────────────────────────
+// Secret keys (*_API_KEY, *_AUTH_TOKEN, *_TOKEN) are written as ${VAR} placeholders
+// in providers.json. Actual values are stored in the secrets store
+// (~/.claude/nf-secrets.json) so they never appear on disk in providers.json or
+// its backups. Dispatch-time resolution in unified-mcp-server.mjs and
+// call-quorum-slot.cjs loads from the secrets store into process.env.
+//
+// Only providers touched by this fan-out (added or updated in the plan) are
+// masked — pre-existing vanilla slots and hand-written entries are left intact.
+// Secrets are namespaced by provider name (<name>__<key>) to prevent collisions
+// when multiple providers share the same env key with different token values.
+const SECRET_KEY_RE = /_(API_KEY|AUTH_TOKEN|TOKEN)$/;
+const PLACEHOLDER_RE = /^\$\{([^}]+)\}$/;
+
+// Collect names of providers that were actually touched by this fan-out
+const touchedNames = new Set();
+for (const item of plan) {
+  if (item.kind === 'add') touchedNames.add(item.newName);
+  else if (item.kind === 'update') touchedNames.add(item.existingName);
+}
+
+let secretsStore = {};
+const secretsPath = path.join(os.homedir(), '.claude', 'nf-secrets.json');
+try { secretsStore = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {}; } catch (_) {}
+let secretsUpdated = false;
+
+for (const provider of providersData.providers) {
+  if (!provider.env) continue;
+  if (!touchedNames.has(provider.name)) continue;
+  for (const k of Object.keys(provider.env)) {
+    if (SECRET_KEY_RE.test(k) && !PLACEHOLDER_RE.test(String(provider.env[k]))) {
+      // Store with namespaced key to prevent multi-provider collisions
+      const storeKey = provider.name + '__' + k;
+      secretsStore[storeKey] = provider.env[k];
+      secretsUpdated = true;
+      // Replace with placeholder (uses the CLI-expected env key name)
+      provider.env[k] = '${' + k + '}';
+    }
+  }
+}
+
+// Persist secrets store (atomic write)
+if (secretsUpdated) {
+  fs.mkdirSync(path.dirname(secretsPath), { recursive: true });
+  const tmpSecrets = secretsPath + '.tmp';
+  fs.writeFileSync(tmpSecrets, JSON.stringify(secretsStore, null, 2), { mode: 0o600 });
+  fs.renameSync(tmpSecrets, secretsPath);
+  process.stderr.write('[nf:link-daintree] Stored ' + Object.keys(secretsStore).length + ' secret(s) in secrets store, replaced with ${VAR} placeholders in providers.json\n');
+}
+
 fs.writeFileSync(providersPath, JSON.stringify(providersData, null, 2) + '\n');
+
+// ── Persist preset metadata to install-immune store (issue #168) ──
+// ~/.claude/daintree-presets.json lives outside the nf/ directory, so it survives the
+// copyWithPathReplacement wipe that install.js performs. On every install, ensureMcpSlotsFromProviders
+// reads this file and restores any preset entries that got stripped from providers.json.
+const presetsStorePath = path.join(os.homedir(), '.claude', 'daintree-presets.json');
+let presetsStore = { version: 1, presets: {} };
+try { const existing = JSON.parse(fs.readFileSync(presetsStorePath, 'utf8')); if (existing && existing.presets) presetsStore = existing; } catch (_) {}
+for (const item of plan.filter(p => p.kind === 'add' || p.kind === 'update')) {
+  const targetName = item.kind === 'add' ? item.newName : item.existingName;
+  const provider = providersData.providers.find(p => p.name === targetName);
+  if (provider) {
+    presetsStore.presets[targetName] = {
+      daintree_preset_id: String(item.preset.id),
+      daintree_preset_name: item.preset.name,
+      daintree_preset_family: item.family || null,
+      agent_name: item.agentName,
+      vanilla_slot_name: item.vanilla ? item.vanilla.name : null,
+      env: provider.env || {},
+      model: provider.model || null,
+      display_provider: provider.display_provider || null,
+    };
+  }
+}
+// Prune stale entries: remove presets whose slot no longer exists in providers.json
+const currentSlotNames = new Set(providersData.providers.map(p => p.name));
+for (const slotName of Object.keys(presetsStore.presets)) {
+  if (!currentSlotNames.has(slotName)) delete presetsStore.presets[slotName];
+}
+// Atomic write with restrictive permissions — presets store may contain auth tokens
+// (ANTHROPIC_AUTH_TOKEN, *_API_KEY) in the env field. Mode 0o600 limits to owner-only read/write.
+fs.mkdirSync(path.dirname(presetsStorePath), { recursive: true });
+const _presetsTmp = presetsStorePath + '.tmp';
+fs.writeFileSync(_presetsTmp, JSON.stringify(presetsStore, null, 2) + '\n', { mode: 0o600 });
+fs.renameSync(_presetsTmp, presetsStorePath);
 
 // ── Apply to ~/.claude.json (clone vanilla MCP server entry per new slot) ──
 const claudeJsonPath = path.join(os.homedir(), '.claude.json');
@@ -1154,7 +1239,7 @@ Re-run /nf:link-canopy any time to refresh the link. Idempotency rules:
 - nf.json backup created before any write
 - Import path fans out per-agent presets into new provider entries (matched via provider.mainTool === agentName + family inferred from preset env), overlaying allowlisted env onto the cloned vanilla. Vanilla slots are untouched; preset-linked slots are replaced in place on re-import. (issue 138 AC2 + AC5)
 - providers.json backup created before any env merge write
-- Both preset env and globalEnvironmentVariables merges are gated by allowlist `^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$)` — covers all BRAND_COLORS providers
+- Both preset env and globalEnvironmentVariables merges are gated by allowlist `^(ANTHROPIC_|OPENAI_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|OLLAMA_|OPENROUTER_|XAI_|GROK_|MODEL$|.*_BASE_URL$|.*_API_KEY$|.*_AUTH_TOKEN$|.*_TOKEN$)` — covers all BRAND_COLORS providers
 - Registration writes to Canopy's userAgentRegistry with `nf-` prefixed agent IDs
 - Export path writes nForma quorum slots to per-agent Daintree customPresets arrays (agentSettings.agents.<agent>.customPresets[]) with provider-specific brand colors from BRAND_COLORS mapping (issue 138 AC3 + AC4)
 - Canopy config.json backup created before any write
