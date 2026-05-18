@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - fix(quorum): replace the fragile HTML-comment `FALLBACK_CHECKPOINT` transcript marker with a schema-validated structured checkpoint file (`.planning/quorum/checkpoints/round-<N>.json`). `/nf:quorum` now runs `quorum-checkpoint.cjs` to write the checkpoint; `nf-stop.js` reads and JSON-schema-validates that file instead of regex-parsing the transcript, so LLM stylistic variation in the comment can no longer bypass or trigger the FALLBACK-01 gate. The human-readable HTML comment is still emitted for the transcript but is no longer the gating mechanism. (#172)
 
+### Fixed
+- fix(provider-concurrency): PID-based file semaphores no longer leave stale locks after a crash or `SIGKILL` — stale-lock reclamation (dead PID, previous-boot detection, TTL backstop) now runs on every pass of the acquire retry loop, so a slot freed by a holder that dies while another caller is waiting becomes available within one backoff cycle instead of blocking until timeout; `process.kill(pid,0)` `EPERM` is now treated as alive and a boot-time field guards against post-reboot PID reuse (#176)
+- fix(call-quorum-slot): HTTP provider slots are now held for the full request lifetime — the slot was previously released in a synchronous `finally` the instant `req.end()` returned, before the response arrived, which defeated the per-provider concurrency cap (#176)
+
 ## [0.43.1] - 2026-05-03
 
 ### Fixed
