@@ -2762,13 +2762,21 @@ function install(isGlobal, runtime = 'claude') {
         } catch (_) { /* unreadable — skip migration */ }
 
         // Replace legacy nf/bin/providers.json with symlink to canonical nf-bin/providers.json
+        // Use atomic rename to avoid losing the legacy file if symlink creation fails
         try {
-          fs.unlinkSync(nfBinProviders);
-          fs.symlinkSync(canonicalProviders, nfBinProviders);
-          console.log(`  ${green}✓${reset} Linked nf/bin/providers.json → nf-bin/providers.json`);
+          const backupPath = nfBinProviders + '.bak';
+          fs.renameSync(nfBinProviders, backupPath);
+          try {
+            fs.symlinkSync(canonicalProviders, nfBinProviders);
+            fs.unlinkSync(backupPath);
+            console.log(`  ${green}✓${reset} Linked nf/bin/providers.json → nf-bin/providers.json`);
+          } catch (e) {
+            // Symlink failed — restore backup so legacy readers still work
+            try { fs.renameSync(backupPath, nfBinProviders); } catch (_) { /* best effort */ }
+            log(`  Could not create providers.json symlink: ${e.message}`);
+          }
         } catch (e) {
-          // Symlink failed (e.g. permissions) — leave the old file in place as a fallback
-          log(`  Could not create providers.json symlink: ${e.message}`);
+          log(`  Could not back up legacy providers.json: ${e.message}`);
         }
       }
 
