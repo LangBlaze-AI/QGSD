@@ -3,6 +3,7 @@
     "minQuorumMet":            "successCount * 2 >= N",
     "unanimityMet":            "successCount = polledCount",
     "floorMet":                "successCount >= minLiveVoters",
+    "unanimityAndFloorMet":    "successCount = polledCount /\\ successCount >= minLiveVoters",
     "noInfiniteDeliberation":  "deliberationRounds < maxDeliberation",
     "phaseMonotonicallyAdvances": "TRUE"
   },

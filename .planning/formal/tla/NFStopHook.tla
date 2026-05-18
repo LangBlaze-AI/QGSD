@@ -156,12 +156,12 @@ SafetyInvariant1 ==
   decision = "BLOCK" => hasCommand
 
 (*
- * SafetyInvariant2: BLOCK can only be decided if quorum evidence is absent.
- * Prevents blocking a turn that already satisfied the quorum requirement.
+ * SafetyInvariant2: BLOCK can only be decided if quorum evidence is absent
+ * OR live voters are below the floor. Allows floor-block even with evidence.
  *)
 \* @requirement STOP-03
 SafetyInvariant2 ==
-  decision = "BLOCK" => ~hasQuorumEvidence
+  decision = "BLOCK" => ~hasQuorumEvidence \/ liveVoterCount < MinLiveVoters
 
 (*
  * SafetyInvariant3: PASS can only be decided on a planning turn if quorum evidence is present

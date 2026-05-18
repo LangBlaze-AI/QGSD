@@ -133,15 +133,17 @@ DeliberatingVotesCollectedToDELIBERATING ==
     /\ deliberationRounds' = deliberationRounds + 1
     /\ UNCHANGED <<slotsAvailable, successCount, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
-\* DELIBERATING -[VOTES_COLLECTED]-> DECIDED
+\* DELIBERATING -[VOTES_COLLECTED / floorMet]-> DECIDED (max rounds exhausted, but floor still met)
 DeliberatingVotesCollectedFallbackToDECIDED ==
     /\ state = "DELIBERATING"
+    /\ successCount >= minLiveVoters
     /\ state' = "DECIDED"
     /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 
-\* DELIBERATING -[DECIDE]-> DECIDED
+\* DELIBERATING -[DECIDE / floorMet]-> DECIDED
 DeliberatingDecide ==
     /\ state = "DELIBERATING"
+    /\ successCount >= minLiveVoters
     /\ state' = "DECIDED"
     /\ UNCHANGED <<slotsAvailable, successCount, deliberationRounds, maxDeliberation, maxSize, minLiveVoters, polledCount>>
 

@@ -1788,14 +1788,25 @@ test('TC-FLOOR-2: slot-worker adequate consensus — 2 live voters, floor=2 → 
   for (const s of slots) mcpServers[s] = {};
   fs.writeFileSync(claudeJsonTmp, JSON.stringify({ mcpServers }));
 
-  // Transcript: both slot-workers return APPROVE
+  // Transcript: both slot-workers return APPROVE (dispatched as sibling Tasks in one message)
   const transcriptLines = [
     userLine('/qnf:quick add something', 'human-floor2'),
     assistantLine([bashCommitBlock('node /path/nf-tools.cjs commit "docs: plan" --files quick-115-PLAN.md')], 'assistant-commit'),
-    slotWorkerTaskLine('slot-a', 'task-a'),
-    slotWorkerTaskLine('slot-b', 'task-b'),
-    slotWorkerResultLine('task-a', 'verdict: APPROVE\nreasoning: looks good\ndispatch_nonce: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6'),
-    slotWorkerResultLine('task-b', 'verdict: APPROVE\nreasoning: solid plan\ndispatch_nonce: f1e2d3c4b5a6978869504132435a6b7c'),
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'tool_use', id: 'task-a', name: 'Task', input: { subagent_type: 'nf-quorum-slot-worker', prompt: 'node quorum-slot-dispatch.cjs --slot slot-a --mode A --round 1 --question "test"' } },
+          { type: 'tool_use', id: 'task-b', name: 'Task', input: { subagent_type: 'nf-quorum-slot-worker', prompt: 'node quorum-slot-dispatch.cjs --slot slot-b --mode A --round 1 --question "test"' } },
+        ],
+        stop_reason: 'tool_use',
+      },
+      timestamp: '2026-02-20T00:05:00Z',
+      uuid: 'assistant-sw-dispatch',
+    }),
+    toolResultSuccessLine('task-a', 'verdict: APPROVE\nreasoning: looks good\ndispatch_nonce: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6'),
+    toolResultSuccessLine('task-b', 'verdict: APPROVE\nreasoning: solid plan\ndispatch_nonce: f1e2d3c4b5a6978869504132435a6b7c'),
     assistantLine([{ type: 'text', text: 'Done.' }], 'assistant-final'),
   ];
   const tmpFile = writeTempTranscript(transcriptLines);

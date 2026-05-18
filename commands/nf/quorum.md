@@ -60,7 +60,7 @@ These three rules govern ALL consensus determination in both Mode A and Mode B. 
 - Consensus means 100% of valid (non-UNAVAIL) external voters agree on the same verdict.
 - There is NO majority-based approval. 2-out-of-3 APPROVE with 1 BLOCK is NOT consensus — it is a disagreement requiring deliberation.
 - UNAVAIL voters are excluded from the denominator (they are not valid voters for this round).
-- If only 1 external voter is valid and they APPROVE, that is consensus (1/1 = 100%).
+- If only 1 external voter is valid and they APPROVE, that is consensus (1/1 = 100%) — provided `min_live_voters` is satisfied (see CE-4).
 
 **RULE CE-4: Minimum Live Voters Floor**
 - After tier fallback, if the number of live (non-UNAVAIL) external voters is below `min_live_voters` (default: 2), consensus MUST NOT be declared — even if all remaining voters agree.

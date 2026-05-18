@@ -34,6 +34,10 @@ export const nfWorkflowMachine = setup({
     floorMet: ({ context }) =>
       context.successCount >= context.minLiveVoters,
 
+    unanimityAndFloorMet: ({ context }) =>
+      context.successCount === context.polledCount &&
+      context.successCount >= context.minLiveVoters,
+
     noInfiniteDeliberation: ({ context }) =>
       context.deliberationRounds < context.maxDeliberation,
 
@@ -78,7 +82,7 @@ export const nfWorkflowMachine = setup({
       on: {
         VOTES_COLLECTED: [
           {
-            guard: ['unanimityMet', 'floorMet'],
+            guard:   'unanimityAndFloorMet',
             target:  'DECIDED',
             actions: assign({
               successCount:  ({ event }) => event.successCount,
@@ -109,7 +113,7 @@ export const nfWorkflowMachine = setup({
       on: {
         VOTES_COLLECTED: [
           {
-            guard: ['unanimityMet', 'floorMet'],
+            guard:   'unanimityAndFloorMet',
             target:  'DECIDED',
             actions: assign({
               successCount:  ({ event }) => event.successCount,
@@ -124,6 +128,7 @@ export const nfWorkflowMachine = setup({
             }),
           },
           {
+            guard:   'floorMet',
             target:  'DECIDED',
             actions: assign({ currentPhase: () => 'DECIDED' }),
           },
