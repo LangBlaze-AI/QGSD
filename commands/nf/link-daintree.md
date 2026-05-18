@@ -675,6 +675,41 @@ if (secretsUpdated) {
 
 fs.writeFileSync(providersPath, JSON.stringify(providersData, null, 2) + '\n');
 
+// ── Persist preset metadata to install-immune store (issue #168) ──
+// ~/.claude/daintree-presets.json lives outside the nf/ directory, so it survives the
+// copyWithPathReplacement wipe that install.js performs. On every install, ensureMcpSlotsFromProviders
+// reads this file and restores any preset entries that got stripped from providers.json.
+const presetsStorePath = path.join(os.homedir(), '.claude', 'daintree-presets.json');
+let presetsStore = { version: 1, presets: {} };
+try { const existing = JSON.parse(fs.readFileSync(presetsStorePath, 'utf8')); if (existing && existing.presets) presetsStore = existing; } catch (_) {}
+for (const item of plan.filter(p => p.kind === 'add' || p.kind === 'update')) {
+  const targetName = item.kind === 'add' ? item.newName : item.existingName;
+  const provider = providersData.providers.find(p => p.name === targetName);
+  if (provider) {
+    presetsStore.presets[targetName] = {
+      daintree_preset_id: String(item.preset.id),
+      daintree_preset_name: item.preset.name,
+      daintree_preset_family: item.family || null,
+      agent_name: item.agentName,
+      vanilla_slot_name: item.vanilla ? item.vanilla.name : null,
+      env: provider.env || {},
+      model: provider.model || null,
+      display_provider: provider.display_provider || null,
+    };
+  }
+}
+// Prune stale entries: remove presets whose slot no longer exists in providers.json
+const currentSlotNames = new Set(providersData.providers.map(p => p.name));
+for (const slotName of Object.keys(presetsStore.presets)) {
+  if (!currentSlotNames.has(slotName)) delete presetsStore.presets[slotName];
+}
+// Atomic write with restrictive permissions — presets store may contain auth tokens
+// (ANTHROPIC_AUTH_TOKEN, *_API_KEY) in the env field. Mode 0o600 limits to owner-only read/write.
+fs.mkdirSync(path.dirname(presetsStorePath), { recursive: true });
+const _presetsTmp = presetsStorePath + '.tmp';
+fs.writeFileSync(_presetsTmp, JSON.stringify(presetsStore, null, 2) + '\n', { mode: 0o600 });
+fs.renameSync(_presetsTmp, presetsStorePath);
+
 // ── Apply to ~/.claude.json (clone vanilla MCP server entry per new slot) ──
 const claudeJsonPath = path.join(os.homedir(), '.claude.json');
 let claudeJson = {};

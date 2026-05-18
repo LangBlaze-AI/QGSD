@@ -633,7 +633,25 @@ function ensureMcpSlotsFromProviders() {
               });
             }
           }
-          if (merged.providers.length > 0) {
+          // ── Restore daintree presets from install-immune store (issue #168) ──
+          // ~/.claude/daintree-presets.json persists across copyWithPathReplacement wipes.
+          // Overlay any preset entries that are missing or stripped from the merged providers.
+          const { restoreDaintreePresets: _restoreDaintreePresets } = require('./install-helpers.cjs');
+          const presetsStorePath = path.join(os.homedir(), '.claude', 'daintree-presets.json');
+          let restoreResult = { restoredCount: 0, restoredNames: [] };
+          try {
+            restoreResult = _restoreDaintreePresets(merged.providers, presetsStorePath);
+            if (restoreResult.restoredCount > 0) {
+              const tmpPath = globalProvidersJson + '.tmp';
+              fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2) + '\n', 'utf8');
+              fs.renameSync(tmpPath, globalProvidersJson);
+              console.log(`  ${green}✓${reset} Restored ${restoreResult.restoredCount} daintree preset(s) from durable store`);
+            }
+          } catch (e) {
+            console.warn(`  ${yellow}⚠${reset} Could not restore daintree presets: ${e.message}`);
+          }
+
+          if (merged.providers.length > 0 && restoreResult.restoredCount === 0) {
             const tmpPath = globalProvidersJson + '.tmp';
             fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2) + '\n', 'utf8');
             fs.renameSync(tmpPath, globalProvidersJson);
