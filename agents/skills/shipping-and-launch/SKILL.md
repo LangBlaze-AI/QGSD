@@ -18,6 +18,48 @@ When to use
 
 High-level steps the skill should follow
 ----------------------------------------
+0) Worktree cleanliness check (PRE-FLIGHT — must pass before any other step)
+  - Run `git status --porcelain` to list all dirty files
+  - Run `git status --porcelain --ignored=matching` to also surface files matched by gitignore rules (prefixed `!!`)
+  - Run `git diff --stat` for unstaged changes summary
+  - Run `git diff --cached --stat` for staged-but-uncommitted summary
+  - Run `git log --oneline origin/main..HEAD` to see commits not yet in main (verify PR scope)
+  - Run `git stash list` to check for stashed work that may be relevant
+
+  For each file from `git status --porcelain`, classify using `git check-ignore -v <file>`:
+  - **Ignored (`!!`)** → already covered by ignore rules (no action unless rule is too broad)
+  - **Untracked (`??`)** → recommend STAGE + COMMIT (legitimate new file) or ADD TO .gitignore if it matches heuristic patterns below
+  - **Modified/unstaged (` M`)** → recommend STAGE + COMMIT (unstaged change)
+  - **Staged/uncommitted (`M `, `A `)** → recommend COMMIT (staged but not committed)
+  - **Deleted (` D`, `D `)** → recommend STAGE + COMMIT (deletion not tracked)
+
+  Heuristics for gitignore recommendations on untracked files:
+  - Files matching common secret patterns: `.env*`, `*.pem`, `*.key`, `credentials*`
+  - Editor/OS artifacts: `.DS_Store`, `*.swp`, `*~`, `.idea/`, `.vscode/`
+  - Build output: `dist/`, `build/`, `*.o`, `*.pyc`, `node_modules/`
+  - Logs and temp files: `*.log`, `*.tmp`, `*.bak`
+  - Run `git check-ignore -v <file>` to confirm matching ignore rules
+  - If a file is tracked but should now be ignored, untrack only that file: `git rm --cached <file>`, then commit `.gitignore` and the index change
+
+  Present findings as a table:
+  ```text
+  XY  File                            Recommendation
+  ??  .env.local                      ADD TO .gitignore (secret pattern)
+   M  src/feature.ts                  STAGE + COMMIT (unstaged change)
+  M   src/new-feature.ts              COMMIT (staged, not committed)
+  ```
+
+  If all clean: proceed to Step 1 immediately (no output needed).
+  If issues found: use AskUserQuestion with options:
+    [c] Commit all — stage + commit everything with auto-generated message
+    [g] Gitignore recommended files — add suggested patterns to .gitignore, then re-check
+    [i] Individual — walk through each file separately
+    [s] Skip — proceed with dirty tree (not recommended for releases)
+    [a] Abort — stop the skill
+
+  After fixes: re-run `git status --porcelain` to confirm clean state.
+  Only proceed to Step 1 when tree is clean or user explicitly chose [s] Skip.
+
 1) Confirm release scope
   - State what is shipping, who is affected, and the blast radius
   - Identify dependencies: migrations, config, flags, docs, support, or data backfills
