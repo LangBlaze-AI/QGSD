@@ -303,6 +303,33 @@ function truncateResponse(text) {
   return text.slice(0, MAX_RESPONSE - suffix.length) + suffix;
 }
 
+/**
+ * Resolve the executable to hand to child_process.spawn for a subprocess provider.
+ *
+ * Mirrors the 3-tier fallback in bin/call-quorum-slot.cjs (PR #161/#164):
+ *   resolvedCli (absolute path, populated by the startup resolution loop) →
+ *   cli (raw providers.json field) → mainTool (bare binary name).
+ *
+ * The startup loop normally populates `resolvedCli`, but it only runs for
+ * `type === 'subprocess'` providers and skips any with no `cli`/`mainTool`.
+ * When it doesn't run, the previous `provider.resolvedCli ?? provider.cli`
+ * expression could be `null` — and `providers.json` carries `cli: null` for
+ * mainTool-only slots, so spawn received `null` and threw the opaque
+ * `TypeError [ERR_INVALID_ARG_TYPE]: The "file" argument must be of type
+ * string. Received null`, taking the whole quorum offline. Throwing a named
+ * error here turns that into a diagnosable `[spawn error: ...]` instead.
+ *
+ * @param {object} provider
+ * @returns {string} a non-empty executable name or path
+ */
+function resolveSpawnTarget(provider) {
+  const target = provider.resolvedCli || provider.cli || provider.mainTool;
+  if (!target) {
+    throw new Error(`provider ${provider.name} has no resolvable CLI (cli, resolvedCli, and mainTool all empty)`);
+  }
+  return target;
+}
+
 async function runProvider(provider, toolArgs) {
   const prompt = toolArgs.prompt;
   const timeoutMs = toolArgs.timeout_ms ?? provider.timeout_ms ?? 300000;
@@ -323,7 +350,7 @@ async function runProvider(provider, toolArgs) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(provider.resolvedCli ?? provider.cli, args, {
+      child = spawn(resolveSpawnTarget(provider), args, {
         env,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
@@ -387,7 +414,7 @@ async function runSubprocessWithArgs(provider, args, timeoutMs = 30000) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(provider.resolvedCli ?? provider.cli, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
+      child = spawn(resolveSpawnTarget(provider), args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (err) {
       resolve(`[spawn error: ${err.message}]`);
       return;
@@ -657,8 +684,9 @@ async function runDeepHealthCheck(provider) {
 
   const timeoutMs = probe.timeout_ms ?? 20000;
 
-  // Step 1: Check binary exists
-  const binaryPath = provider.resolvedCli ?? provider.cli;
+  // Step 1: Check binary exists — same 3-tier fallback as resolveSpawnTarget
+  // (resolvedCli → cli → mainTool) so mainTool-only slots resolve here too.
+  const binaryPath = provider.resolvedCli || provider.cli || provider.mainTool;
   try {
     fs.accessSync(binaryPath, fs.constants.X_OK);
   } catch (_) {
