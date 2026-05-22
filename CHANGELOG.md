@@ -6,13 +6,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-05-21 — Quorum reliability & provider resolution hardening
+
+### Added
+- feat(skills): `/nf:pr-resolve` skill — evaluates bot review comments (CodeRabbit, Copilot, gitar) for validity before resolving threads, then polls CI and squash-merges when ready. Includes a worktree cleanliness pre-flight check before skill execution (#160, #181)
+- feat(quorum): `min_live_voters` floor for thin-consensus safety — a verdict is trusted only once a minimum number of slots have returned live votes, so a lone surviving voter can no longer carry consensus (#192)
+- feat(quorum): empirical score-delta calibration — consensus scoring thresholds are derived from observed score distributions rather than fixed constants (#175)
+- feat(install): auto-install `uv` when missing, gated by an availability pre-check, before the River ML install step (#155)
+
 ### Changed
-- fix(quorum): replace the fragile HTML-comment `FALLBACK_CHECKPOINT` transcript marker with a schema-validated structured checkpoint file (`.planning/quorum/checkpoints/round-<N>.json`). `/nf:quorum` now runs `quorum-checkpoint.cjs` to write the checkpoint; `nf-stop.js` reads and JSON-schema-validates that file instead of regex-parsing the transcript, so LLM stylistic variation in the comment can no longer bypass or trigger the FALLBACK-01 gate. The human-readable HTML comment is still emitted for the transcript but is no longer the gating mechanism. (#172)
+- fix(quorum): replace the fragile HTML-comment `FALLBACK_CHECKPOINT` transcript marker with a schema-validated structured checkpoint file (`.planning/quorum/checkpoints/round-<N>.json`). `/nf:quorum` now runs `quorum-checkpoint.cjs` to write the checkpoint; `nf-stop.js` reads and JSON-schema-validates that file instead of regex-parsing the transcript, so LLM stylistic variation in the comment can no longer bypass or trigger the FALLBACK-01 gate. The human-readable HTML comment is still emitted for the transcript but is no longer the gating mechanism. (#188)
+- fix: consolidate `providers.json` onto the canonical `~/.claude/nf-bin/` path — installer, MCP server, and quorum dispatch now all read the same location, ending divergence between the legacy `nf/bin/` and `nf-bin/` copies (#186, closes #167)
 
 ### Fixed
-- fix(mcp): `unified-mcp-server.mjs` now resolves the spawn executable through the same 3-tier fallback as `call-quorum-slot.cjs` (`resolvedCli → cli → mainTool`) via a shared `resolveSpawnTarget` helper. The previous `provider.resolvedCli ?? provider.cli` expression could hand `null` to `child_process.spawn` for `mainTool`-only slots (`providers.json` carries `cli: null`), throwing the opaque `TypeError: The "file" argument must be of type string. Received null`. An unresolvable provider now fails with a named `[spawn error: provider <name> has no resolvable CLI ...]` instead. The deep health check binary lookup uses the same fallback (#161/#164 follow-up)
-- fix(provider-concurrency): PID-based file semaphores no longer leave stale locks after a crash or `SIGKILL` — stale-lock reclamation (dead PID, previous-boot detection, TTL backstop) now runs on every pass of the acquire retry loop, so a slot freed by a holder that dies while another caller is waiting becomes available within one backoff cycle instead of blocking until timeout; `process.kill(pid,0)` `EPERM` is now treated as alive and a boot-time field guards against post-reboot PID reuse (#176)
+- fix(mcp): `unified-mcp-server.mjs` now resolves the spawn executable through the same 3-tier fallback as `call-quorum-slot.cjs` (`resolvedCli → cli → mainTool`) via a shared `resolveSpawnTarget` helper. The previous `provider.resolvedCli ?? provider.cli` expression could hand `null` to `child_process.spawn` for `mainTool`-only slots (`providers.json` carries `cli: null`), throwing the opaque `TypeError: The "file" argument must be of type string. Received null`. An unresolvable provider now fails with a named `[spawn error: provider <name> has no resolvable CLI ...]` instead. The deep health check binary lookup uses the same fallback (#193, follows #161/#164)
+- fix(mcp/install): resolve a provider's CLI from `mainTool` when the `cli` field is null, and self-heal a missing `mainTool` — without this the resolved CLI stayed unset and spawn received `null`, taking the whole quorum offline (#161, #164)
+- fix(quorum): backport the `mainTool` CLI fallback to `probe-quorum-slots` so slot health probes resolve binaries the same way dispatch does (#180)
+- fix(quorum): replace a truthy gate in `detectInstalledProviders` that excluded validly-configured slots (#183)
+- fix(mcp): auto-fall-back to the user-installed `providers.json`, and backfill `UNIFIED_PROVIDERS_CONFIG` when the repo-shipped source is empty (#162, #163)
+- fix(quorum): prefer the slash-path `providers.json` so Daintree-registered slots are visible to the quorum (#165)
+- fix(provider-concurrency): PID-based file semaphores no longer leave stale locks after a crash or `SIGKILL` — stale-lock reclamation (dead PID, previous-boot detection, TTL backstop) now runs on every pass of the acquire retry loop, so a slot freed by a holder that dies while another caller is waiting becomes available within one backoff cycle instead of blocking until timeout; `process.kill(pid,0)` `EPERM` is now treated as alive and a boot-time field guards against post-reboot PID reuse (#187, addresses #176)
 - fix(call-quorum-slot): HTTP provider slots are now held for the full request lifetime — the slot was previously released in a synchronous `finally` the instant `req.end()` returned, before the response arrived, which defeated the per-provider concurrency cap (#176)
+- fix(quorum): model correlated provider failures in the early-escalation gate so a shared-upstream outage no longer reads as independent slot failures (#190)
+- fix(quorum/link-daintree): attribute fan-out slots to their actual upstream provider, make fan-out idempotent across installs, persist fan-out preset metadata to an install-immune store, and always register `health_check` plus smoke-probe for newly created slots (#158, #159, #179, #184)
+- fix(quorum/link-daintree): store API tokens as `${VAR}` placeholders instead of plaintext (#182)
+- fix(mcp-status): read the quorum scoreboard from the correct path (#166)
+- fix(autopilot): trust GitHub server merge state over the `gh` CLI exit code when deciding whether a merge succeeded (#185)
+- fix(statusline): River status cyan now means "has visits" (reward data exists), not merely "has arms" (#155)
+
+### Removed
+- chore(quorum): remove dead CCR code paths after the `ccr-*` fleet retirement (#177)
 
 ## [0.43.1] - 2026-05-03
 
