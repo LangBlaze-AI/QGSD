@@ -656,6 +656,13 @@ const {
   makeFileSetHash,
   makePatternHash,
   getEvidencePath,
+  hasReversionInHashes,
+  detectOscillation,
+  countOscillationCycles,
+  getCommitMessages,
+  hasRollbackIntent,
+  isCleanRollback,
+  ROLLBACK_KEYWORDS,
 } = require('../hooks/nf-circuit-breaker.js');
 
 // Test CB-TC-BR1: Deny message includes commit graph when snapshot present
@@ -1219,5 +1226,399 @@ test('CB-EV09: markEvidenceResolved sets resolved_at and resolved_by_commit', ()
     assert.strictEqual(after.signatures[0].resolved_by_commit, 'deadbeef', 'resolved_by_commit must be set');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// ============================================================================
+// New tests for false-positive prevention: cycles, rollback, intent
+// ============================================================================
+
+// --- Direct unit tests for new exported functions ---
+
+// Test CB-UT01: countOscillationCycles returns correct values
+test('CB-UT01: countOscillationCycles returns runList.length - 1', () => {
+  assert.strictEqual(countOscillationCycles([{ indices: [0] }]), 0, '1 run-group = 0 cycles');
+  assert.strictEqual(countOscillationCycles([{ indices: [0] }, { indices: [2] }]), 1, '2 run-groups = 1 cycle');
+  assert.strictEqual(countOscillationCycles([{ indices: [0] }, { indices: [2] }, { indices: [4] }]), 2, '3 run-groups = 2 cycles');
+  assert.strictEqual(countOscillationCycles([]), 0, 'empty = 0 cycles');
+});
+
+// Test CB-UT02: ROLLBACK_KEYWORDS matches expected patterns
+test('CB-UT02: ROLLBACK_KEYWORDS matches revert/rollback/remove/undo/backout', () => {
+  assert.ok(ROLLBACK_KEYWORDS.test('Revert prefer_wallet parameter'), '"Revert" must match');
+  assert.ok(ROLLBACK_KEYWORDS.test('fix: remove unvalidated wallet-first'), '"remove" must match');
+  assert.ok(ROLLBACK_KEYWORDS.test('Rollback feature X'), '"Rollback" must match');
+  assert.ok(ROLLBACK_KEYWORDS.test('Undo bad merge'), '"Undo" must match');
+  assert.ok(ROLLBACK_KEYWORDS.test('Backout changeset'), '"Backout" must match');
+  assert.ok(ROLLBACK_KEYWORDS.test('back out changes'), '"back out" must match');
+  assert.ok(!ROLLBACK_KEYWORDS.test('Update config'), '"Update" must not match');
+  assert.ok(!ROLLBACK_KEYWORDS.test('Add new feature'), '"Add" must not match');
+  assert.ok(!ROLLBACK_KEYWORDS.test('Fix typo in readme'), '"Fix" must not match');
+});
+
+// Test CB-UT03: hasRollbackIntent detects keywords on negative-net commits
+test('CB-UT03: hasRollbackIntent detects keywords on negative-net commits', () => {
+  const hash = 'abc123';
+  const messages = new Map([[hash, 'Revert prefer_wallet parameter']]);
+  const pairStats = [{ pairNet: 10, hash: 'other' }, { pairNet: -10, hash }];
+  assert.ok(hasRollbackIntent(messages, pairStats), 'negative-net commit with "Revert" must match');
+});
+
+// Test CB-UT04: hasRollbackIntent ignores keywords on positive-net commits
+test('CB-UT04: hasRollbackIntent ignores keywords on positive-net commits', () => {
+  const hash = 'abc123';
+  const messages = new Map([[hash, 'Revert something']]);
+  const pairStats = [{ pairNet: 10, hash }]; // positive net — keyword shouldn't count
+  assert.ok(!hasRollbackIntent(messages, pairStats), 'positive-net commit with "Revert" must not match');
+});
+
+// Test CB-UT05: hasRollbackIntent returns false when no keywords present
+test('CB-UT05: hasRollbackIntent returns false when no keywords present', () => {
+  const hash = 'abc123';
+  const messages = new Map([[hash, 'Update routing logic']]);
+  const pairStats = [{ pairNet: -5, hash }];
+  assert.ok(!hasRollbackIntent(messages, pairStats), 'negative-net commit without keywords must not match');
+});
+
+// --- Integration tests: cycle gate, rollback detection, intent ---
+
+// Helper: build a PreToolUse stdin payload for a write command in the given repo
+function makeWritePayload(repoDir) {
+  return {
+    tool_name: 'Bash',
+    tool_input: { command: 'echo write-test', description: 'test', timeout: 5000 },
+    cwd: repoDir,
+    hook_event_name: 'PreToolUse',
+    tool_use_id: 'test-id',
+    session_id: 'test-session',
+    transcript_path: '/tmp/test.jsonl',
+    permission_mode: 'default',
+  };
+}
+
+// Helper: create a clean rollback pattern — add feature then remove it, with filler commits
+// Produces: add feature (same files) → filler → remove feature (same files) → filler → same files again
+// This gives 3 run-groups of the same file set but only 1 full cycle.
+function createRollbackPattern(repoDir, fileName) {
+  // Initial commit
+  fs.writeFileSync(path.join(repoDir, fileName), 'line1\n', 'utf8');
+  spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+  spawnSync('git', ['commit', '-m', 'initial'], { cwd: repoDir, encoding: 'utf8' });
+
+  // Commit 1: add feature (50 lines)
+  let content = 'line1\n';
+  for (let i = 0; i < 50; i++) content += `feature-line-${i}\n`;
+  fs.writeFileSync(path.join(repoDir, fileName), content, 'utf8');
+  spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+  spawnSync('git', ['commit', '-m', 'feat: add prefer_wallet routing'], { cwd: repoDir, encoding: 'utf8' });
+
+  // Filler commit (different file)
+  fs.writeFileSync(path.join(repoDir, 'other.txt'), 'filler 0', 'utf8');
+  spawnSync('git', ['add', 'other.txt'], { cwd: repoDir, encoding: 'utf8' });
+  spawnSync('git', ['commit', '-m', 'b-group filler 0'], { cwd: repoDir, encoding: 'utf8' });
+
+  // Commit 2: remove feature (back to 1 line) — deliberate rollback
+  fs.writeFileSync(path.join(repoDir, fileName), 'line1\n', 'utf8');
+  spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+  spawnSync('git', ['commit', '-m', 'fix: remove unvalidated wallet-first routing'], { cwd: repoDir, encoding: 'utf8' });
+
+  // Filler commit (different file)
+  fs.writeFileSync(path.join(repoDir, 'other2.txt'), 'filler 1', 'utf8');
+  spawnSync('git', ['add', 'other2.txt'], { cwd: repoDir, encoding: 'utf8' });
+  spawnSync('git', ['commit', '-m', 'b-group filler 1'], { cwd: repoDir, encoding: 'utf8' });
+
+  // Commit 3: touch the same file again (creates 3rd run-group)
+  fs.writeFileSync(path.join(repoDir, fileName), 'line1\npost-rollback-fix\n', 'utf8');
+  spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+  spawnSync('git', ['commit', '-m', 'a-group post-rollback'], { cwd: repoDir, encoding: 'utf8' });
+}
+
+// Test CB-FP01: Single-cycle rollback with min_cycles=2 does NOT trigger
+// This is the DigitalFrontier-infra false positive scenario.
+test('CB-FP01: Single-cycle rollback (add→remove) with min_cycles=2 does not trigger', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    createRollbackPattern(repoDir, 'router.py');
+
+    // Run hook with write command — should NOT detect oscillation
+    const { stdout, exitCode, stderr } = runHook(makeWritePayload(repoDir));
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+
+    // stdout should be empty or not contain oscillation detection
+    // (state file might be written for non-cycle reasons, but hook should not deny)
+    if (stdout.trim()) {
+      const parsed = JSON.parse(stdout);
+      const decision = parsed.hookSpecificOutput?.permissionDecision;
+      assert.notStrictEqual(decision, 'deny', 'must not deny on single-cycle rollback');
+    }
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// Test CB-FP02: Two full oscillation cycles DO trigger
+test('CB-FP02: Two full oscillation cycles (A→B→A→B→A) do trigger', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    // Create 5 A-groups (4 filler groups between them = 2 full cycles beyond what min_cycles=2 requires)
+    createAlternatingCommits(repoDir, ['app.js'], 5);
+
+    // Run hook — should detect oscillation (state file or detection output)
+    const { exitCode } = runHook(makeWritePayload(repoDir));
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+
+    // Check that state file was written (oscillation detected)
+    const statePath = path.join(repoDir, '.claude', 'circuit-breaker-state.json');
+    assert.ok(fs.existsSync(statePath), 'state file must be written for 2+ cycle oscillation');
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// Test CB-FP03: Commit message "revert" prevents triggering on net-negative pattern
+test('CB-FP03: Rollback intent keywords in commit message prevent triggering', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    // Create 3 A-groups with net-negative pattern but rollback keywords
+    const fileName = 'config.py';
+
+    // Commit 1: add content
+    fs.writeFileSync(path.join(repoDir, fileName), 'line1\nfeature-a\nfeature-b\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'feat: add new config flag'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Filler
+    fs.writeFileSync(path.join(repoDir, 'filler0.txt'), 'x', 'utf8');
+    spawnSync('git', ['add', 'filler0.txt'], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'filler 0'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Commit 2: remove content — with "revert" keyword
+    fs.writeFileSync(path.join(repoDir, fileName), 'line1\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'Revert "feat: add new config flag" — unvalidated'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Filler
+    fs.writeFileSync(path.join(repoDir, 'filler1.txt'), 'x', 'utf8');
+    spawnSync('git', ['add', 'filler1.txt'], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'filler 1'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Commit 3: touch same file again (3rd run-group)
+    fs.writeFileSync(path.join(repoDir, fileName), 'line1\npost-fix\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'a-group post-rollback'], { cwd: repoDir, encoding: 'utf8' });
+
+    // One more filler + same-file to get enough for 2 cycles (5 A-groups)
+    fs.writeFileSync(path.join(repoDir, 'filler2.txt'), 'x', 'utf8');
+    spawnSync('git', ['add', 'filler2.txt'], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'filler 2'], { cwd: repoDir, encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, fileName), 'line1\npost-fix-v2\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'a-group again'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Run hook — should NOT detect oscillation because commit message has "Revert"
+    const { stdout, exitCode } = runHook(makeWritePayload(repoDir));
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+
+    if (stdout.trim()) {
+      const parsed = JSON.parse(stdout);
+      const decision = parsed.hookSpecificOutput?.permissionDecision;
+      assert.notStrictEqual(decision, 'deny', 'must not deny when commit has rollback keywords');
+    }
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// Test CB-FP04: Clean inverse diff pattern (add 50 lines, remove 50 lines) = clean rollback
+test('CB-FP04: Clean inverse diff pattern detected as rollback via isCleanRollback', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    // Create add-then-remove pattern on the same file
+    const fileName = 'feature.py';
+
+    // Initial
+    fs.writeFileSync(path.join(repoDir, fileName), 'base\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'initial'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Add feature (30 lines)
+    let content = 'base\n';
+    for (let i = 0; i < 30; i++) content += `feature_line_${i}\n`;
+    fs.writeFileSync(path.join(repoDir, fileName), content, 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'feat: add new routing param'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Remove feature (back to base) — no "revert" keyword to test pure diff detection
+    fs.writeFileSync(path.join(repoDir, fileName), 'base\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'fix: adjust routing without param'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Get hashes for all 3 commits (newest-first: remove, add, initial)
+    const logResult = spawnSync('git', ['log', '--format=%H', '-n', '3'], {
+      cwd: repoDir, encoding: 'utf8', timeout: 5000,
+    });
+    const hashes = logResult.stdout.trim().split('\n').filter(Boolean);
+
+    // isCleanRollback should return true (exactly 1 inverse pair: initial→add vs add→remove)
+    const result = isCleanRollback(repoDir, hashes, [fileName]);
+    assert.ok(result, 'add-then-remove pattern must be detected as clean rollback');
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// Test CB-FP05: Repeated oscillation (add→remove→add→remove) is NOT a clean rollback
+test('CB-FP05: Repeated add-remove-add-remove is NOT a clean rollback', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    const fileName = 'loop.py';
+
+    // Initial
+    fs.writeFileSync(path.join(repoDir, fileName), 'base\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'initial'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Add feature
+    fs.writeFileSync(path.join(repoDir, fileName), 'base\nfeature\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'add feature'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Remove feature
+    fs.writeFileSync(path.join(repoDir, fileName), 'base\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'remove feature'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Add feature again
+    fs.writeFileSync(path.join(repoDir, fileName), 'base\nfeature\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'add feature again'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Remove feature again
+    fs.writeFileSync(path.join(repoDir, fileName), 'base\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'remove feature again'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Get hashes for all 4 feature commits
+    const logResult = spawnSync('git', ['log', '--format=%H', '-n', '4'], {
+      cwd: repoDir, encoding: 'utf8', timeout: 5000,
+    });
+    const hashes = logResult.stdout.trim().split('\n').filter(Boolean);
+
+    // isCleanRollback should return false (2+ inverse pairs = repeated oscillation)
+    const result = isCleanRollback(repoDir, hashes, [fileName]);
+    assert.ok(!result, 'repeated add-remove-add-remove must NOT be clean rollback');
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// Test CB-FP06: Haiku prompt contains DELIBERATE_ROLLBACK classification
+test('CB-FP06: Haiku prompt source contains DELIBERATE_ROLLBACK option', () => {
+  const hookSource = fs.readFileSync(HOOK_PATH, 'utf8');
+  assert.ok(
+    hookSource.includes('DELIBERATE_ROLLBACK'),
+    'hook source must include DELIBERATE_ROLLBACK in Haiku prompt'
+  );
+  assert.ok(
+    hookSource.includes('DELIBERATE_ROLLBACK') && hookSource.includes('a feature was intentionally added then cleanly removed'),
+    'Haiku prompt must describe DELIBERATE_ROLLBACK as intentional add-then-remove'
+  );
+});
+
+// Test CB-FP07: getCommitMessages returns correct messages
+test('CB-FP07: getCommitMessages returns Map of hash→subject', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    commitInRepo(repoDir, 'test.txt', 'content', 'initial commit');
+    commitInRepo(repoDir, 'test.txt', 'content2', 'second commit');
+
+    const logResult = spawnSync('git', ['log', '--format=%H', '-n', '2'], {
+      cwd: repoDir, encoding: 'utf8', timeout: 5000,
+    });
+    const hashes = logResult.stdout.trim().split('\n').filter(Boolean);
+    assert.strictEqual(hashes.length, 2, 'should have 2 hashes');
+
+    const messages = getCommitMessages(repoDir, hashes);
+    assert.strictEqual(messages.size, 2, 'should return 2 messages');
+    assert.ok(messages.has(hashes[0]), 'first hash must be in map');
+    assert.strictEqual(messages.get(hashes[0]), 'second commit', 'first (newest) must be "second commit"');
+    assert.strictEqual(messages.get(hashes[1]), 'initial commit', 'second must be "initial commit"');
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// Test CB-FP08: hasReversionInHashes populates pairStatsOut when provided
+test('CB-FP08: hasReversionInHashes populates pairStatsOut array', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    const fileName = 'test.txt';
+
+    // Create 3 commits: add → grow → shrink (net negative)
+    fs.writeFileSync(path.join(repoDir, fileName), 'line1\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'c1'], { cwd: repoDir, encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, fileName), 'line1\nline2\nline3\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'c2'], { cwd: repoDir, encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, fileName), 'line1\n', 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'c3'], { cwd: repoDir, encoding: 'utf8' });
+
+    const logResult = spawnSync('git', ['log', '--format=%H', '-n', '3'], {
+      cwd: repoDir, encoding: 'utf8', timeout: 5000,
+    });
+    const hashes = logResult.stdout.trim().split('\n').filter(Boolean);
+
+    const pairStats = [];
+    hasReversionInHashes(repoDir, hashes, [fileName], pairStats);
+
+    assert.ok(pairStats.length >= 1, 'pairStats must be populated');
+    assert.ok(typeof pairStats[0].pairNet === 'number', 'pairStats must have pairNet');
+    assert.ok(typeof pairStats[0].additions === 'number', 'pairStats must have additions');
+    assert.ok(typeof pairStats[0].deletions === 'number', 'pairStats must have deletions');
+    assert.ok(pairStats[0].hash, 'pairStats must have hash');
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// Test CB-FP09: detectOscillation with min_cycles=0 falls back to pure depth check
+test('CB-FP09: min_cycles=0 (disabled) allows single cycle to trigger on depth', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    // Create 3 A-groups with alternating content (1 full cycle, but depth 3)
+    createAlternatingCommits(repoDir, ['app.js'], 3);
+
+    // Get file sets and hashes for direct detectOscillation call
+    const logResult = spawnSync('git', ['log', '--format=%H', '-6'], {
+      cwd: repoDir, encoding: 'utf8', timeout: 5000,
+    });
+    const hashes = logResult.stdout.trim().split('\n').filter(Boolean);
+
+    const fileSets = hashes.map(() => {
+      const r = spawnSync('git', ['diff-tree', '--no-commit-id', '-r', '--name-only', '--root', hashes[hashes.indexOf(hashes.find(() => true))]], {
+        cwd: repoDir, encoding: 'utf8', timeout: 5000,
+      });
+      return [];
+    });
+
+    // Actually get proper file sets
+    const properFileSets = [];
+    for (const hash of hashes) {
+      const r = spawnSync('git', ['diff-tree', '--no-commit-id', '-r', '--name-only', '--root', hash], {
+        cwd: repoDir, encoding: 'utf8', timeout: 5000,
+      });
+      properFileSets.push(r.stdout.trim().split('\n').filter(f => f.length > 0));
+    }
+
+    // min_cycles=0, rollbackDetection=false → pure depth check, should detect
+    const result = detectOscillation(properFileSets, 3, hashes, repoDir, { minCycles: 0, rollbackDetection: false });
+    assert.ok(result.detected, 'with min_cycles=0, single cycle at depth 3 must detect');
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });

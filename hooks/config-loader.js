@@ -145,6 +145,8 @@ const DEFAULT_CONFIG = {
     commit_window: 6,              // how many commits to look back
     haiku_reviewer: true,          // call Claude Haiku to verify before blocking
     haiku_model: 'claude-haiku-4-5-20251001', // model used for review
+    min_cycles: 2,                 // minimum full oscillation cycles (A→B→A→B→A = 2) before flagging
+    rollback_detection: true,      // enable commit-message intent + diff-level rollback checks
   },
   model_preferences: {},  // { "<mcp-server-name>": "<model-id>" }
   // context_monitor: PostToolUse hook thresholds for context window warnings.
@@ -353,6 +355,22 @@ function validateConfig(config) {
     if (typeof config.circuit_breaker.haiku_model !== 'string') {
       process.stderr.write('[nf] WARNING: nf.json: circuit_breaker.haiku_model must be a string; using default\n');
       config.circuit_breaker.haiku_model = DEFAULT_CONFIG.circuit_breaker.haiku_model;
+    }
+    // Validate min_cycles
+    if (config.circuit_breaker.min_cycles === undefined) {
+      config.circuit_breaker.min_cycles = DEFAULT_CONFIG.circuit_breaker.min_cycles;
+    }
+    if (!Number.isInteger(config.circuit_breaker.min_cycles) || config.circuit_breaker.min_cycles < 0) {
+      process.stderr.write('[nf] WARNING: nf.json: circuit_breaker.min_cycles must be a non-negative integer; defaulting to 2\n');
+      config.circuit_breaker.min_cycles = 2;
+    }
+    // Validate rollback_detection
+    if (config.circuit_breaker.rollback_detection === undefined) {
+      config.circuit_breaker.rollback_detection = DEFAULT_CONFIG.circuit_breaker.rollback_detection;
+    }
+    if (typeof config.circuit_breaker.rollback_detection !== 'boolean') {
+      process.stderr.write('[nf] WARNING: nf.json: circuit_breaker.rollback_detection must be boolean; defaulting to true\n');
+      config.circuit_breaker.rollback_detection = true;
     }
   }
 

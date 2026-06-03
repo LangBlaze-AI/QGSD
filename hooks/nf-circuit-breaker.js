@@ -121,7 +121,9 @@ function getCommitDiff(gitRoot, olderHash, newerHash, files) {
 // Returns true if real oscillation (net change <= 0 AND at least one negative pair).
 // Returns false if all pairs are zero-net substitutions (monotonic workflow progression).
 // Returns true also if ALL pairs errored out (git unavailable → fall back to original behavior).
-function hasReversionInHashes(gitRoot, hashes, files) {
+// pairStatsOut: optional array — if provided, populated with { additions, deletions, pairNet, hash }
+//               for each consecutive pair (oldest-first), for use by rollback intent detection.
+function hasReversionInHashes(gitRoot, hashes, files, pairStatsOut) {
   // hashes are newest-first; consecutive pairs: (hashes[i], hashes[i-1]) where
   // hashes[i] is older (higher index = earlier in time), hashes[i-1] is newer.
   // We diff older → newer: git diff <hashes[i]> <hashes[i-1]>
@@ -154,6 +156,11 @@ function hasReversionInHashes(gitRoot, hashes, files) {
     const pairNet = additions - deletions;
     totalNetChange += pairNet;
     if (pairNet < 0) hasNegativePair = true;
+
+    // Collect pair stats for rollback intent detection
+    if (Array.isArray(pairStatsOut)) {
+      pairStatsOut.push({ additions, deletions, pairNet, hash: newerHash });
+    }
   }
 
   // If all pairs errored out → fall back to original behavior (treat as oscillation)
@@ -165,6 +172,112 @@ function hasReversionInHashes(gitRoot, hashes, files) {
   return totalNetChange <= 0 && hasNegativePair;
 }
 
+// Counts full oscillation cycles for a file set key.
+// A cycle = one reappearance of the key after a gap (different file set in between).
+// keyRunList.length run-groups = keyRunList.length - 1 cycles.
+// Example: 3 run-groups of key A (separated by non-A groups) = 2 full cycles.
+// Only 1 run-group = 0 cycles (no oscillation at all, just repeated edits).
+function countOscillationCycles(keyRunList) {
+  return Math.max(0, keyRunList.length - 1);
+}
+
+// Gets commit messages (subject lines) for the given hashes.
+// Returns Map<hash, string> of commit subject lines.
+function getCommitMessages(gitRoot, hashes) {
+  const messages = new Map();
+  if (!hashes || hashes.length === 0) return messages;
+
+  // Fetch messages for specific hashes via git log
+  for (const hash of hashes) {
+    const result = spawnSync('git', ['log', '--format=%s', '-n', '1', hash], {
+      cwd: gitRoot, encoding: 'utf8', timeout: 5000,
+    });
+    if (result.status === 0 && result.stdout) {
+      messages.set(hash, result.stdout.trim());
+    }
+  }
+  return messages;
+}
+
+// Regex for commit message keywords signaling deliberate rollback intent.
+const ROLLBACK_KEYWORDS = /\b(revert|rollback|remove|undo|back\s?out|cherry.?pick.*revert)\b/i;
+
+// Checks if any of the net-negative commits signal deliberate rollback intent
+// via commit message keywords.
+// pairStats: array of { additions, deletions, pairNet, hash } from hasReversionInHashes
+// messages: Map<hash, string> from getCommitMessages
+// Returns true if a negative-net commit has rollback keywords in its message.
+function hasRollbackIntent(messages, pairStats) {
+  for (const stat of pairStats) {
+    if (stat.pairNet < 0) {
+      const msg = messages.get(stat.hash) || '';
+      if (ROLLBACK_KEYWORDS.test(msg)) return true;
+    }
+  }
+  return false;
+}
+
+// Detects whether the oscillating commits show a clean rollback pattern.
+// A clean rollback = one commit adds content, a later commit removes the same content
+// (inverse diff), without repeating the cycle.
+//
+// Algorithm: compare consecutive same-file-set commit pairs.
+// If pair N shows +X/-Y and pair N+1 shows +Y/-X (approximately inverse),
+// and there is exactly 1 such inverse pair, this is a deliberate one-shot rollback.
+// 2+ inverse pairs = repeated add-remove-add-remove = true oscillation.
+//
+// Returns true if the pattern is a clean rollback (should NOT trigger breaker).
+// Returns false if the pattern shows repeated oscillation (SHOULD trigger breaker).
+function isCleanRollback(gitRoot, hashes, files) {
+  // Collect per-pair diff stats
+  const pairStats = [];
+  for (let i = hashes.length - 1; i >= 1; i--) {
+    const diff = getCommitDiff(gitRoot, hashes[i], hashes[i - 1], files);
+    if (diff === '') continue;
+    const lines = diff.split('\n');
+    let additions = 0, deletions = 0;
+    for (const line of lines) {
+      if (line.startsWith('---') || line.startsWith('+++')) continue;
+      if (line.startsWith('+')) additions++;
+      else if (line.startsWith('-')) deletions++;
+    }
+    pairStats.push({ additions, deletions });
+  }
+
+  if (pairStats.length < 2) return false; // Need at least 2 pairs to detect rollback
+
+  // Check for inverse pair pattern
+  let inversePairs = 0;
+  const MIN_ROLLBACK_LINES = 10; // Minimum total changed lines to consider a pair as rollback-scale
+  for (let i = 0; i < pairStats.length - 1; i++) {
+    const a = pairStats[i];
+    const b = pairStats[i + 1];
+    // Tolerance: allow up to 5 lines difference or 20% of total changed lines
+    const totalChanged = a.additions + a.deletions + b.additions + b.deletions;
+    const tolerance = Math.max(5, Math.ceil(totalChanged * 0.2));
+    // Rollback asymmetry: one pair must be mostly additions, the other mostly deletions.
+    // This distinguishes a clean rollback (+30/-0 then +0/-30) from oscillation (+4/-2 then +2/-4).
+    // For rollback, the ratio of additions to total change should be extreme for at least one pair.
+    const aTotal = a.additions + a.deletions;
+    const bTotal = b.additions + b.deletions;
+    const aAddRatio = aTotal > 0 ? a.additions / aTotal : 0;
+    const bAddRatio = bTotal > 0 ? b.additions / bTotal : 0;
+    const isAsymmetric = (aAddRatio >= 0.8 || aAddRatio <= 0.2) && (bAddRatio >= 0.8 || bAddRatio <= 0.2);
+    if (
+      Math.abs(a.additions - b.deletions) <= tolerance &&
+      Math.abs(a.deletions - b.additions) <= tolerance &&
+      totalChanged >= MIN_ROLLBACK_LINES &&
+      isAsymmetric
+    ) {
+      inversePairs++;
+    }
+  }
+
+  // A clean rollback has exactly 1 inverse pair (one add-then-remove cycle).
+  // More than 1 inverse pair means repeated add-remove-add-remove = true oscillation.
+  return inversePairs === 1;
+}
+
 // Detects true oscillation: returns { detected: bool, fileSet: string[] }
 //
 // Algorithm: collapse consecutive identical file sets into run-groups first,
@@ -173,13 +286,17 @@ function hasReversionInHashes(gitRoot, hashes, files) {
 // (3 A-groups, 2 B-groups → oscillation at depth 3) while ignoring simple
 // iterative refinement like A A A (1 A-group → not oscillation).
 //
-// Second-pass reversion check: when a file set reaches >= depth run-groups,
-// diff consecutive pairs to confirm content was actually reverted (net deletions).
-// If all pairs are purely additive (TDD progression), do NOT flag as oscillation.
+// Multi-pass filtering (in order):
+// 1. Run-group depth check (>= depth run-groups)
+// 2. Content reversion check (net change <= 0 AND deletions)
+// 3. Cycle count gate (>= min_cycles full oscillation cycles)
+// 4. Commit message intent (rollback keywords on net-negative commits)
+// 5. Diff-level rollback (exactly 1 inverse pair = clean rollback)
 //
 // hashes: commit hashes array (newest-first, same order as fileSets)
 // gitRoot: git repository root (used for diff-based reversion check)
-function detectOscillation(fileSets, depth, hashes, gitRoot) {
+// options: { minCycles, rollbackDetection } — both optional, default to 0/false
+function detectOscillation(fileSets, depth, hashes, gitRoot, options) {
   // Step 1: collapse consecutive identical file sets into runs, tracking indices
   const runs = [];
   for (let i = 0; i < fileSets.length; i++) {
@@ -215,10 +332,40 @@ function detectOscillation(fileSets, depth, hashes, gitRoot) {
         }
         // Sort by index position (newest-first as they appear in hashes array)
         // The indices are already ordered since we iterate runs in order
-        const isRealOscillation = hasReversionInHashes(gitRoot, oscillatingHashes, files);
+
+        // Collect pair stats for rollback intent detection
+        const pairStats = [];
+        const isRealOscillation = hasReversionInHashes(gitRoot, oscillatingHashes, files, pairStats);
         if (!isRealOscillation) {
           // All additive → TDD progression, not a real loop
-          return { detected: false, fileSet: [] };
+          continue;
+        }
+
+        // Cycle count gate: require at least min_cycles full oscillation cycles.
+        // min_cycles defaults to 0 for backward compat (config default is 2).
+        const minCycles = (options && options.minCycles) || 0;
+        if (minCycles > 0 && countOscillationCycles(keyRunList) < minCycles) {
+          // Not enough cycles — single rollback or short pattern
+          continue;
+        }
+
+        // Rollback detection: commit message intent + diff-level analysis
+        // Only applies at the borderline (cycles == minCycles).
+        // With cycles > minCycles, the pattern is sustained enough to be real oscillation
+        // even if a commit message uses "revert" keywords.
+        const cycles = countOscillationCycles(keyRunList);
+        if (options && options.rollbackDetection && cycles === minCycles) {
+          const messages = getCommitMessages(gitRoot, oscillatingHashes);
+          if (hasRollbackIntent(messages, pairStats)) {
+            // Deliberate rollback signaled by commit message — not oscillation
+            continue;
+          }
+
+          // Expensive check: diff-level inverse pair analysis
+          if (isCleanRollback(gitRoot, oscillatingHashes, files)) {
+            // Clean one-shot rollback — not oscillation
+            continue;
+          }
         }
       }
 
@@ -258,9 +405,10 @@ async function consultHaiku(gitRoot, fileSet, fileSets, model) {
     `Oscillating file set: ${fileSet.join(', ')}\n\n` +
     `Recent git log:\n${gitLog}\n\n` +
     `Recent diffs (truncated):\n${diffs.join('\n\n').slice(0, 3000)}\n\n` +
-    `Question: Is this GENUINE oscillation (the same bug being introduced and fixed repeatedly, agent stuck in a loop) ` +
-    `or REFINEMENT (developer/agent iteratively improving the same files toward a clear goal, e.g. adjusting a banner message, tuning output)?\n\n` +
-    `Reply with exactly one word: GENUINE or REFINEMENT`;
+    `Question: Is this GENUINE oscillation (the same bug being introduced and fixed repeatedly, agent stuck in a loop), ` +
+    `REFINEMENT (developer/agent iteratively improving the same files toward a clear goal, e.g. adjusting a banner message, tuning output), ` +
+    `or DELIBERATE_ROLLBACK (a feature was intentionally added then cleanly removed in a deliberate one-shot revert, not a bug loop)?\n\n` +
+    `Reply with exactly one word: GENUINE, REFINEMENT, or DELIBERATE_ROLLBACK`;
 
   const https = require('https');
   const body = JSON.stringify({
@@ -289,7 +437,9 @@ async function consultHaiku(gitRoot, fileSet, fileSets, model) {
           const parsed = JSON.parse(data);
           const text = ((parsed.content || [])[0] || {}).text || '';
           const verdict = text.trim().toUpperCase();
-          resolve(verdict.startsWith('REFINEMENT') ? 'REFINEMENT' : 'GENUINE');
+          if (verdict.startsWith('DELIBERATE_ROLLBACK')) resolve('DELIBERATE_ROLLBACK');
+          else if (verdict.startsWith('REFINEMENT')) resolve('REFINEMENT');
+          else resolve('GENUINE');
         } catch { resolve(null); }
       });
     });
@@ -783,7 +933,10 @@ req.end();
       }
 
       // Detect oscillation
-      const result = detectOscillation(fileSets, config.circuit_breaker.oscillation_depth, hashes, gitRoot);
+      const result = detectOscillation(fileSets, config.circuit_breaker.oscillation_depth, hashes, gitRoot, {
+        minCycles: config.circuit_breaker.min_cycles || 0,
+        rollbackDetection: config.circuit_breaker.rollback_detection !== false,
+      });
       if (!result.detected) {
         process.exit(0);
       }
@@ -791,10 +944,10 @@ req.end();
       // HAIKU-01: Consult Haiku to verify before notifying (if enabled)
       if (config.circuit_breaker.haiku_reviewer) {
         const verdict = await consultHaiku(gitRoot, result.fileSet, fileSets, config.circuit_breaker.haiku_model);
-        if (verdict === 'REFINEMENT') {
-          // Haiku confirmed this is iterative refinement, not a bug loop — do not notify.
+        if (verdict === 'REFINEMENT' || verdict === 'DELIBERATE_ROLLBACK') {
+          // Haiku confirmed this is iterative refinement or deliberate rollback, not a bug loop — do not notify.
           // Log false-negative for auditability (stderr + persistent file).
-          process.stderr.write(`[nf] INFO: circuit breaker false-negative — Haiku classified oscillation as REFINEMENT (files: ${result.fileSet.join(', ')}). Allowing tool call to proceed.\n`);
+          process.stderr.write(`[nf] INFO: circuit breaker false-negative — Haiku classified oscillation as ${verdict} (files: ${result.fileSet.join(', ')}). Allowing tool call to proceed.\n`);
           appendFalseNegative(statePath, result.fileSet);
           process.exit(0);
         }
@@ -861,6 +1014,13 @@ module.exports = {
   makeFileSetHash,
   makePatternHash,
   getEvidencePath,
+  hasReversionInHashes,
+  detectOscillation,
+  countOscillationCycles,
+  getCommitMessages,
+  hasRollbackIntent,
+  isCleanRollback,
+  ROLLBACK_KEYWORDS,
 };
 
 // modified by benchmark
