@@ -617,7 +617,7 @@ test('CB-TC18: Project config oscillation_depth:2 triggers oscillation detection
     fs.mkdirSync(claudeDir, { recursive: true });
     fs.writeFileSync(
       path.join(claudeDir, 'nf.json'),
-      JSON.stringify({ circuit_breaker: { oscillation_depth: 2, commit_window: 6 } }),
+      JSON.stringify({ circuit_breaker: { oscillation_depth: 2, commit_window: 6, min_cycles: 0 } }),
       'utf8'
     );
 
@@ -1343,14 +1343,11 @@ test('CB-FP01: Single-cycle rollback (add→remove) with min_cycles=2 does not t
     // Run hook with write command — should NOT detect oscillation
     const { stdout, exitCode, stderr } = runHook(makeWritePayload(repoDir));
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'stdout must be empty — no detection on first pass');
 
-    // stdout should be empty or not contain oscillation detection
-    // (state file might be written for non-cycle reasons, but hook should not deny)
-    if (stdout.trim()) {
-      const parsed = JSON.parse(stdout);
-      const decision = parsed.hookSpecificOutput?.permissionDecision;
-      assert.notStrictEqual(decision, 'deny', 'must not deny on single-cycle rollback');
-    }
+    // State file must NOT be written — this is the key assertion
+    const statePath = path.join(repoDir, '.claude', 'circuit-breaker-state.json');
+    assert(!fs.existsSync(statePath), 'state file must NOT be written — single-cycle rollback must not activate the breaker (CB-FP01)');
   } finally {
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
@@ -1375,56 +1372,54 @@ test('CB-FP02: Two full oscillation cycles (A→B→A→B→A) do trigger', () =
   }
 });
 
-// Test CB-FP03: Commit message "revert" prevents triggering on net-negative pattern
-test('CB-FP03: Rollback intent keywords in commit message prevent triggering', () => {
+// Test CB-FP03: Clean rollback with revert keyword does NOT trigger at borderline
+// Uses exactly 3 A-groups (depth=3, cycles=2, min_cycles=2) with a clean inverse diff
+// pattern (large add then large remove) — suppressed by isCleanRollback.
+test('CB-FP03: Clean rollback with revert keyword does not trigger at borderline', () => {
   const repoDir = createTempGitRepo();
   try {
-    // Create 3 A-groups with net-negative pattern but rollback keywords
     const fileName = 'config.py';
 
-    // Commit 1: add content
-    fs.writeFileSync(path.join(repoDir, fileName), 'line1\nfeature-a\nfeature-b\n', 'utf8');
+    // Initial
+    fs.writeFileSync(path.join(repoDir, fileName), 'base\n', 'utf8');
     spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
-    spawnSync('git', ['commit', '-m', 'feat: add new config flag'], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'initial'], { cwd: repoDir, encoding: 'utf8' });
+
+    // Commit 1: add 30 lines (A-group 1)
+    let content = 'base\n';
+    for (let i = 0; i < 30; i++) content += `feature_line_${i}\n`;
+    fs.writeFileSync(path.join(repoDir, fileName), content, 'utf8');
+    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'feat: add new config flags'], { cwd: repoDir, encoding: 'utf8' });
 
     // Filler
     fs.writeFileSync(path.join(repoDir, 'filler0.txt'), 'x', 'utf8');
     spawnSync('git', ['add', 'filler0.txt'], { cwd: repoDir, encoding: 'utf8' });
     spawnSync('git', ['commit', '-m', 'filler 0'], { cwd: repoDir, encoding: 'utf8' });
 
-    // Commit 2: remove content — with "revert" keyword
-    fs.writeFileSync(path.join(repoDir, fileName), 'line1\n', 'utf8');
+    // Commit 2: remove all 30 lines — clean inverse (A-group 2)
+    fs.writeFileSync(path.join(repoDir, fileName), 'base\n', 'utf8');
     spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
-    spawnSync('git', ['commit', '-m', 'Revert "feat: add new config flag" — unvalidated'], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'Revert "feat: add new config flags" — unvalidated'], { cwd: repoDir, encoding: 'utf8' });
 
     // Filler
     fs.writeFileSync(path.join(repoDir, 'filler1.txt'), 'x', 'utf8');
     spawnSync('git', ['add', 'filler1.txt'], { cwd: repoDir, encoding: 'utf8' });
     spawnSync('git', ['commit', '-m', 'filler 1'], { cwd: repoDir, encoding: 'utf8' });
 
-    // Commit 3: touch same file again (3rd run-group)
-    fs.writeFileSync(path.join(repoDir, fileName), 'line1\npost-fix\n', 'utf8');
+    // Commit 3: small touch to same file (A-group 3, creates borderline cycles=2)
+    fs.writeFileSync(path.join(repoDir, fileName), 'base\ncleanup\n', 'utf8');
     spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
-    spawnSync('git', ['commit', '-m', 'a-group post-rollback'], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'cleanup pass'], { cwd: repoDir, encoding: 'utf8' });
 
-    // One more filler + same-file to get enough for 2 cycles (5 A-groups)
-    fs.writeFileSync(path.join(repoDir, 'filler2.txt'), 'x', 'utf8');
-    spawnSync('git', ['add', 'filler2.txt'], { cwd: repoDir, encoding: 'utf8' });
-    spawnSync('git', ['commit', '-m', 'filler 2'], { cwd: repoDir, encoding: 'utf8' });
-
-    fs.writeFileSync(path.join(repoDir, fileName), 'line1\npost-fix-v2\n', 'utf8');
-    spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
-    spawnSync('git', ['commit', '-m', 'a-group again'], { cwd: repoDir, encoding: 'utf8' });
-
-    // Run hook — should NOT detect oscillation because commit message has "Revert"
+    // Run hook — should NOT detect oscillation (clean inverse diff pattern)
     const { stdout, exitCode } = runHook(makeWritePayload(repoDir));
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'stdout must be empty — no detection on first pass');
 
-    if (stdout.trim()) {
-      const parsed = JSON.parse(stdout);
-      const decision = parsed.hookSpecificOutput?.permissionDecision;
-      assert.notStrictEqual(decision, 'deny', 'must not deny when commit has rollback keywords');
-    }
+    // State file must NOT be written — isCleanRollback suppresses at borderline
+    const statePath = path.join(repoDir, '.claude', 'circuit-breaker-state.json');
+    assert(!fs.existsSync(statePath), 'state file must NOT be written — clean rollback must not activate breaker (CB-FP03)');
   } finally {
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
@@ -1599,24 +1594,17 @@ test('CB-FP09: min_cycles=0 (disabled) allows single cycle to trigger on depth',
     });
     const hashes = logResult.stdout.trim().split('\n').filter(Boolean);
 
-    const fileSets = hashes.map(() => {
-      const r = spawnSync('git', ['diff-tree', '--no-commit-id', '-r', '--name-only', '--root', hashes[hashes.indexOf(hashes.find(() => true))]], {
-        cwd: repoDir, encoding: 'utf8', timeout: 5000,
-      });
-      return [];
-    });
-
-    // Actually get proper file sets
-    const properFileSets = [];
+    // Build file sets for each commit
+    const fileSets = [];
     for (const hash of hashes) {
       const r = spawnSync('git', ['diff-tree', '--no-commit-id', '-r', '--name-only', '--root', hash], {
         cwd: repoDir, encoding: 'utf8', timeout: 5000,
       });
-      properFileSets.push(r.stdout.trim().split('\n').filter(f => f.length > 0));
+      fileSets.push(r.stdout.trim().split('\n').filter(f => f.length > 0));
     }
 
     // min_cycles=0, rollbackDetection=false → pure depth check, should detect
-    const result = detectOscillation(properFileSets, 3, hashes, repoDir, { minCycles: 0, rollbackDetection: false });
+    const result = detectOscillation(fileSets, 3, hashes, repoDir, { minCycles: 0, rollbackDetection: false });
     assert.ok(result.detected, 'with min_cycles=0, single cycle at depth 3 must detect');
   } finally {
     fs.rmSync(repoDir, { recursive: true, force: true });
