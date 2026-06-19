@@ -31,6 +31,7 @@ const { getRequirementIds } = require('./requirement-map.cjs');
 
 // ── Locate PRISM binary ──────────────────────────────────────────────────────
 const { resolvePrismBin } = require('./resolve-prism-bin.cjs');
+const { loadProviders } = require('./resolve-providers.cjs');
 const prismBin = resolvePrismBin();
 
 if (!prismBin) {
@@ -63,23 +64,19 @@ if (!fs.existsSync(modelPath)) {
 // Reads bin/providers.json → gemini-1.oauth_rotation.max_retries.
 // Injected as -const max_retries=<N> unless the caller already supplies it.
 let liveMaxRetries = null;
-const providersPath = path.join(__dirname, 'providers.json');
-if (fs.existsSync(providersPath)) {
-  try {
-    const parsed  = JSON.parse(fs.readFileSync(providersPath, 'utf8'));
-    // providers.json has shape { providers: [...] } with each entry having a `name` field
-    const list    = Array.isArray(parsed) ? parsed : (parsed.providers || []);
-    const gemini1 = list.find(function(p) { return p.name === 'gemini-1' || p.id === 'gemini-1'; }) || {};
-    const rot     = gemini1.oauth_rotation || {};
-    if (typeof rot.max_retries === 'number') {
-      liveMaxRetries = rot.max_retries;
-      process.stdout.write(
-        '[run-oauth-rotation-prism] max_retries=' + liveMaxRetries +
-        ' (from providers.json)\n'
-      );
-    }
-  } catch (_) { /* malformed providers.json — fall through to spec default */ }
-}
+try {
+  // Single source of truth: resolve-providers.cjs (issue #197/#218)
+  const list    = loadProviders({ baseDir: __dirname }) || [];
+  const gemini1 = list.find(function(p) { return p.name === 'gemini-1' || p.id === 'gemini-1'; }) || {};
+  const rot     = gemini1.oauth_rotation || {};
+  if (typeof rot.max_retries === 'number') {
+    liveMaxRetries = rot.max_retries;
+    process.stdout.write(
+      '[run-oauth-rotation-prism] max_retries=' + liveMaxRetries +
+      ' (from providers.json)\n'
+    );
+  }
+} catch (_) { /* malformed providers.json — fall through to spec default */ }
 
 // ── Build argument list ──────────────────────────────────────────────────────
 // Extra args passed to this script are forwarded to PRISM after the model path.

@@ -63,28 +63,27 @@ const PROVIDERS_RULES = [
   },
 ];
 
-// Files allowed to construct the providers.json path directly.
+// Files allowed to construct the providers.json path directly. Every entry is a
+// WRITER or a path-management tool — read-resolution must go through
+// resolve-providers.cjs (the #197/#218 single source of truth).
 //   resolve-providers.cjs  — the single source of truth itself
 //   unified-mcp-server.mjs — bootstrap last-resort empty-warning fallback
 //   install.js             — creates/writes/symlinks the file at install time
 //   install-helpers.cjs    — synthesizeMcpEntry builds the canonical install-time
 //                            UNIFIED_PROVIDERS_CONFIG write-path (moved out of install.js, #200)
 //   manage-agents-core.cjs — read/write path must stay coupled (writes the file)
-//   migrate-plaintext-tokens.cjs, account-manager.cjs, config-audit.cjs,
-//   nForma.cjs, run-oauth-rotation-prism.cjs — DEFERRED (not in the dispatch
-//   pipeline; wire in a follow-up to keep this change focused).
+//   nForma.cjs             — the TUI/CLI that adds & edits slots (writes the file)
+//   migrate-plaintext-tokens.cjs — one-off migration tool that intentionally
+//                            scans LEGACY locations (nf/bin) to rewrite plaintext
+//                            tokens in place; not a dispatch-pipeline read.
 const PROVIDERS_ALLOWLIST = new Set([
   'bin/resolve-providers.cjs',
   'bin/unified-mcp-server.mjs',
   'bin/install.js',
   'bin/install-helpers.cjs',
   'bin/manage-agents-core.cjs',
-  'bin/migrate-plaintext-tokens.cjs',
-  'bin/account-manager.cjs',
-  'bin/config-audit.cjs',
   'bin/nForma.cjs',
-  'bin/run-oauth-rotation-prism.cjs',
-  'bin/observe-handler-internal.cjs',
+  'bin/migrate-plaintext-tokens.cjs',
 ]);
 
 const violations = [];

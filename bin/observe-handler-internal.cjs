@@ -27,6 +27,7 @@ const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 const os = require('node:os');
 const { formatAgeFromMtime } = require('./observe-utils.cjs');
+const { loadProviders } = require('./resolve-providers.cjs');
 
 /**
  * Internal work detection handler
@@ -344,13 +345,9 @@ function handleInternal(sourceConfig, options) {
     try {
       const probeScript = resolveScript('probe-quorum-slots.cjs');
       if (probeScript) {
-        // Discover active slots from providers.json
-        let slotNames = '';
-        const providersPath = path.join(path.dirname(probeScript), 'providers.json');
-        if (fs.existsSync(providersPath)) {
-          const providers = JSON.parse(fs.readFileSync(providersPath, 'utf8'));
-          slotNames = (providers.providers || []).map(p => p.name).join(',');
-        }
+        // Discover active slots via the single resolver (#197/#218)
+        const providers = loadProviders({ baseDir: path.dirname(probeScript) }) || [];
+        const slotNames = providers.map(p => p.name).join(',');
         if (slotNames) {
           const result = spawnSync(process.execPath, [probeScript, '--slots', slotNames, '--timeout', '8000'], {
             encoding: 'utf8',

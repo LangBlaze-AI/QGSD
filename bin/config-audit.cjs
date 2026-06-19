@@ -11,6 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { loadProviders } = require('./resolve-providers.cjs');
 
 try {
   // Parse CLI args
@@ -19,15 +20,14 @@ try {
   const projectRootArg = args.find(a => a.startsWith('--project-root='));
   const projectRoot = projectRootArg ? projectRootArg.split('=').slice(1).join('=') : null;
 
-  // 1. Read providers.json
-  const providersPath = path.join(__dirname, 'providers.json');
-  if (!fs.existsSync(providersPath)) {
-    const result = { warnings: [], missing: [], error: 'providers.json not found at ' + providersPath };
+  // 1. Load providers.json via the single resolver (#197/#218)
+  const providers = loadProviders({ baseDir: __dirname });
+  if (!Array.isArray(providers) || providers.length === 0) {
+    const result = { warnings: [], missing: [], error: 'no providers.json with providers found' };
     process.stdout.write(JSON.stringify(result) + '\n');
     process.exit(0);
   }
-  const providersData = JSON.parse(fs.readFileSync(providersPath, 'utf8'));
-  const allSlotNames = (providersData.providers || []).map(p => p.name);
+  const allSlotNames = providers.map(p => p.name);
 
   // 2. Load config via config-loader
   const configLoader = require(path.join(__dirname, '..', 'hooks', 'config-loader'));

@@ -26,6 +26,7 @@ const fs     = require('fs');
 const path   = require('path');
 const os     = require('os');
 const { spawn } = require('child_process');
+const { loadProviders } = require('./resolve-providers.cjs');
 
 // ─── FSM states and events (mirrors NFAccountManager.tla) ──────────────────
 
@@ -113,21 +114,10 @@ function expandHome(p) {
 }
 
 function findProviders() {
-  const search = [
-    path.join(__dirname, 'providers.json'),
-    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),
-    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),
-  ];
-  try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
-    const u1  = cfg?.mcpServers?.['unified-1']?.args ?? [];
-    const srv = u1.find(a => typeof a === 'string' && a.endsWith('unified-mcp-server.mjs'));
-    if (srv) search.unshift(path.join(path.dirname(srv), 'providers.json'));
-  } catch (_) {}
-  for (const p of search) {
-    try { if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8')).providers; } catch (_) {}
-  }
-  return null;
+  // Single source of truth: resolve-providers.cjs (issue #197/#218). The canonical
+  // installed path is ~/.claude/nf-bin/providers.json (`'.claude', 'nf-bin', 'providers.json'`).
+  const providers = loadProviders({ baseDir: __dirname });
+  return (Array.isArray(providers) && providers.length > 0) ? providers : null;
 }
 
 function resolveProvider(providerArg) {
