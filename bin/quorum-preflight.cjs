@@ -28,6 +28,7 @@ const fs              = require('fs');
 const path            = require('path');
 const os              = require('os');
 const { spawn, execFileSync } = require('child_process');
+const { resolveCli }  = require('./resolve-cli.cjs');
 const https           = require('https');
 const http            = require('http');
 
@@ -66,9 +67,14 @@ function findProviders() {
   } catch (_) {}
   for (const p of searchPaths) {
     try {
-      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8')).providers;
+      if (!fs.existsSync(p)) continue;
+      const providers = JSON.parse(fs.readFileSync(p, 'utf8')).providers;
+      // Skip empty files (the repo stub is {"providers":[]}) — fall through to the
+      // next path so a checkout never resolves to a zero-slot fleet (issue #196).
+      if (Array.isArray(providers) && providers.length > 0) return providers;
     } catch (_) {}
   }
+  process.stderr.write('[quorum-preflight] no non-empty providers.json found in any search path\n');
   return [];
 }
 
@@ -305,10 +311,16 @@ async function probeHealth(providers) {
   await Promise.all(providers.map(async (p) => {
     const isHttp = p.type === 'http';
 
-    // Layer 1: binary probe (CLI slots only — HTTP slots have no binary)
+    // Layer 1: binary probe (CLI slots only — HTTP slots have no binary).
+    // Resolve the spawn target the same way the dispatcher does (#161/#164/#180/#193):
+    // providers.json carries cli:null on mainTool-only fleets, so probing p.cli raw would
+    // spawn(null) and mark the entire healthy fleet dead (issue #196).
+    const spawnTarget = p.resolvedCli || resolveCli(p.cli || p.mainTool);
     const layer1Promise = isHttp
       ? Promise.resolve({ ok: true, skipped: true, reason: 'HTTP slot — no CLI binary' })
-      : probeBinary(p.cli, p.health_check_args || []);
+      : spawnTarget
+        ? probeBinary(spawnTarget, p.health_check_args || [])
+        : Promise.resolve({ ok: false, reason: 'no CLI configured (cli, resolvedCli, mainTool all empty)' });
 
     // Layer 2: upstream API probe (HTTP slots only)
     let layer2Promise;
@@ -450,7 +462,9 @@ async function main() {
   if (mode === '--quorum-active') {
     console.log(JSON.stringify(cfg.quorum_active || []));
   } else if (mode === '--max-quorum-size') {
-    console.log(cfg.max_quorum_size ?? 3);
+    // Write an explicit string — console.log of a Number is ANSI-colorized under
+    // FORCE_COLOR, which breaks quorum.md's shell integer comparison (issue #196).
+    process.stdout.write(String(cfg.max_quorum_size ?? 3) + '\n');
   } else if (mode === '--team') {
     const providers = findProviders();
     const active    = cfg.quorum_active || [];
@@ -560,4 +574,4 @@ if (require.main === module) {
   main().catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { dedupBySlotIdentity };
+module.exports = { dedupBySlotIdentity, probeHealth, findProviders };
