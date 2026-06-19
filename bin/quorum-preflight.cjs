@@ -31,6 +31,8 @@ const { spawn, execFileSync } = require('child_process');
 const { resolveCli }  = require('./resolve-cli.cjs');
 const https           = require('https');
 const http            = require('http');
+const { resolveSpawnTarget } = require('./resolve-cli.cjs');
+const { loadProviders } = require('./resolve-providers.cjs');
 
 // Probe is ON by default for --all; --no-probe to skip, --probe still accepted for compat
 const NO_PROBE = process.argv.includes('--no-probe');
@@ -52,30 +54,12 @@ function readConfig() {
   return cfg;
 }
 
-// ─── Find providers.json (mirrors call-quorum-slot.cjs / probe-quorum-slots.cjs) ──
+// ─── Find providers.json ─────────────────────────────────────────────────────
+// Delegates to the single source of truth in resolve-providers.cjs (issue #197).
+// Canonical installed path: ~/.claude/nf-bin/providers.json
+// (`'.claude', 'nf-bin', 'providers.json'`). Returns [] when no populated file is found.
 function findProviders() {
-  const searchPaths = [
-    path.join(__dirname, 'providers.json'),
-    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),
-    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),
-  ];
-  try {
-    const claudeJson = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
-    const u1args = claudeJson?.mcpServers?.['unified-1']?.args ?? [];
-    const serverScript = u1args.find(a => typeof a === 'string' && a.endsWith('unified-mcp-server.mjs'));
-    if (serverScript) searchPaths.unshift(path.join(path.dirname(serverScript), 'providers.json'));
-  } catch (_) {}
-  for (const p of searchPaths) {
-    try {
-      if (!fs.existsSync(p)) continue;
-      const providers = JSON.parse(fs.readFileSync(p, 'utf8')).providers;
-      // Skip empty files (the repo stub is {"providers":[]}) — fall through to the
-      // next path so a checkout never resolves to a zero-slot fleet (issue #196).
-      if (Array.isArray(providers) && providers.length > 0) return providers;
-    } catch (_) {}
-  }
-  process.stderr.write('[quorum-preflight] no non-empty providers.json found in any search path\n');
-  return [];
+  return loadProviders({ baseDir: __dirname }) || [];
 }
 
 // ─── Build team JSON from providers + config ────────────────────────────────
@@ -311,16 +295,13 @@ async function probeHealth(providers) {
   await Promise.all(providers.map(async (p) => {
     const isHttp = p.type === 'http';
 
-    // Layer 1: binary probe (CLI slots only — HTTP slots have no binary).
-    // Resolve the spawn target the same way the dispatcher does (#161/#164/#180/#193):
-    // providers.json carries cli:null on mainTool-only fleets, so probing p.cli raw would
-    // spawn(null) and mark the entire healthy fleet dead (issue #196).
-    const spawnTarget = p.resolvedCli || resolveCli(p.cli || p.mainTool);
+    // Layer 1: binary probe (CLI slots only — HTTP slots have no binary)
+    // Use the shared spawn-target resolver (issue #197, supersedes #196/#207):
+    // raw p.cli is null when only mainTool is set, which previously reported the
+    // entire fleet false-dead. resolveSpawnTarget falls back to mainTool.
     const layer1Promise = isHttp
       ? Promise.resolve({ ok: true, skipped: true, reason: 'HTTP slot — no CLI binary' })
-      : spawnTarget
-        ? probeBinary(spawnTarget, p.health_check_args || [])
-        : Promise.resolve({ ok: false, reason: 'no CLI configured (cli, resolvedCli, mainTool all empty)' });
+      : probeBinary(resolveSpawnTarget(p), p.health_check_args || []);
 
     // Layer 2: upstream API probe (HTTP slots only)
     let layer2Promise;

@@ -11,6 +11,7 @@
 const path = require('path');
 const { spawnSync } = require('child_process');
 const inquirer = require('inquirer');
+const { loadProviders } = require('./resolve-providers.cjs');
 
 // ---------------------------------------------------------------------------
 // CLI metadata map — keyed by binary basename
@@ -29,13 +30,10 @@ const CLI_META = {
 // ---------------------------------------------------------------------------
 
 function buildCliList() {
-  let providers = [];
-  try {
-    const data = require('./providers.json');
-    providers = data.providers || [];
-  } catch (_) {
-    return [];
-  }
+  // Single source of truth (issue #197) — replaces require('./providers.json'),
+  // which bound the repo's empty shipped source instead of the installed copy.
+  const providers = loadProviders({ baseDir: __dirname }) || [];
+  if (providers.length === 0) return [];
 
   // Deduplicate by binary basename
   const seen = new Set();

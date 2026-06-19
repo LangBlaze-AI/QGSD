@@ -12,7 +12,30 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { resolveCli } = require('./resolve-cli.cjs');
+const { resolveCli, resolveSpawnTarget } = require('./resolve-cli.cjs');
+
+// ─── resolveSpawnTarget() tests (issue #197) ──────────────────────────────────
+
+test('resolveSpawnTarget prefers resolvedCli when present', () => {
+  assert.equal(resolveSpawnTarget({ resolvedCli: '/abs/codex', cli: 'codex' }), '/abs/codex');
+});
+
+test('resolveSpawnTarget falls back to mainTool when cli is absent (null-CLI class)', () => {
+  // Only mainTool set — previously raw p.cli handed null to spawn().
+  const r = resolveSpawnTarget({ mainTool: 'node' });
+  assert.ok(r === 'node' || r.endsWith(path.sep + 'node') || r.endsWith('/node'));
+});
+
+test('resolveSpawnTarget resolves cli via resolveCli', () => {
+  const r = resolveSpawnTarget({ cli: 'node' });
+  assert.ok(r === 'node' || r.endsWith(path.sep + 'node') || r.endsWith('/node'));
+});
+
+test('resolveSpawnTarget returns empty string when nothing is resolvable', () => {
+  assert.equal(resolveSpawnTarget({ name: 'x' }), '');
+  assert.equal(resolveSpawnTarget(null), '');
+  assert.equal(resolveSpawnTarget(undefined), '');
+});
 
 // ─── Basic contract tests ─────────────────────────────────────────────────────
 

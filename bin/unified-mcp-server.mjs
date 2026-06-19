@@ -20,38 +20,23 @@ import os from 'os';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const { resolveCli } = require('./resolve-cli.cjs');
+const { resolveProvidersConfig } = require('./resolve-providers.cjs');
 const { _pure: { detectInstalledProviders } } = require('./manage-agents-core.cjs');
 const { resolveEnvPlaceholders, findUnresolvedPlaceholders } = require('./resolve-env.cjs');
 const { extractPlaceholderVar, namespacedSecretKey } = require('./resolve-env.cjs');
 
 // ─── Load providers config ─────────────────────────────────────────────────────
-// Precedence:
-//   1. UNIFIED_PROVIDERS_CONFIG env (explicit override — set by install.js)
-//   2. __dirname/providers.json (same dir as this script — populated when running
-//      from nf-bin/ after install)
-//   3. ~/.claude/nf-bin/providers.json (user-installed canonical copy)
-// The shipped repo source is empty by design (populated at install time). Without the
-// step-3 fallback, Claude Code MCP entries that lack UNIFIED_PROVIDERS_CONFIG hit the
-// empty repo source and exit with "Unknown PROVIDER_SLOT" on every session start.
+// Single source of truth (issue #197): resolve-providers.cjs. Order = UNIFIED_PROVIDERS_CONFIG
+// env → ~/.claude.json pointer → __dirname (non-empty) → ~/.claude/nf-bin/providers.json
+// (`'.claude', 'nf-bin', 'providers.json'`) → legacy ~/.claude/nf/bin (non-empty).
+// The shipped repo source is empty by design (populated at install time); the resolver
+// skips it so Claude Code MCP entries lacking UNIFIED_PROVIDERS_CONFIG still find the
+// installed copy instead of exiting with "Unknown PROVIDER_SLOT" on session start.
 function loadProvidersConfig() {
-  const explicit = process.env.UNIFIED_PROVIDERS_CONFIG;
-  if (explicit) {
-    return { path: explicit, data: JSON.parse(fs.readFileSync(explicit, 'utf8')) };
-  }
-  const repoPath = join(__dirname, 'providers.json');
-  let repoData = null;
-  try {
-    repoData = JSON.parse(fs.readFileSync(repoPath, 'utf8'));
-    if (Array.isArray(repoData?.providers) && repoData.providers.length > 0) {
-      return { path: repoPath, data: repoData };
-    }
-  } catch (_) { /* fall through to user-installed */ }
-  const userPath = join(os.homedir(), '.claude', 'nf-bin', 'providers.json');
-  if (fs.existsSync(userPath)) {
-    return { path: userPath, data: JSON.parse(fs.readFileSync(userPath, 'utf8')) };
-  }
-  // Last resort: return whatever we read from repo (even if empty) so warning path triggers below
-  return { path: repoPath, data: repoData ?? { providers: [] } };
+  const resolved = resolveProvidersConfig({ baseDir: __dirname });
+  if (resolved) return resolved;
+  // Last resort: empty so the warning path triggers below (server starts with zero tools).
+  return { path: join(__dirname, 'providers.json'), data: { providers: [] } };
 }
 
 let configPath, providers;

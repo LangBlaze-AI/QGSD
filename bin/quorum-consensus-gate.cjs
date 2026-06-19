@@ -16,6 +16,7 @@
 const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
+const { loadProviders } = require('./resolve-providers.cjs');
 
 /**
  * poissonBinomialCDF(probabilities, k) — computes P(X >= k) for heterogeneous trials.
@@ -339,21 +340,17 @@ function buildFailureDomainClusters(slotRates, providersPath) {
   const activeSlots = Object.keys(slotRates);
   if (activeSlots.length === 0) return {};
 
-  // Resolve providers.json
-  const searchPaths = providersPath
-    ? [providersPath]
-    : [
-        path.join(__dirname, 'providers.json'),
-        path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),
-      ];
-
+  // Resolve providers.json. An explicit providersPath (used by tests) is read
+  // directly; otherwise delegate to the single source of truth (issue #197).
+  // Canonical installed path: ~/.claude/nf-bin/providers.json
+  // (`'.claude', 'nf-bin', 'providers.json'`).
   let providers = [];
-  for (const p of searchPaths) {
+  if (providersPath) {
     try {
-      const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-      providers = data.providers || [];
-      break;
+      providers = JSON.parse(fs.readFileSync(providersPath, 'utf8')).providers || [];
     } catch (_) {}
+  } else {
+    providers = loadProviders({ baseDir: __dirname }) || [];
   }
 
   if (providers.length === 0) return {};
