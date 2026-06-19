@@ -17,6 +17,7 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 const { loadProviders } = require('./resolve-providers.cjs');
+const { parseIntStrict } = require('./parse-int-strict.cjs');
 
 /**
  * poissonBinomialCDF(probabilities, k) — computes P(X >= k) for heterogeneous trials.
@@ -241,32 +242,46 @@ function computeEarlyEscalation(slotRates, minQuorum, remainingRounds, threshold
 
   const probability = 1 - Math.pow(1 - pPerRound, remainingRounds);
   const rounded = Math.round(probability * 1e6) / 1e6;
-  const result = {
+  return {
     shouldEscalate: rounded < threshold,
     probability: rounded,
     threshold,
     remainingRounds,
     pPerRound: Math.round(pPerRound * 1e6) / 1e6,
   };
-
-  if (clusterOutages.length > 0) {
-    result.clusterOutages = clusterOutages;
-  }
-
-  return result;
 }
 
 // ── CLI entrypoint ───────────────────────────────────────────────────────────
 if (require.main === module) {
   const args = process.argv.slice(2);
   const minQuorumArg = args.find(a => a.startsWith('--min-quorum='));
-  const minQuorum = minQuorumArg ? parseInt(minQuorumArg.split('=')[1], 10) : undefined;
+  let minQuorum;
+  if (minQuorumArg) {
+    minQuorum = parseIntStrict(minQuorumArg.split('=')[1]);
+    if (minQuorum === null || minQuorum < 1) {
+      process.stderr.write(
+        'Usage: quorum-consensus-gate --min-quorum=<positive integer>\n' +
+        `Invalid --min-quorum value: ${JSON.stringify(minQuorumArg.split('=')[1])}\n`,
+      );
+      process.exit(2);
+    }
+  }
 
   const remainingRoundsArg = args.find(a => a.startsWith('--remaining-rounds='));
 
   if (remainingRoundsArg) {
     // HEAL-01: Early escalation mode -- compute P(consensus | remaining rounds)
-    const remainingRounds = parseInt(remainingRoundsArg.split('=')[1], 10);
+    // Fail CLOSED on malformed input (#204): an unvalidated NaN propagated
+    // through Math.pow(...) and produced shouldEscalate:false / probability:null,
+    // silently disabling the early-escalation net. Exit 2 so callers SEE the misuse.
+    const remainingRounds = parseIntStrict(remainingRoundsArg.split('=')[1]);
+    if (remainingRounds === null || remainingRounds < 0) {
+      process.stderr.write(
+        'Usage: quorum-consensus-gate --remaining-rounds=<non-negative integer>\n' +
+        `Invalid --remaining-rounds value: ${JSON.stringify(remainingRoundsArg.split('=')[1])}\n`,
+      );
+      process.exit(2);
+    }
     const pp2 = require('./planning-paths.cjs');
     const scoreboardPath = pp2.resolveWithFallback(process.cwd(), 'quorum-scoreboard');
     let slotRates = null;
