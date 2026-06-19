@@ -1,7 +1,6 @@
 {
-  "aggregated_at": "2026-05-02T04:53:54.732Z",
-  "content_hash": "0e92a13b394eb596",
-  "frozen_at": "2026-05-02T04:53:54.733Z",
+  "aggregated_at": "2026-06-19T20:44:15.753Z",
+  "content_hash": "ab77dca3a849d72d",
   "schema_version": "1",
   "source": ".planning/REQUIREMENTS.md",
   "last_sync": "2026-03-31T09:45:23.686Z",
@@ -6461,6 +6460,54 @@
         "source_file": ".planning/milestones/v0.35-REQUIREMENTS.md",
         "milestone": "unknown"
       }
+    },
+    {
+      "category": "Observability & Diagnostics",
+      "category_raw": "Scoreboard Classification Taxonomy",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/formal/alloy/taxonomy-safety.als",
+        "milestone": "unknown"
+      },
+      "formal_models": [
+        ".planning/formal/alloy/taxonomy-safety.als"
+      ],
+      "id": "SCBD-05",
+      "text": "Issue/task classification is deterministic — the same task description yields exactly one classification (`category`, `subcategory`, `is_new`); task content cannot inject or alter the category taxonomy (classifyWithHaiku in update-scoreboard.cjs)."
+    },
+    {
+      "category": "Observability & Diagnostics",
+      "category_raw": "Scoreboard Classification Taxonomy",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/formal/alloy/taxonomy-safety.als",
+        "milestone": "unknown"
+      },
+      "formal_models": [
+        ".planning/formal/alloy/taxonomy-safety.als"
+      ],
+      "id": "SCBD-06",
+      "text": "When classification returns `is_new=false`, the returned category already exists in the known-categories snapshot it was classified against (taxonomy closure)."
+    },
+    {
+      "category": "Observability & Diagnostics",
+      "category_raw": "Scoreboard Classification Taxonomy",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/formal/alloy/taxonomy-safety.als",
+        "milestone": "unknown"
+      },
+      "formal_models": [
+        ".planning/formal/alloy/taxonomy-safety.als"
+      ],
+      "id": "SCBD-07",
+      "text": "When classification returns `is_new=true`, the returned category is genuinely absent from the known-categories snapshot it was classified against (new-category consistency)."
     }
   ]
 }
