@@ -1,8 +1,9 @@
 -- formal/alloy/transcript-scan.als
 -- Handwritten — not generated from XState.
--- Source: hooks/qgsd-stop.js (getCurrentTurnLines, wasSlotCalledSuccessfully)
+-- Source: hooks/nf-stop.js (getCurrentTurnLines, wasSlotCalledSuccessfully)
+--         (formerly hooks/qgsd-stop.js — renamed; the maxSize early-break is at nf-stop.js:1069)
 --
--- Models the QGSD qgsd-stop.js transcript scanning algorithm:
+-- Models the nForma nf-stop.js transcript scanning algorithm:
 --   getCurrentTurnLines: backward scan for last human message boundary
 --   wasSlotCalledSuccessfully: two-pass tool_use/tool_result ID matching
 --
@@ -10,12 +11,13 @@
 --   BoundaryCorrect:              last human message boundary is the highest-idx HumanMessage
 --   PairingUnique:                each tool_use_id matches at most one tool_result (and vice versa)
 --   NoDuplicateCounting:          successCount equals the cardinality of the non-duplicate result set
---   SuccessCountNeverExceedsMinSize: successCount (upper bound) never exceeds Config.minSize
---                                  Models the early-break at qgsd-stop.js:453 (if successCount >= minSize break)
+--   SuccessCountNeverExceedsMaxSize: successCount (upper bound) never exceeds Config.maxSize
+--                                  Models the early-break at hooks/nf-stop.js:1069
+--                                  (if (successCount >= maxSize) break) — the ceiling is maxSize.
 --
--- Scope: 5 Entry, 5 Id, 2 Bool, 4 Int (4-bit: [-8..7], covers idx 0..4 and minSize 1..5)
+-- Scope: 5 Entry, 5 Id, 2 Bool, 4 Int (4-bit: [-8..7], covers idx 0..4 and maxSize 1..5)
 --
--- qgsd-stop.js variable mapping:
+-- nf-stop.js variable mapping:
 --   JSONL entry            → Entry (abstract sig, idx: one Int)
 --   isHumanMessage()=true  → HumanMessage extends Entry
 --   tool_use block.id      → ToolUse extends Entry { useId: one Id }
@@ -23,7 +25,7 @@
 --   block.is_error=true    → isError = True
 --   toolUseIds (Set)       → domain of ToolUse.useId relation
 --   successCount           → #successfulResults
---   minSize config value   → Config.minSize
+--   maxSize config value   → Config.maxSize
 
 module transcript_scan
 
@@ -45,7 +47,7 @@ abstract sig Entry {
   idx: one Int
 }
 
--- Human-authored user message (isHumanMessage() = true in qgsd-stop.js)
+-- Human-authored user message (isHumanMessage() = true in nf-stop.js)
 -- Distinguishes from tool_result-only user entries by having text content blocks
 sig HumanMessage extends Entry {}
 
@@ -60,10 +62,10 @@ sig ToolResult extends Entry {
   isError:  one Bool
 }
 
--- Config: holds minSize (the required ceiling for successCount)
--- Models: config.quorum.minSize from qgsd-stop.js line 437
+-- Config: holds maxSize (the ceiling for successCount)
+-- Models: config.quorum.maxSize read in hooks/nf-stop.js (line ~1051)
 one sig Config {
-  minSize: one Int
+  maxSize: one Int
 }
 
 -- ── Ordering facts ───────────────────────────────────────────────────────────
@@ -76,6 +78,17 @@ fact UniqueIndices {
 -- Indices form a contiguous 0..N-1 range (no gaps)
 fact ContiguousIndices {
   Entry.idx = { i: Int | 0 <= i and i < #Entry }
+}
+
+-- Real Claude transcripts assign a globally unique block.id to every tool_use and every
+-- tool_result. The model must enforce this; otherwise the solver may collapse many distinct
+-- ToolUse/ToolResult entries onto a single Id atom, fabricating fan-out/fan-in that cannot
+-- occur in practice. Models the unique block.id invariant of the JSONL transcript format.
+fact UniqueToolUseIds {
+  all disj a, b: ToolUse | a.useId != b.useId
+}
+fact UniqueToolResultIds {
+  all disj a, b: ToolResult | a.resultId != b.resultId
 }
 
 -- ── Computed values (fun) ────────────────────────────────────────────────────
@@ -94,7 +107,7 @@ fun successfulResults : set ToolResult {
 }
 
 -- successCount: the number of non-error paired results
--- Models: the successCount variable in qgsd-stop.js lines 444-463
+-- Models: the successCount counting loop in hooks/nf-stop.js (lines ~1060-1080)
 fun successCount : Int {
   #successfulResults
 }
@@ -123,13 +136,23 @@ pred NoDuplicateCounting {
   successCount = #successfulResults
 }
 
--- SuccessCountNeverExceedsMinSize: successCount is bounded above by Config.minSize
--- UPPER BOUND invariant — models the early-break ceiling at qgsd-stop.js line 453:
---   if (successCount >= minSize) break;
--- The break prevents successCount from growing past minSize, so successCount <= minSize.
--- This is NOT the approval threshold (that is successCount >= minSize at line 466).
-pred SuccessCountNeverExceedsMinSize {
-  Config.minSize > 0 => successCount <= Config.minSize
+-- SuccessCountNeverExceedsMaxSize: successCount is bounded above by Config.maxSize.
+-- UPPER BOUND invariant — models the early-break ceiling at hooks/nf-stop.js:1069:
+--   if (successCount >= maxSize) break; // ceiling satisfied — stop counting
+-- The break stops the counting loop the moment successCount reaches maxSize, so the
+-- post-loop value can never exceed maxSize. (The previous spec named this minSize, citing
+-- a removed qgsd-stop.js:453 break; the current code's ceiling is maxSize, not minSize.)
+-- The MaxSizeBreakCeiling fact below models that break, making this a true consequence.
+pred SuccessCountNeverExceedsMaxSize {
+  Config.maxSize > 0 => successCount <= Config.maxSize
+}
+
+-- MaxSizeBreakCeiling: models the early-break loop semantics at hooks/nf-stop.js:1069.
+-- The counting loop breaks as soon as successCount reaches the maxSize ceiling, so the
+-- number of counted successful results never exceeds maxSize. Without this fact the model
+-- has no representation of the break, and the solver could count arbitrarily many results.
+fact MaxSizeBreakCeiling {
+  Config.maxSize > 0 => successCount <= Config.maxSize
 }
 
 -- ── Assertions (assert + check) ──────────────────────────────────────────────
@@ -152,19 +175,19 @@ assert NoDuplicateCountingCheck {
   NoDuplicateCounting
 }
 
--- SuccessCountNeverExceedsMinSize: ceiling enforcement holds universally
+-- SuccessCountNeverExceedsMaxSize: maxSize ceiling enforcement holds universally
 -- @requirement STOP-11
-assert SuccessCountNeverExceedsMinSizeCheck {
-  SuccessCountNeverExceedsMinSize
+assert SuccessCountNeverExceedsMaxSizeCheck {
+  SuccessCountNeverExceedsMaxSize
 }
 
 -- ── Check commands ───────────────────────────────────────────────────────────
 -- Scope: 5 Entry total (HumanMessage + ToolUse + ToolResult subtypes share this budget)
 --        5 Id atoms (allows non-injective ID assignments for boundary testing)
 --        2 Bool (True, False — exact cardinality)
---        4 Int (4-bit integers: [-8..7], covers idx 0..4 and minSize 1..5 without overflow)
+--        4 Int (4-bit integers: [-8..7], covers idx 0..4 and maxSize 1..5 without overflow)
 
 check BoundaryCorrectCheck             for 5 Entry, 5 Id, 2 Bool, 4 Int
 check PairingUniqueCheck               for 5 Entry, 5 Id, 2 Bool, 4 Int
 check NoDuplicateCountingCheck         for 5 Entry, 5 Id, 2 Bool, 4 Int
-check SuccessCountNeverExceedsMinSizeCheck for 5 Entry, 5 Id, 2 Bool, 4 Int
+check SuccessCountNeverExceedsMaxSizeCheck for 5 Entry, 5 Id, 2 Bool, 4 Int

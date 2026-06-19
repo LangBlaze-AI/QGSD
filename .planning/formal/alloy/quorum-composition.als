@@ -59,10 +59,15 @@ run {} for 5 Config, 5 Slot, 4 int
 -- Assert: all rules must hold (Alloy checks this is unsatisfiable to find violations)
 -- @requirement SPEC-03
 -- @requirement COMP-01
+-- The High-risk clause carries the same availability guard as fact NoEmptySelection:
+-- a non-empty selection is only forced when slots are actually available. The empty
+-- roster (High risk, 0 available, 0 selected) is a real system state — when no agents
+-- are reachable the orchestrator routes the decision to solo mode rather than polling
+-- zero agents — so the unguarded form was strictly stronger than the facts guarantee.
 assert AllRulesHold {
   all c : Config | {
     (#c.availableSlots > 0) implies (#c.selectedSlots > 0)
-    (c.riskLevel = High) implies (#c.selectedSlots > 0)
+    (c.riskLevel = High and #c.availableSlots > 0) implies (#c.selectedSlots > 0)
     (c.soloMode = True) implies (#c.selectedSlots = 1)
   }
 }

@@ -48,12 +48,25 @@ pred SameState [s1, s2: InstallState] {
     all r: Runtime | r.(s1.assigned) = r.(s2.assigned)
 }
 
--- AllEquivalence: --all flag produces same state as specifying all runtimes individually.
--- Both paths lead to all runtimes mapped to the same non-Uninstalled scope.
+-- AllEquivalence: for a FIXED chosen scope, `--all` produces the same final state as
+-- specifying every runtime individually (`--claude --opencode --gemini`) at that scope.
+-- INST-02 real invariant (bin/install.js): scope (Local vs Global) is an orthogonal, free
+-- choice — `--all --global` and `--all --local` legitimately differ — so equivalence holds
+-- only when both invocations target the SAME non-Uninstalled scope. The previous form
+-- ("all all-selected states are identical") over-stated this: it ignored that scope is free,
+-- making `--all --global` vs `--all --local` a spurious counterexample.
+-- We mirror the InstallIdempotent shape: both states are the post-state of an InstallOp that
+-- targets the full Runtime set at one shared scope `sc`, so they must coincide.
+-- NonUninstalled[sc] guards out the trivial Uninstalled scope (an uninstall, not an install).
 -- @requirement INST-02
+pred NonUninstalled [sc: Scope] { sc != Uninstalled }
+
 assert AllEquivalence {
-    all s1, s2: InstallState |
-        (AllSelected[s1] and AllSelected[s2]) => SameState[s1, s2]
+    all pre1, pre2, s1, s2: InstallState, sc: Scope |
+        (NonUninstalled[sc]
+         and InstallOp[pre1, s1, Runtime, sc]
+         and InstallOp[pre2, s2, Runtime, sc])
+        => SameState[s1, s2]
 }
 
 -- InstallOp: models applying install with a target scope to a pre-state, producing a post-state.
