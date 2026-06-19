@@ -67,6 +67,8 @@ const PROVIDERS_RULES = [
 //   resolve-providers.cjs  — the single source of truth itself
 //   unified-mcp-server.mjs — bootstrap last-resort empty-warning fallback
 //   install.js             — creates/writes/symlinks the file at install time
+//   install-helpers.cjs    — synthesizeMcpEntry builds the canonical install-time
+//                            UNIFIED_PROVIDERS_CONFIG write-path (moved out of install.js, #200)
 //   manage-agents-core.cjs — read/write path must stay coupled (writes the file)
 //   migrate-plaintext-tokens.cjs, account-manager.cjs, config-audit.cjs,
 //   nForma.cjs, run-oauth-rotation-prism.cjs — DEFERRED (not in the dispatch
@@ -75,6 +77,7 @@ const PROVIDERS_ALLOWLIST = new Set([
   'bin/resolve-providers.cjs',
   'bin/unified-mcp-server.mjs',
   'bin/install.js',
+  'bin/install-helpers.cjs',
   'bin/manage-agents-core.cjs',
   'bin/migrate-plaintext-tokens.cjs',
   'bin/account-manager.cjs',
