@@ -24,6 +24,10 @@ const path = require('path');
 const { writeCheckResult } = require('./write-check-result.cjs');
 const { readPolicy } = require('./read-policy.cjs');
 const { getRequirementIds } = require('./requirement-map.cjs');
+// readMCPAvailabilityRates lives in a side-effect-free sibling so consumers
+// (e.g. quorum-consensus-gate.cjs) can borrow it WITHOUT triggering this file's
+// import-time pipeline. See issue #198.
+const { readMCPAvailabilityRates } = require('./scoreboard-rates.cjs');
 
 // ── Check ID mapping for multi-model support ─────────────────────────────────
 const CHECK_ID_MAP = {
@@ -35,8 +39,15 @@ const PROPERTY_MAP = {
   'mcp-availability': 'MCP server availability under nondeterministic failure modes',
 };
 
-// ── Locate PRISM binary ──────────────────────────────────────────────────────
 const { resolvePrismBin } = require('./resolve-prism-bin.cjs');
+
+// ── main() — entire PRISM pipeline ───────────────────────────────────────────
+// Guarded behind `require.main === module` so that requiring this file (e.g. to
+// borrow readMCPAvailabilityRates) does NO import-time work: no process.exit,
+// no spawnSync, no FS writes, no argv forwarding. See issue #198.
+function main() {
+
+// ── Locate PRISM binary ──────────────────────────────────────────────────────
 const prismBin = resolvePrismBin();
 
 if (!prismBin) {
@@ -81,58 +92,6 @@ if (!fs.existsSync(modelPath)) {
     });
   } catch (e) { process.stderr.write('[run-prism] Warning: failed to write check result: ' + e.message + '\n'); }
   process.exit(1);
-}
-
-// ── readMCPAvailabilityRates (MCPENV-04) ─────────────────────────────────────
-// Reads quorum-scoreboard.json and computes per-slot availability rates.
-// Returns { 'slot-name': availabilityRate, ... } or null if no data.
-// Rate = 1.0 - (unavail_count / total_count) per slot, excluding 'claude' (self).
-// Exported for tests.
-function readMCPAvailabilityRates(sbPath) {
-  let p = sbPath;
-  if (!p) {
-    try {
-      const pp = require('./planning-paths.cjs');
-      p = pp.resolveWithFallback(process.cwd(), 'quorum-scoreboard');
-    } catch (_) {
-      p = path.join(process.cwd(), '.planning', 'quorum-scoreboard.json');
-    }
-  }
-  try {
-    const raw = fs.readFileSync(p, 'utf8');
-    const sb = JSON.parse(raw);
-    const rounds = Array.isArray(sb.rounds) ? sb.rounds : [];
-    if (rounds.length === 0) return null;
-
-    const slotStats = {};
-    for (const round of rounds) {
-      const votes = round.votes || {};
-      for (const [slot, code] of Object.entries(votes)) {
-        if (slot === 'claude') continue; // exclude self
-        // FILTER FIRST — inside readMCPAvailabilityRates, before building the rates object.
-        // Composite keys (e.g. 'claude-1:deepseek-ai/DeepSeek-V3.2') contain ':' or '/'
-        // which are illegal PRISM identifier characters. Filter them out here so the returned
-        // rates object contains only base keys — making the function directly testable with
-        // realistic scoreboards that include composite keys.
-        if (slot.includes(':') || slot.includes('/')) {
-          process.stderr.write('[run-prism] Skipping composite key (invalid PRISM identifier): ' + slot + '\n');
-          continue;
-        }
-        if (!slotStats[slot]) slotStats[slot] = { total: 0, unavail: 0 };
-        slotStats[slot].total++;
-        if (code === 'UNAVAIL') slotStats[slot].unavail++;
-      }
-    }
-
-    const rates = {};
-    for (const [slot, stats] of Object.entries(slotStats)) {
-      if (stats.total === 0) continue;
-      rates[slot] = Math.round((1.0 - stats.unavail / stats.total) * 1e6) / 1e6;
-    }
-    return Object.keys(rates).length > 0 ? rates : null;
-  } catch (_) {
-    return null; // missing or malformed scoreboard — caller uses priors
-  }
 }
 
 // ── Read scoreboard for empirical tp_rate / unavail injection (PRISM-02) ────
@@ -498,8 +457,14 @@ try {
   process.stderr.write('[run-prism] Warning: failed to write check result: ' + e.message + '\n');
 }
 
-if (require.main === module) {
-  process.exit(passed ? 0 : (finalResult === 'warn' ? 0 : 1));
-}
+process.exit(passed ? 0 : (finalResult === 'warn' ? 0 : 1));
 
+} // end main()
+
+// Re-export from the side-effect-free sibling so existing consumers and tests
+// that do `require('./run-prism.cjs').readMCPAvailabilityRates` keep working.
 module.exports = { readMCPAvailabilityRates };
+
+if (require.main === module) {
+  main();
+}

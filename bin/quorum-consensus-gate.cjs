@@ -92,13 +92,16 @@ function checkConsensusGate(options = {}) {
   const configPath     = options.configPath || path.join(process.cwd(), '.planning', 'config.json');
   const minQuorum      = options.minQuorum || 2;
 
-  // Read scoreboard availability rates
+  // Read scoreboard availability rates.
+  // Source from the side-effect-free scoreboard-rates.cjs — NOT run-prism.cjs,
+  // which runs its full PRISM pipeline (process.exit, spawnSync, argv forwarding)
+  // at import time and would kill this gate. See issue #198.
   let slotRates = null;
   try {
-    const { readMCPAvailabilityRates } = require('./run-prism.cjs');
+    const { readMCPAvailabilityRates } = require('./scoreboard-rates.cjs');
     slotRates = readMCPAvailabilityRates(scoreboardPath);
   } catch (_) {
-    // run-prism.cjs not available — fall through to priors
+    // scoreboard-rates.cjs not available — fall through to priors
   }
 
   // If no rates (empty/missing scoreboard): use conservative prior rates
@@ -268,7 +271,7 @@ if (require.main === module) {
     const scoreboardPath = pp2.resolveWithFallback(process.cwd(), 'quorum-scoreboard');
     let slotRates = null;
     try {
-      const { readMCPAvailabilityRates } = require('./run-prism.cjs');
+      const { readMCPAvailabilityRates } = require('./scoreboard-rates.cjs');
       slotRates = readMCPAvailabilityRates(scoreboardPath);
     } catch (_) {}
     if (!slotRates || Object.keys(slotRates).length === 0) {
