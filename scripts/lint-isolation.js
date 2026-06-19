@@ -43,7 +43,78 @@ const RULES = [
   },
 ];
 
+// --- providers.json resolver isolation (issue #197) ---
+// Forbids inline providers.json path construction and require('./providers.json')
+// in bin/ JS files. All resolution must route through bin/resolve-providers.cjs.
+const PROVIDERS_RULES = [
+  {
+    id: 'providers-inline-path',
+    // path.join(... 'providers.json')  — any inline construction of the file path.
+    re: /path\.join\([^;\n]*['"]providers\.json['"]\s*\)/,
+    message:
+      "Inline providers.json path construction — use loadProviders()/resolveProvidersConfig() from bin/resolve-providers.cjs",
+  },
+  {
+    id: 'providers-direct-require',
+    // require('./providers.json') or require('./bin/providers.json')
+    re: /require\(\s*['"]\.\/(?:bin\/)?providers\.json['"]\s*\)/,
+    message:
+      "Direct require() of providers.json — use loadProviders() from bin/resolve-providers.cjs",
+  },
+];
+
+// Files allowed to construct the providers.json path directly.
+//   resolve-providers.cjs  — the single source of truth itself
+//   unified-mcp-server.mjs — bootstrap last-resort empty-warning fallback
+//   install.js             — creates/writes/symlinks the file at install time
+//   manage-agents-core.cjs — read/write path must stay coupled (writes the file)
+//   migrate-plaintext-tokens.cjs, account-manager.cjs, config-audit.cjs,
+//   nForma.cjs, run-oauth-rotation-prism.cjs — DEFERRED (not in the dispatch
+//   pipeline; wire in a follow-up to keep this change focused).
+const PROVIDERS_ALLOWLIST = new Set([
+  'bin/resolve-providers.cjs',
+  'bin/unified-mcp-server.mjs',
+  'bin/install.js',
+  'bin/manage-agents-core.cjs',
+  'bin/migrate-plaintext-tokens.cjs',
+  'bin/account-manager.cjs',
+  'bin/config-audit.cjs',
+  'bin/nForma.cjs',
+  'bin/run-oauth-rotation-prism.cjs',
+  'bin/observe-handler-internal.cjs',
+]);
+
 const violations = [];
+
+function scanProvidersIsolation() {
+  const binDir = path.join(ROOT, 'bin');
+  const entries = fs.readdirSync(binDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const name = entry.name;
+    if (!/\.(cjs|mjs|js)$/.test(name)) continue;
+    if (name.endsWith('.test.cjs') || name.endsWith('.test.js') || name.endsWith('.test.mjs')) continue;
+    const rel = path.posix.join('bin', name);
+    if (PROVIDERS_ALLOWLIST.has(rel)) continue;
+    const lines = fs.readFileSync(path.join(binDir, name), 'utf8').split('\n');
+    lines.forEach((line, i) => {
+      // Ignore comment lines so doc references to the canonical path don't trip the rule.
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//') || trimmed.startsWith('*')) return;
+      for (const rule of PROVIDERS_RULES) {
+        if (rule.re.test(line)) {
+          violations.push({
+            rule: rule.id,
+            message: rule.message,
+            file: rel,
+            line: i + 1,
+            text: trimmed,
+          });
+        }
+      }
+    });
+  }
+}
 
 function scan(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -74,6 +145,8 @@ function scan(dir) {
 for (const dir of SCAN_DIRS) {
   scan(path.join(ROOT, dir));
 }
+
+scanProvidersIsolation();
 
 if (violations.length === 0) {
   console.log('✓ lint-isolation: all portable-path checks passed');

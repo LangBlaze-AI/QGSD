@@ -22,31 +22,15 @@ const { spawn } = require('child_process');
 const fs         = require('fs');
 const path       = require('path');
 const os         = require('os');
-const { resolveCli } = require('./resolve-cli.cjs');
+const { resolveSpawnTarget } = require('./resolve-cli.cjs');
+const { loadProviders } = require('./resolve-providers.cjs');
 
-// ─── Find providers.json (mirrors call-quorum-slot.cjs logic) ────────────────
+// ─── Find providers.json ─────────────────────────────────────────────────────
+// Delegates to the single source of truth in resolve-providers.cjs (issue #197).
+// Canonical installed path: ~/.claude/nf-bin/providers.json
+// (`'.claude', 'nf-bin', 'providers.json'`).
 function findProviders() {
-  const searchPaths = [
-    path.join(__dirname, 'providers.json'),                              // same dir (nf-bin) — canonical
-    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),      // installed canonical
-    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),   // legacy (pre-migration)
-  ];
-  try {
-    const claudeJson = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
-    const u1args = claudeJson?.mcpServers?.['unified-1']?.args ?? [];
-    const serverScript = u1args.find(a => typeof a === 'string' && a.endsWith('unified-mcp-server.mjs'));
-    if (serverScript) searchPaths.unshift(path.join(path.dirname(serverScript), 'providers.json'));
-  } catch (_) {}
-  for (const p of searchPaths) {
-    try {
-      if (fs.existsSync(p)) {
-        const providers = JSON.parse(fs.readFileSync(p, 'utf8')).providers;
-        // Skip empty files (the shipped repo source is empty by design); fall through to next path
-        if (Array.isArray(providers) && providers.length > 0) return providers;
-      }
-    } catch (_) { /* try next */ }
-  }
-  return null;
+  return loadProviders({ baseDir: __dirname });
 }
 
 // ─── Kill entire process group (mirrors call-quorum-slot.cjs killGroup) ──────
@@ -70,14 +54,9 @@ function probeSlot(provider, timeoutMs, spawnCwd) {
     const args = provider.args_template.map(a => (a === '{prompt}' ? 'OK' : a));
     const env  = { ...process.env, ...(provider.env ?? {}) };
 
-    // Mirror call-quorum-slot.cjs CLI resolution (PR #164): `cli` is optional in
-    // providers.json; fall back to `mainTool` so spawn() never receives null.
-    const cliSource = provider.cli || provider.mainTool;
-    if (cliSource && !provider.resolvedCli) {
-      const bareName = cliSource.split('/').pop();
-      provider.resolvedCli = resolveCli(bareName);
-    }
-    const spawnTarget = provider.resolvedCli || provider.cli || provider.mainTool;
+    // Shared spawn-target resolver (issue #197): resolvedCli → resolveCli(cli || mainTool).
+    // `cli` is optional in providers.json; this never hands null to spawn().
+    const spawnTarget = resolveSpawnTarget(provider);
     if (!spawnTarget) {
       resolve({ slot: provider.name, healthy: false, latencyMs: Date.now() - start, error: 'spawn: no resolvable CLI (cli, resolvedCli, and mainTool all empty)' });
       return;

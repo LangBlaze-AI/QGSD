@@ -18,6 +18,8 @@ const { spawn } = require('child_process');
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
+const { resolveSpawnTarget } = require('./resolve-cli.cjs');
+const { loadProviders: loadProvidersConfig } = require('./resolve-providers.cjs');
 
 // ─── Error pattern classification ────────────────────────────────────────────
 
@@ -37,17 +39,11 @@ function classifyOutput(text) {
 }
 
 // ─── Find providers.json ─────────────────────────────────────────────────────
-
+// Delegates to the single source of truth in resolve-providers.cjs (issue #197).
+// Canonical installed path: ~/.claude/nf-bin/providers.json
+// (`'.claude', 'nf-bin', 'providers.json'`).
 function loadProviders() {
-  const searchPaths = [
-    path.join(__dirname, 'providers.json'),
-    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),
-    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),
-  ];
-  for (const p of searchPaths) {
-    try { if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8')).providers; } catch (_) {}
-  }
-  return null;
+  return loadProvidersConfig({ baseDir: __dirname });
 }
 
 // ─── Kill helper ─────────────────────────────────────────────────────────────
@@ -168,10 +164,14 @@ function checkRecentLogs(slotName) {
 async function probeProvider(provider, quick) {
   const name = provider.name;
 
+  // Shared spawn-target resolver (issue #197): resolvedCli → resolveCli(cli || mainTool),
+  // so slots that define only `mainTool` are not falsely reported UNREACHABLE.
+  const spawnTarget = resolveSpawnTarget(provider) || provider.cli;
+
   // Quick mode: just --version
   if (quick) {
     const healthArgs = provider.health_check_args ?? ['--version'];
-    const result = await runCommand(provider.cli, healthArgs, 10000, provider.env);
+    const result = await runCommand(spawnTarget, healthArgs, 10000, provider.env);
     const version = result.output.trim().split('\n')[0];
     return {
       slot: name,
@@ -185,7 +185,7 @@ async function probeProvider(provider, quick) {
   // Deep probe: send actual prompt, check for PROBE_OK in output
   const probe = provider.deep_probe ?? { prompt: 'respond with: PROBE_OK', expect: 'PROBE_OK', timeout_ms: 45000 };
   const args  = provider.args_template.map(a => (a === '{prompt}' ? probe.prompt : a));
-  const result = await runCommand(provider.cli, args, probe.timeout_ms, provider.env);
+  const result = await runCommand(spawnTarget, args, probe.timeout_ms, provider.env);
   const combined = result.output;
 
   // Check for error patterns first

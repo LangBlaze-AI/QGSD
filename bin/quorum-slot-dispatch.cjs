@@ -33,6 +33,14 @@ const fs         = require('fs');
 const path       = require('path');
 const os         = require('os');
 const planningPaths = require('./planning-paths.cjs');
+const { loadProviders } = require('./resolve-providers.cjs');
+
+// ─── Providers.json (single source of truth — issue #197) ────────────────────
+// Canonical installed path: ~/.claude/nf-bin/providers.json
+// (`'.claude', 'nf-bin', 'providers.json'`). Returns [] when no populated file is found.
+function loadDispatchProviders() {
+  return loadProviders({ baseDir: __dirname }) || [];
+}
 
 // ─── Routing reward recording (fail-open) ───────────────────────────────────
 let recordRoutingReward;
@@ -1442,8 +1450,7 @@ async function main() {
     timeout = parseInt(timeoutArg, 10);
   } else {
     try {
-      const pPath = path.join(__dirname, 'providers.json');
-      const providers = JSON.parse(fs.readFileSync(pPath, 'utf8')).providers || [];
+      const providers = loadDispatchProviders();
       const provider = providers.find(p => p.name === slot);
       timeout = (provider && provider.quorum_timeout_ms) || DEFAULT_QUORUM_TIMEOUT_MS;
     } catch {
@@ -1533,11 +1540,7 @@ async function main() {
   const allPrecedents = loadPrecedents(repoDir);
   const matchedPrecedents = matchPrecedentsByKeywords(allPrecedents, question);
 
-  const providersPath = path.join(__dirname, 'providers.json');
-  let providers = [];
-  try {
-    providers = JSON.parse(fs.readFileSync(providersPath, 'utf8')).providers || [];
-  } catch (_) {}
+  const providers = loadDispatchProviders();
 
   // EXEC-01: Determine review mode — Mode B or explicit --review-only flag
   const isReviewMode = mode === 'B' || reviewOnly;
@@ -1694,8 +1697,7 @@ async function main() {
   // EXEC-01: Detect ccr-based slot to pass --allowed-tools for review-only restriction
   const isCcrSlot = (() => {
     try {
-      const pPath = path.join(__dirname, 'providers.json');
-      const providers = JSON.parse(fs.readFileSync(pPath, 'utf8')).providers || [];
+      const providers = loadDispatchProviders();
       const provider = providers.find(p => p.name === dispatchSlot);
       return provider && (provider.display_type === 'claude-code-router' || (provider.cli && provider.cli.includes('ccr')));
     } catch { return false; }
@@ -1737,8 +1739,7 @@ async function main() {
   // ─── Acquire per-provider semaphore (SOLVE-10) ───────────────────────
   let semLock = null;
   try {
-    const pPath = path.join(__dirname, 'providers.json');
-    const providers = JSON.parse(fs.readFileSync(pPath, 'utf8')).providers || [];
+    const providers = loadDispatchProviders();
     const provider = providers.find(p => p.name === dispatchSlot);
     if (provider && provider.type === 'http' && provider.baseUrl && provider.max_concurrency) {
       semLock = semAcquire(provider.baseUrl, provider.max_concurrency);

@@ -84,7 +84,35 @@ function resolveCli(name) {
   return name;
 }
 
-module.exports = { resolveCli };
+/**
+ * Resolve the spawn target (executable) for a provider entry.
+ *
+ * Single source of truth for the chain that ~5 call sites re-implemented with
+ * divergent semantics — the null-CLI bug class (#161 #164 #180 #193). Some sites
+ * used raw `provider.cli` (which is null when only `mainTool` is present, handing
+ * null to child_process.spawn → ENOENT, false-dead at ~1ms). Others used
+ * `resolvedCli || cli || mainTool` inconsistently.
+ *
+ * Order:
+ *   1. provider.resolvedCli — absolute path resolved earlier (preferred)
+ *   2. resolveCli(provider.cli || provider.mainTool) — resolve the bare name to
+ *      an absolute path; `cli` is optional in providers.json, fall back to mainTool
+ *
+ * Returns an empty string only when the provider has no cli, mainTool, AND
+ * resolvedCli — the caller must treat '' as "no resolvable CLI".
+ *
+ * @param {object} provider - a providers.json entry
+ * @returns {string} absolute path or bare name; '' when nothing is resolvable.
+ */
+function resolveSpawnTarget(provider) {
+  if (!provider || typeof provider !== 'object') return '';
+  if (provider.resolvedCli) return provider.resolvedCli;
+  const bare = provider.cli || provider.mainTool;
+  if (!bare) return '';
+  return resolveCli(bare);
+}
+
+module.exports = { resolveCli, resolveSpawnTarget };
 
 // ---------------------------------------------------------------------------
 // Standalone CLI interface

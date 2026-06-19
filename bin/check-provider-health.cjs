@@ -32,6 +32,7 @@ const http  = require('http');
 const fs    = require('fs');
 const path  = require('path');
 const os    = require('os');
+const { loadProviders } = require('./resolve-providers.cjs');
 
 // ─── Project root lookup (for quorum-failures.json) ───────────────────────────
 function findProjectRoot() {
@@ -141,12 +142,9 @@ const activeMcpServers = (quorumActive.length > 0)
   : mcpServers;
 
 // ─── Load providers.json for PROVIDER_SLOT-based slot discovery ──────────────
-let providersJson = [];
-try {
-  const pjPath = path.join(__dirname, 'providers.json');
-  const pj = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
-  providersJson = pj.providers ?? [];
-} catch (_) {}
+// Single source of truth (issue #197). Canonical installed path:
+// ~/.claude/nf-bin/providers.json (`'.claude', 'nf-bin', 'providers.json'`).
+const providersJson = loadProviders({ baseDir: __dirname }) || [];
 
 // Build lookup: slotName -> { baseUrl, apiKeyEnv, model } from providers.json
 const slotLookup = {};

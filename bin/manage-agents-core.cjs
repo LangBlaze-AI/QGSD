@@ -17,7 +17,7 @@ const os = require('os');
 const https = require('https');
 const http = require('http');
 const { spawnSync } = require('child_process');
-const { resolveCli } = require('./resolve-cli.cjs');
+const { resolveCli, resolveSpawnTarget } = require('./resolve-cli.cjs');
 const { updateAgents, getUpdateStatuses } = require('./update-agents.cjs');
 
 // File paths
@@ -703,7 +703,9 @@ async function probeAndPersistKey(slotName, baseUrl, apiKey) {
  * @returns {{ healthy: boolean, latencyMs: number, statusCode: null, error: string|null, type: string }}
  */
 function probeSubprocess(provider) {
-  const cliPath = provider.resolvedCli || provider.cli;
+  // Shared spawn-target resolver (issue #197): resolvedCli → resolveCli(cli || mainTool).
+  // Previously `resolvedCli || cli` dropped the mainTool fallback (null-CLI class).
+  const cliPath = resolveSpawnTarget(provider);
   if (!cliPath) {
     return { healthy: false, latencyMs: 0, statusCode: null, error: 'No CLI path', type: 'subprocess' };
   }

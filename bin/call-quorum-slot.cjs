@@ -27,7 +27,8 @@ const http      = require('http');
 const fs        = require('fs');
 const path      = require('path');
 const os        = require('os');
-const { resolveCli } = require('./resolve-cli.cjs');
+const { resolveCli, resolveSpawnTarget } = require('./resolve-cli.cjs');
+const { loadProviders } = require('./resolve-providers.cjs');
 const { acquireSlot, releaseSlot, providerKeyFromUrl } = require('./provider-concurrency.cjs');
 const { resolveEnvPlaceholders, findUnresolvedPlaceholders, isPlaceholder, extractPlaceholderVar, namespacedSecretKey } = require('./resolve-env.cjs');
 
@@ -277,37 +278,13 @@ if (!slot && require.main === module) {
 }
 
 // ─── Find providers.json ───────────────────────────────────────────────────────
-// Canonical path is ~/.claude/nf-bin/providers.json — all code reads/writes this location.
-// __dirname/providers.json (same dir as this script, which lives in nf-bin/) is the first
-// fallback. The legacy ~/.claude/nf/bin/ path is checked last for backwards compatibility
-// (it may be a symlink to nf-bin/ after migration).
+// Single source of truth lives in resolve-providers.cjs (issue #197). The canonical
+// installed path is ~/.claude/nf-bin/providers.json (`'.claude', 'nf-bin', 'providers.json'`);
+// the resolver also honors UNIFIED_PROVIDERS_CONFIG, the ~/.claude.json pointer, __dirname,
+// and the legacy nf/bin path. baseDir=__dirname makes the "same dir" candidate resolve relative
+// to this script (nf-bin after install).
 function findProviders() {
-  const searchPaths = [
-    path.join(__dirname, 'providers.json'),                              // same dir (nf-bin) — canonical
-    path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json'),      // installed canonical
-    path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json'),   // legacy (pre-migration)
-  ];
-
-  // Also derive path from unified-1 MCP server config in ~/.claude.json
-  try {
-    const claudeJson = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
-    const u1args = claudeJson?.mcpServers?.['unified-1']?.args ?? [];
-    const serverScript = u1args.find(a => typeof a === 'string' && a.endsWith('unified-mcp-server.mjs'));
-    if (serverScript) {
-      searchPaths.unshift(path.join(path.dirname(serverScript), 'providers.json'));
-    }
-  } catch (_) { /* no claude.json — fine */ }
-
-  for (const p of searchPaths) {
-    try {
-      if (fs.existsSync(p)) {
-        const providers = JSON.parse(fs.readFileSync(p, 'utf8')).providers;
-        // Skip empty files (the shipped repo source is empty by design); fall through to next path
-        if (Array.isArray(providers) && providers.length > 0) return providers;
-      }
-    } catch (_) { /* try next */ }
-  }
-  return null;
+  return loadProviders({ baseDir: __dirname });
 }
 
 // ─── Read stdin ────────────────────────────────────────────────────────────────
@@ -381,10 +358,9 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     try {
       // detached: true creates a new process group — required to kill all descendants
       // (ccr → Claude Code → node, opencode → LLM subprocess, etc.)
-      // Chain of fallbacks: resolvedCli (preferred, absolute path) → cli (raw field) →
-      // mainTool (bare binary name, last resort). Guards against spawn(null) in case the
-      // resolution above produced no value.
-      const spawnTarget = provider.resolvedCli || provider.cli || provider.mainTool;
+      // Shared spawn-target resolver (issue #197): resolvedCli (preferred, absolute path)
+      // → resolveCli(cli || mainTool). Guards against spawn(null).
+      const spawnTarget = resolveSpawnTarget(provider);
       if (!spawnTarget) throw new Error(`provider ${provider.name} has no resolvable CLI (cli, resolvedCli, and mainTool all empty)`);
       child = spawn(spawnTarget, args, { env, cwd: spawnCwd, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
     } catch (err) {
