@@ -525,6 +525,24 @@ function mergeProvidersJson(repoPath, userPath) {
   return result;
 }
 
+// --- nf-bin install helpers (pure; exported for unit tests) -----------------
+// The unified MCP server is a `.mjs` ES module that the nf-bin copy loop must
+// install alongside the `.cjs` dispatch scripts. Historically the loop matched
+// only `*.cjs`, so `unified-mcp-server.mjs` never landed in ~/.claude/nf-bin/
+// and every mcpServers slot was pointed at the user's repo working tree (issue
+// #200). These pure helpers centralize the selection / path rules so they can
+// be tested without mutating the live ~/.claude environment.
+
+// These pure helpers live in install-helpers.cjs so tests can import them
+// WITHOUT requiring install.js (which runs the installer on load). See #200.
+const {
+  NF_BIN_RUNTIME_MJS,
+  shouldCopyToNfBin,
+  installedUnifiedMcpPath,
+  isUnderInstallDir,
+  synthesizeMcpEntry,
+} = require('./install-helpers.cjs');
+
 // Ensures all provider slots from providers.json have corresponding MCP entries in ~/.claude.json.
 // Only adds missing entries (never modifies existing ones).
 // Fail-open: errors are logged but do not abort install.
@@ -714,9 +732,16 @@ function ensureMcpSlotsFromProviders() {
       }
     }
 
-    // Step 3: Verify unified-mcp-server.mjs exists (hard fail if missing)
-    if (!fs.existsSync(unifiedMcpPath)) {
-      console.error(`  ${yellow}✗${reset} ERROR: unified-mcp-server.mjs not found at ${unifiedMcpPath}. MCP slots would be non-functional. Stopping.`);
+    // Step 3: Verify unified-mcp-server.mjs exists (hard fail if missing).
+    // Slots must spawn from the INSTALLED copy under ~/.claude/nf-bin/, not the
+    // repo working tree (issue #200) — a repo edit/stash/branch-switch must not
+    // be able to take all slots down at once. Prefer the installed copy; fall
+    // back to the repo source only if the nf-bin copy is not yet in place.
+    const claudeHomeDir = path.join(os.homedir(), '.claude');
+    const installedMcpPath = installedUnifiedMcpPath(claudeHomeDir);
+    const mcpEntryPath = fs.existsSync(installedMcpPath) ? installedMcpPath : unifiedMcpPath;
+    if (!fs.existsSync(unifiedMcpPath) && !fs.existsSync(installedMcpPath)) {
+      console.error(`  ${yellow}✗${reset} ERROR: unified-mcp-server.mjs not found at ${installedMcpPath} or ${unifiedMcpPath}. MCP slots would be non-functional. Stopping.`);
       return;
     }
 
@@ -736,13 +761,12 @@ function ensureMcpSlotsFromProviders() {
       // new entries get it on creation, existing entries get backfilled below.
       const installedProvidersPath = path.join(os.homedir(), '.claude', 'nf-bin', 'providers.json');
       if (!claudeConfig.mcpServers.hasOwnProperty(providerName)) {
-        // Create entry for this provider
-        claudeConfig.mcpServers[providerName] = {
-          type: 'stdio',
-          command: 'node',
-          args: [unifiedMcpPath],
-          env: { PROVIDER_SLOT: providerName, UNIFIED_PROVIDERS_CONFIG: installedProvidersPath }
-        };
+        // Create entry for this provider — args point at the INSTALLED nf-bin
+        // copy (mcpEntryPath), never the repo working tree (issue #200).
+        const entry = synthesizeMcpEntry(providerName, claudeHomeDir);
+        entry.args = [mcpEntryPath];
+        entry.env.UNIFIED_PROVIDERS_CONFIG = installedProvidersPath;
+        claudeConfig.mcpServers[providerName] = entry;
         addedCount++;
         console.log(`  ${green}✓${reset} Added MCP entry for ${providerName}`);
       } else {
@@ -757,8 +781,41 @@ function ensureMcpSlotsFromProviders() {
           existing.env.UNIFIED_PROVIDERS_CONFIG = installedProvidersPath;
           addedCount++;
           console.log(`  ${green}✓${reset} Backfilled UNIFIED_PROVIDERS_CONFIG on ${providerName}`);
+        }
+        // Args migration (issue #200): older installs wrote args[0] pointing at
+        // the repo working tree (<repo>/bin/unified-mcp-server.mjs) or the npx
+        // cache. Rewrite any nForma slot whose args[0] is not under nf-bin to the
+        // installed copy so a repo edit/stash/eviction can't take slots down.
+        if (fs.existsSync(installedMcpPath)) {
+          const args0 = Array.isArray(existing.args) ? existing.args[0] : undefined;
+          const pointsAtUnified = typeof args0 === 'string' && args0.endsWith('unified-mcp-server.mjs');
+          if (pointsAtUnified && !isUnderInstallDir(args0, path.join(claudeHomeDir, 'nf-bin'))) {
+            existing.args = [installedMcpPath];
+            addedCount++;
+            console.log(`  ${green}✓${reset} Migrated ${providerName} args → ${installedMcpPath}`);
+          } else if (!pointsAtUnified) {
+            console.log(`  ${dim}↳ MCP entry for ${providerName} already exists (skipped)${reset}`);
+          }
         } else {
           console.log(`  ${dim}↳ MCP entry for ${providerName} already exists (skipped)${reset}`);
+        }
+      }
+    }
+
+    // Step 4b: Install-time assertion (issue #200 regression gate) — every
+    // nForma mcpServers entry's args[0] must exist AND live under nf-bin. Warn
+    // loudly (never abort install) when a slot still points at the repo tree.
+    if (fs.existsSync(installedMcpPath)) {
+      const nfBinDir = path.join(claudeHomeDir, 'nf-bin');
+      for (const provider of providers) {
+        const slot = claudeConfig.mcpServers[provider.name];
+        if (!slot || !Array.isArray(slot.args)) continue;
+        const args0 = slot.args[0];
+        if (typeof args0 !== 'string' || !args0.endsWith('unified-mcp-server.mjs')) continue;
+        const underInstall = isUnderInstallDir(args0, nfBinDir);
+        const exists = fs.existsSync(args0);
+        if (!underInstall || !exists) {
+          console.warn(`  ${yellow}⚠${reset} MCP slot ${provider.name} args[0] is not a valid installed path: ${args0} (under nf-bin: ${underInstall}, exists: ${exists})`);
         }
       }
     }
@@ -2705,7 +2762,10 @@ function install(isGlobal, runtime = 'claude') {
     for (const entry of binEntries) {
       if (entry === 'providers.json') {
         mergeProvidersJson(path.join(binSrc, entry), path.join(binDest, entry));
-      } else if (entry.endsWith('.cjs')) {
+      } else if (shouldCopyToNfBin(entry)) {
+        // Copies *.cjs dispatch scripts AND runtime *.mjs modules (notably
+        // unified-mcp-server.mjs — issue #200). Without the .mjs copy, every
+        // mcpServers slot is forced to spawn from the repo working tree.
         fs.copyFileSync(path.join(binSrc, entry), path.join(binDest, entry));
       }
     }
@@ -4307,5 +4367,5 @@ if (hasGlobal && hasLocal) {
 
 // Export for testing (only when required as a library, not when run directly)
 if (require.main !== module) {
-  module.exports = { validateStructuralIntegrity, validateHookPaths, fileHash, generateManifest, saveLocalPatches, reportLocalPatches, PATCHES_DIR_NAME, MANIFEST_NAME, classifyProviders, detectExternalClis };
+  module.exports = { validateStructuralIntegrity, validateHookPaths, fileHash, generateManifest, saveLocalPatches, reportLocalPatches, PATCHES_DIR_NAME, MANIFEST_NAME, classifyProviders, detectExternalClis, shouldCopyToNfBin, isUnderInstallDir, synthesizeMcpEntry, installedUnifiedMcpPath, NF_BIN_RUNTIME_MJS };
 }
