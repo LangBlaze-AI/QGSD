@@ -38,6 +38,31 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ─── Verdict vocabulary (VERDICT-01) ─────────────────────────────────────────
+// Mode B workers emit exactly one of these on a `verdict:` line. The legacy
+// `/APPROVE|BLOCK|FLAG/` pattern was wrong on two counts:
+//   1. BLOCK is not part of the vocabulary — Mode B emits APPROVE|REJECT|FLAG.
+//   2. It was unanchored, so the first keyword anywhere in the text won
+//      (e.g. "I would not APPROVE this" parsed as APPROVE), corrupting the
+//      verdict telemetry that feeds the score-delta calibration (#175).
+const VERDICTS = Object.freeze(['APPROVE', 'REJECT', 'FLAG']);
+const VERDICT_LINE_RE = /^verdict:\s*(APPROVE|REJECT|FLAG)\b/im;
+
+/**
+ * parseVerdictLine — extract the verdict from an anchored `verdict:` line.
+ *
+ * Anchored to the start of a line (multiline) so prose that merely mentions a
+ * verdict keyword does not register. Returns null when no `verdict:` line is
+ * present, letting callers apply their own default.
+ *
+ * @param {string} text
+ * @returns {'APPROVE'|'REJECT'|'FLAG'|null}
+ */
+function parseVerdictLine(text) {
+  const m = VERDICT_LINE_RE.exec(String(text || ''));
+  return m ? m[1].toUpperCase() : null;
+}
+
 // ─── Token sentinel for CLI slots (OBSV-04) ───────────────────────────────────
 function appendTokenSentinel(slotName) {
   try {
@@ -378,6 +403,13 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
   const safePrompt = isCcr
     ? prompt.replace(/`/g, "'").replace(/\$\(/g, '(').replace(/\$/g, '').replace(/!/g, '.')
     : prompt;
+  // CCR-MUTATE-01: surface whether the neutralization above actually changed the
+  // prompt. CCR reviews then see mutilated code ($/!/backtick stripped) and may
+  // cite lines that no longer match the original — callers should treat such
+  // reviews with reduced confidence. Tracked via the returned `promptMutated`
+  // flag (and a stderr warning in runSubprocess) until CCR can accept the prompt
+  // over stdin/temp-file without shell re-interpretation.
+  const promptMutated = Boolean(isCcr) && safePrompt !== prompt;
   args = provider.args_template.map(a => (a === '{prompt}' ? safePrompt : a));
   // Only use stdin for slots that explicitly require it (none currently do)
   useStdinPrompt = false;
@@ -392,12 +424,16 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
     }
   }
 
-  return { args, useStdinPrompt, isCcr };
+  return { args, useStdinPrompt, isCcr, promptMutated };
 }
 
 // ─── Subprocess dispatch ───────────────────────────────────────────────────────
 function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag) {
-  const { args, useStdinPrompt, isCcr } = buildSpawnArgs(provider, prompt, allowedToolsFlag);
+  const { args, useStdinPrompt, isCcr, promptMutated } = buildSpawnArgs(provider, prompt, allowedToolsFlag);
+  if (promptMutated) {
+    // CCR-MUTATE-01: warn that the prompt was neutralized for CCR's shell re-spawn.
+    process.stderr.write('[call-quorum-slot] WARNING: prompt_mutated=true — CCR neutralized $/!/backtick chars; review may cite mutilated code\n');
+  }
 
   // XPLAT-01: resolve CLI path at dispatch time (once per invocation)
   // `cli` is optional in providers.json — when absent, fall back to `mainTool` as the bare
@@ -910,16 +946,16 @@ async function main() {
       const cliExitCode = parseInt(exitCodeMatch[1], 10);
       // Check if output contains a valid verdict despite non-zero exit
       // (common cause: Gemini SessionEnd hook exits non-zero, but response is fine)
-      const hasValidVerdict = /\b(APPROVE|BLOCK|FLAG)\b/.test(result);
+      const hasValidVerdict = parseVerdictLine(result) !== null;
       // Substantial output must contain model content, not just hook/framework logs
-      const isFrameworkNoise = /^(Created execution plan|Hook execution|Expanding hook|Attempt \d+ failed|Keychain|AgentRegistry|\[ERROR\])/m.test(result) && !/\b(APPROVE|BLOCK|FLAG|verdict|reasoning)\b/i.test(result);
+      const isFrameworkNoise = /^(Created execution plan|Hook execution|Expanding hook|Attempt \d+ failed|Keychain|AgentRegistry|\[ERROR\])/m.test(result) && parseVerdictLine(result) === null && !/\b(APPROVE|REJECT|FLAG|verdict|reasoning)\b/i.test(result);
       const hasSubstantialOutput = result.length > 100 && !isFrameworkNoise;
 
       if (hasValidVerdict || hasSubstantialOutput) {
         // Valid output despite non-zero exit -- treat as success with warning
         const latencyMs = Date.now() - startMs;
         const providerName = provider.provider || provider.name;
-        const verdict = (/APPROVE|BLOCK|FLAG/.exec(result) || [])[0] || 'UNKNOWN';
+        const verdict = parseVerdictLine(result) || 'UNKNOWN';
         const l1Detect = result.includes('[OUTPUT TRUNCATED at 10MB');
         process.stderr.write('[call-quorum-slot] WARNING: ' + slot + ' CLI exited non-zero (code ' + cliExitCode + ') but produced valid output -- treating as available\n');
         recordTelemetry(slot, roundNum, verdict, latencyMs, providerName, 'available_with_warning', retryCount, null, l1Detect, l1Detect ? 'L1' : null, null, result.slice(0, 500), result.length, cliExitCode);
@@ -945,8 +981,8 @@ async function main() {
       process.exit(1);
     }
 
-    // Extract verdict from result using regex
-    const verdict = (/APPROVE|BLOCK|FLAG/.exec(result) || [])[0] || 'UNKNOWN';
+    // Extract verdict from result using the anchored verdict-line parser
+    const verdict = parseVerdictLine(result) || 'UNKNOWN';
     const latencyMs = Date.now() - startMs;
     const providerName = provider.provider || provider.name;
 
@@ -986,4 +1022,4 @@ if (require.main === module) {
 }
 
 // ─── Test exports (SHELL-ESCAPE-01, TRUNC-01, INFRA-367) ───────────────────────
-module.exports = { buildSpawnArgs, recordTelemetry, findProjectRoot, writeFailureLog, atomicUpdateJson };
+module.exports = { buildSpawnArgs, recordTelemetry, findProjectRoot, writeFailureLog, atomicUpdateJson, VERDICTS, VERDICT_LINE_RE, parseVerdictLine };

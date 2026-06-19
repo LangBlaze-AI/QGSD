@@ -35,6 +35,7 @@ const os         = require('os');
 const planningPaths = require('./planning-paths.cjs');
 const { loadProviders } = require('./resolve-providers.cjs');
 const { buildDispatchArgv } = require('./quorum-dispatch-argv.cjs'); // #202: parent→child argv contract
+const { VERDICTS, parseVerdictLine } = require('./call-quorum-slot.cjs'); // #203: shared verdict parsing
 
 // ─── Providers.json (single source of truth — issue #197) ────────────────────
 // Canonical installed path: ~/.claude/nf-bin/providers.json
@@ -74,6 +75,44 @@ function loadNfConfig(cwd) {
     } catch (_) {}
   }
   return {}; // fail-open: empty config uses defaults
+}
+
+// ─── readBoundedTail — read a file capped to a byte tail (E2BIG-01) ───────────
+/**
+ * Read a file, returning at most `maxBytes` of its TAIL. Keeping the tail (rather
+ * than the head) preserves the most recent — and for execution traces, most
+ * relevant — content. When the file is truncated, a one-line marker is prepended
+ * so downstream readers (and the model) know bytes were dropped.
+ *
+ * Returns null when `filePath` is falsy or the read fails (fail-open). Never
+ * throws.
+ *
+ * @param {string|null} filePath
+ * @param {number} maxBytes
+ * @param {string} [label]  used only in the stderr diagnostic
+ * @returns {string|null}
+ */
+function readBoundedTail(filePath, maxBytes, label = 'file') {
+  if (!filePath) return null;
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.size <= maxBytes) {
+      return fs.readFileSync(filePath, 'utf8');
+    }
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      const buf = Buffer.alloc(maxBytes);
+      fs.readSync(fd, buf, 0, maxBytes, stat.size - maxBytes);
+      const tail = buf.toString('utf8');
+      process.stderr.write(`[quorum-slot-dispatch] ${label} too large (${stat.size} bytes), inlining last ${maxBytes} bytes only\n`);
+      return `[...${stat.size - maxBytes} earlier bytes omitted; showing last ${maxBytes} bytes...]\n` + tail;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (e) {
+    process.stderr.write(`[quorum-slot-dispatch] Could not read ${label}: ${e.message}\n`);
+    return null;
+  }
 }
 
 // ─── classifyDispatchError — classify UNAVAIL output into a human-readable type ──────────────
@@ -873,12 +912,14 @@ function parseVerdict(rawOutput, mode) {
     parseVerdict.lastTruncationNote = false;
     return (rawOutput || '').slice(0, 500);
   }
-  // Mode B: extract APPROVE|REJECT|FLAG
-  const match = (rawOutput || '').match(/verdict:\s*(APPROVE|REJECT|FLAG)/i);
+  // Mode B: extract APPROVE|REJECT|FLAG from an anchored `verdict:` line
+  // (shared with call-quorum-slot.cjs via parseVerdictLine). Anchoring to line
+  // start prevents prose like "I would not APPROVE" from registering a verdict.
+  const verdict = parseVerdictLine(rawOutput);
   // Side-channel: only flag truncation when verdict was DEFAULT (no verdict: line found)
   // AND truncation marker is present. A genuine "verdict: FLAG" survives truncation — it's real.
-  parseVerdict.lastTruncationNote = hasTruncationMarker && !match;
-  return match ? match[1].toUpperCase() : 'FLAG';
+  parseVerdict.lastTruncationNote = hasTruncationMarker && !verdict;
+  return verdict || 'FLAG';
 }
 
 /**
@@ -1303,13 +1344,31 @@ function stripRetrievedContext(prompt) {
   };
 }
 
-function stripBlockByHeading(prompt, heading) {
+// COMPACT-01: end sentinel that closes the precedents and requirements sections
+// (see formatPrecedentsSection / formatRequirementsSection). Stripping must run
+// to this sentinel, not to the first blank line — both sections contain internal
+// blank lines, so the old `\n\n` cut left most of the block (and its bytes) in
+// the prompt while reporting it as stripped.
+const SECTION_END_SENTINEL = '================================';
+
+function stripBlockByHeading(prompt, heading, endSentinel = SECTION_END_SENTINEL) {
   const idx = prompt.indexOf(heading);
   if (idx === -1) return { prompt, changed: false };
-  let end = prompt.indexOf('\n\n', idx + heading.length);
-  if (end === -1) end = prompt.length;
-  else {
-    while (end < prompt.length && prompt.slice(end, end + 2) === '\n\n') end += 2;
+  let end;
+  // Prefer the explicit end sentinel that closes the section.
+  const sentIdx = endSentinel ? prompt.indexOf(endSentinel, idx + heading.length) : -1;
+  if (sentIdx !== -1) {
+    end = sentIdx + endSentinel.length;
+    // consume trailing newlines after the sentinel
+    while (end < prompt.length && prompt[end] === '\n') end += 1;
+  } else {
+    // Fallback: cut at the first blank line (legacy behavior for headings with
+    // no closing sentinel).
+    end = prompt.indexOf('\n\n', idx + heading.length);
+    if (end === -1) end = prompt.length;
+    else {
+      while (end < prompt.length && prompt.slice(end, end + 2) === '\n\n') end += 2;
+    }
   }
   return {
     prompt: prompt.slice(0, idx) + prompt.slice(end),
@@ -1341,8 +1400,12 @@ function compactPromptToFitBudget(prompt, provider, options = {}) {
 
   const steps = [
     { name: 'stripped_retrieved_context', fn: stripRetrievedContext },
-    { name: 'stripped_precedents', fn: (p) => stripBlockByHeading(p, '=== RELEVANT PRECEDENTS ===\n') },
-    { name: 'stripped_requirements', fn: (p) => stripBlockByHeading(p, '=== APPLICABLE REQUIREMENTS ===\n') },
+    // COMPACT-01: headings must match the strings actually emitted by
+    // formatPrecedentsSection ("PAST QUORUM PRECEDENTS", not "RELEVANT
+    // PRECEDENTS") / formatRequirementsSection. Stripping runs to the section's
+    // closing sentinel so the full body is removed.
+    { name: 'stripped_precedents', fn: (p) => stripBlockByHeading(p, '=== PAST QUORUM PRECEDENTS ===') },
+    { name: 'stripped_requirements', fn: (p) => stripBlockByHeading(p, '=== APPLICABLE REQUIREMENTS ===') },
     { name: 'stripped_prior_positions', fn: stripPriorPositions },
   ];
 
@@ -1444,24 +1507,18 @@ async function main() {
     }
   }
 
-  // Read optional temp files
-  let priorPositions = null;
-  if (priorPositionsFile) {
-    try {
-      priorPositions = fs.readFileSync(priorPositionsFile, 'utf8');
-    } catch (e) {
-      process.stderr.write(`[quorum-slot-dispatch] Could not read prior-positions-file: ${e.message}\n`);
-    }
-  }
-
-  let traces = null;
-  if (tracesFile) {
-    try {
-      traces = fs.readFileSync(tracesFile, 'utf8');
-    } catch (e) {
-      process.stderr.write(`[quorum-slot-dispatch] Could not read traces-file: ${e.message}\n`);
-    }
-  }
+  // Read optional temp files.
+  //
+  // E2BIG-01: traces and prior-positions are inlined into the single-argv prompt
+  // that call-quorum-slot.cjs hands to the CLI subprocess (the `{prompt}` arg).
+  // Artifacts are already capped at 50KB (see ARTIFACT_MAX_BYTES below), but these
+  // two inputs had NO cap — a multi-MB trace file pushed the argv past the OS
+  // ARG_MAX limit, so EVERY subprocess slot failed E2BIG at once and was
+  // misclassified as SPAWN_ERROR. Cap both to a 100KB tail so the most recent
+  // (and most relevant) lines survive while the prompt stays well under ARG_MAX.
+  const TRACE_MAX_BYTES = 100 * 1024; // 100KB tail cap per inlined input
+  const priorPositions = readBoundedTail(priorPositionsFile, TRACE_MAX_BYTES, 'prior-positions-file');
+  const traces = readBoundedTail(tracesFile, TRACE_MAX_BYTES, 'traces-file');
 
   // Build prompt
   const repoDir = cwd;
@@ -1640,6 +1697,47 @@ async function main() {
   const compactActionsFinal = compactActions;
   const retrievalSkippedFinal = retrievalSkipped;
   const fallbacked = dispatchSlot !== slot;
+
+  // E2BIG-01: pre-spawn ARG_MAX guard.
+  //
+  // The token-budget check above only fires when the provider declares
+  // max_context_tokens; subprocess CLI slots often don't. Independently of token
+  // budget, call-quorum-slot.cjs inlines this prompt into a SINGLE argv element
+  // for the CLI subprocess. A prompt larger than the OS ARG_MAX limit makes that
+  // exec fail E2BIG — and it does so for every slot at once, which the downstream
+  // classifier mislabels SPAWN_ERROR. Detect the oversized prompt here and emit a
+  // truthful CONTEXT_OVERFLOW instead. Threshold is conservative (well under the
+  // ~256KB single-arg ceiling typical of macOS/Linux) to leave room for the rest
+  // of the CLI argv.
+  const PROMPT_ARG_MAX_BYTES = 200 * 1024; // 200KB single-arg safety ceiling
+  const promptBytes = Buffer.byteLength(prompt, 'utf8');
+  if (promptBytes > PROMPT_ARG_MAX_BYTES) {
+    const result = emitResultBlock({
+      slot,
+      round,
+      verdict: 'UNAVAIL',
+      reasoning: `CONTEXT_OVERFLOW: prompt is ${promptBytes} bytes, exceeding the ${PROMPT_ARG_MAX_BYTES}-byte single-arg limit for the CLI subprocess (would fail E2BIG)`,
+      rawOutput: `Prompt too large to pass as a CLI argument for slot ${slot} via ${dispatchSlot}: ${promptBytes} bytes > ${PROMPT_ARG_MAX_BYTES} byte limit`,
+      isUnavail: true,
+      error_type: 'CONTEXT_OVERFLOW',
+      dispatch_nonce: dispatchNonce,
+      unavailMessage: `Prompt size: ${promptBytes} bytes. Single-arg limit: ${PROMPT_ARG_MAX_BYTES}. Dispatch slot: ${dispatchSlot}.`,
+      logical_slot: slot,
+      dispatch_slot: dispatchSlot,
+      retrieval_skipped: retrievalSkippedFinal,
+    });
+    if (outputFile) {
+      try {
+        fs.mkdirSync(path.dirname(outputFile), { recursive: true });
+        fs.writeFileSync(outputFile, result.endsWith('\n') ? result : result + '\n', 'utf8');
+      } catch (e) {
+        process.stderr.write(`[quorum-slot-dispatch] output-file write failed: ${e.message}\n`);
+      }
+    }
+    process.stdout.write(result);
+    if (!result.endsWith('\n')) process.stdout.write('\n');
+    process.exit(0);
+  }
 
   // Locate call-quorum-slot.cjs relative to this script
   const cqsPath = path.join(__dirname, 'call-quorum-slot.cjs');
@@ -1909,9 +2007,13 @@ module.exports = {
     compactPromptToFitBudget,
     stripRetrievedContext,
     stripPriorPositions,
+    stripBlockByHeading,
     shouldSkipRetrieval,
     classifyDispatchError,
     appendTelemetryUpdate,
+    readBoundedTail,
+    VERDICTS,
+    SECTION_END_SENTINEL,
   };
 
 // ─── Entry point guard ────────────────────────────────────────────────────────
