@@ -8,6 +8,51 @@
  */
 
 const fs = require('fs');
+const path = require('path');
+
+// ── Issue #200: install unified-mcp-server.mjs into ~/.claude/nf-bin/ and point
+// every mcpServers slot at that INSTALLED copy, never the repo working tree. ──
+
+// Runtime .mjs files that must be copied into nf-bin/ (the copy loop's primary
+// filter is the generic `*.cjs` match; these are the non-.cjs runtime files).
+const NF_BIN_RUNTIME_MJS = new Set(['unified-mcp-server.mjs']);
+
+// Decide whether a top-level bin/ entry should be copied into nf-bin/.
+// providers.json is handled separately (merge semantics) and is NOT returned here.
+function shouldCopyToNfBin(entry) {
+  if (entry === 'providers.json') return false;
+  if (entry.endsWith('.cjs')) return true;
+  if (NF_BIN_RUNTIME_MJS.has(entry)) return true;
+  return false;
+}
+
+// Absolute path to the installed unified-mcp-server under a given nf-bin dir.
+function installedUnifiedMcpPath(claudeHomeDir) {
+  return path.join(claudeHomeDir, 'nf-bin', 'unified-mcp-server.mjs');
+}
+
+// True when `argPath` resolves to a file inside `installDir` (the nf-bin dir).
+// Uses path.relative so `..` segments / sibling dirs are rejected.
+function isUnderInstallDir(argPath, installDir) {
+  if (!argPath || !installDir) return false;
+  const rel = path.relative(path.resolve(installDir), path.resolve(argPath));
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+// Build the mcpServers entry for a provider, with args pointing at the INSTALLED
+// unified-mcp-server copy under nf-bin (never the repo working tree).
+function synthesizeMcpEntry(providerName, claudeHomeDir) {
+  const nfBinDir = path.join(claudeHomeDir, 'nf-bin');
+  return {
+    type: 'stdio',
+    command: 'node',
+    args: [installedUnifiedMcpPath(claudeHomeDir)],
+    env: {
+      PROVIDER_SLOT: providerName,
+      UNIFIED_PROVIDERS_CONFIG: path.join(nfBinDir, 'providers.json'),
+    },
+  };
+}
 
 /**
  * Merge the repo's providers.json into the user's installed copy, preserving user-added
@@ -150,4 +195,12 @@ function restoreDaintreePresets(providers, presetsStorePath) {
   return { restoredCount: restoredNames.length, restoredNames };
 }
 
-module.exports = { mergeProvidersJson, restoreDaintreePresets };
+module.exports = {
+  mergeProvidersJson,
+  restoreDaintreePresets,
+  NF_BIN_RUNTIME_MJS,
+  shouldCopyToNfBin,
+  installedUnifiedMcpPath,
+  isUnderInstallDir,
+  synthesizeMcpEntry,
+};

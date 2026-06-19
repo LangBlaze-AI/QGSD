@@ -12,17 +12,16 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
-// install.js inspects process.argv at load; neutralize it for the require.
-const origArgv = process.argv;
-process.argv = ['node', 'test'];
+// Import the pure helpers from install-helpers.cjs — NOT install.js, which runs
+// the installer on require (in CI's non-interactive shell that auto-installs and
+// fails the test file at load). install.js re-exports the same helpers from here.
 const {
   shouldCopyToNfBin,
   isUnderInstallDir,
   synthesizeMcpEntry,
   installedUnifiedMcpPath,
   NF_BIN_RUNTIME_MJS,
-} = require('../bin/install.js');
-process.argv = origArgv;
+} = require('../bin/install-helpers.cjs');
 
 describe('shouldCopyToNfBin — nf-bin copy filter (issue #200)', () => {
   it('selects unified-mcp-server.mjs (the bug: .mjs was skipped)', () => {

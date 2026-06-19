@@ -533,49 +533,15 @@ function mergeProvidersJson(repoPath, userPath) {
 // #200). These pure helpers centralize the selection / path rules so they can
 // be tested without mutating the live ~/.claude environment.
 
-// Runtime `.mjs` modules that must be installed into nf-bin (in addition to the
-// generic `*.cjs` filter). Their `.cjs` dependencies (resolve-cli, resolve-env,
-// manage-agents-core, secrets, …) are already copied by the `.cjs` branch.
-const NF_BIN_RUNTIME_MJS = new Set(['unified-mcp-server.mjs']);
-
-// Decide whether a top-level bin/ entry should be copied into nf-bin/.
-// Mirrors the copy loop's filter so tests can assert `.mjs` runtime files are
-// selected. providers.json is handled separately (merge semantics) and is
-// intentionally NOT returned here.
-function shouldCopyToNfBin(entry) {
-  if (entry === 'providers.json') return false;
-  if (entry.endsWith('.cjs')) return true;
-  if (NF_BIN_RUNTIME_MJS.has(entry)) return true;
-  return false;
-}
-
-// Absolute path to the installed unified-mcp-server under a given nf-bin dir.
-function installedUnifiedMcpPath(claudeHomeDir) {
-  return path.join(claudeHomeDir, 'nf-bin', 'unified-mcp-server.mjs');
-}
-
-// True when `argPath` resolves to a file inside `installDir` (the nf-bin dir).
-// Uses path.relative so `..` segments / sibling dirs are rejected.
-function isUnderInstallDir(argPath, installDir) {
-  if (!argPath || !installDir) return false;
-  const rel = path.relative(path.resolve(installDir), path.resolve(argPath));
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
-}
-
-// Build the mcpServers entry for a provider, with args pointing at the INSTALLED
-// unified-mcp-server copy under nf-bin (never the repo working tree).
-function synthesizeMcpEntry(providerName, claudeHomeDir) {
-  const nfBinDir = path.join(claudeHomeDir, 'nf-bin');
-  return {
-    type: 'stdio',
-    command: 'node',
-    args: [installedUnifiedMcpPath(claudeHomeDir)],
-    env: {
-      PROVIDER_SLOT: providerName,
-      UNIFIED_PROVIDERS_CONFIG: path.join(nfBinDir, 'providers.json'),
-    },
-  };
-}
+// These pure helpers live in install-helpers.cjs so tests can import them
+// WITHOUT requiring install.js (which runs the installer on load). See #200.
+const {
+  NF_BIN_RUNTIME_MJS,
+  shouldCopyToNfBin,
+  installedUnifiedMcpPath,
+  isUnderInstallDir,
+  synthesizeMcpEntry,
+} = require('./install-helpers.cjs');
 
 // Ensures all provider slots from providers.json have corresponding MCP entries in ~/.claude.json.
 // Only adds missing entries (never modifies existing ones).
