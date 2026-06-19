@@ -31,6 +31,7 @@ const { resolveCli, resolveSpawnTarget } = require('./resolve-cli.cjs');
 const { loadProviders } = require('./resolve-providers.cjs');
 const { acquireSlot, releaseSlot, providerKeyFromUrl } = require('./provider-concurrency.cjs');
 const { resolveEnvPlaceholders, findUnresolvedPlaceholders, isPlaceholder, extractPlaceholderVar, namespacedSecretKey } = require('./resolve-env.cjs');
+const { warnUnknownDispatchFlags } = require('./quorum-dispatch-argv.cjs'); // #202: parent→child argv contract
 
 // ─── Utilities ──────────────────────────────────────────────────────────────
 function sleep(ms) {
@@ -312,6 +313,10 @@ const spawnCwd  = getArg('--cwd') ?? process.cwd();
 const allowedTools = getArg('--allowed-tools'); // EXEC-01: e.g. "Read,Grep,Glob" for review-only slots
 const innerOutputFile = getArg('--output-file');  // Defense-in-depth: write result file from child process
 const innerDispatchNonce = getArg('--dispatch-nonce');  // Nonce from parent for file authenticity
+
+// #202: warn (stderr) on any --flag this child does not parse, so future
+// parent→child dispatch-argv contract drift is visible instead of silent.
+warnUnknownDispatchFlags(argv);
 
 // Defense-in-depth: write result file from child process (Haiku can't modify child argv)
 function writeInnerOutputFile(result) {

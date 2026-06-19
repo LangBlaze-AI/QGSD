@@ -34,6 +34,7 @@ const path       = require('path');
 const os         = require('os');
 const planningPaths = require('./planning-paths.cjs');
 const { loadProviders } = require('./resolve-providers.cjs');
+const { buildDispatchArgv } = require('./quorum-dispatch-argv.cjs'); // #202: parent→child argv contract
 
 // ─── Providers.json (single source of truth — issue #197) ────────────────────
 // Canonical installed path: ~/.claude/nf-bin/providers.json
@@ -1379,7 +1380,6 @@ async function main() {
   const requestImprovements = hasFlag('--request-improvements');
   const timeoutArg         = getArg('--timeout');
   const cwd                = getArg('--cwd') || process.cwd();
-  const quorumInvocationIdArg = getArg('--quorum-invocation-id') || null;
   const filesArg              = getArg('--files') || null;
   const constraintsArg        = getArg('--constraints') || null;
 
@@ -1550,7 +1550,6 @@ async function main() {
   // Fail-open: if config load fails, retrieval is ON (default enabled).
   const nfConfig = loadNfConfig(cwd);
   const retrievalEnabled = nfConfig.context_retrieval_enabled !== false;
-  const persistSessionsWithinQuorum = nfConfig.persist_sessions_within_quorum !== false;
 
   const CHARS_PER_TOKEN = 4;
   let prompt = basePrompt;
@@ -1654,38 +1653,24 @@ async function main() {
     } catch { return false; }
   })();
 
-  // Build spawn args — add --allowed-tools for ccr slots in review mode
-  const spawnArgs = [cqsPath, '--slot', dispatchSlot, '--timeout', String(timeout), '--cwd', cwd];
-  spawnArgs.push('--dispatch-slot', dispatchSlot);
-  spawnArgs.push('--compact-actions', JSON.stringify(compactActionsFinal));
-  spawnArgs.push('--retrieval-skipped', retrievalSkippedFinal ? 'true' : 'false');
-  const quorumInvocationId = (() => {
-    if (!persistSessionsWithinQuorum) return null;
-    if (quorumInvocationIdArg) return quorumInvocationIdArg;
-    const stableKey = [
-      process.env.CLAUDE_SESSION_ID || 'manual',
-      cwd,
-      mode,
-      artifactPath || '',
-      reviewContext || '',
-      question || '',
-    ].join('\n');
-    return 'qrm-' + crypto.createHash('sha1').update(stableKey).digest('hex').slice(0, 16);
-  })();
-  if (quorumInvocationId) {
-    spawnArgs.push('--quorum-invocation-id', quorumInvocationId);
-  }
-  if (persistSessionsWithinQuorum === false) {
-    spawnArgs.push('--persist-sessions', 'false');
-  }
-  if (isReviewMode && isCcrSlot) {
-    spawnArgs.push('--allowed-tools', 'Read,Grep,Glob');
-  }
-  // Pass --output-file and --dispatch-nonce to child so it can write the result file
-  // even if the outer script's argv was modified by Haiku (defense-in-depth)
-  if (outputFile) {
-    spawnArgs.push('--output-file', outputFile, '--dispatch-nonce', dispatchNonce);
-  }
+  // Build spawn args via the shared dispatch-argv contract (#202).
+  // Only flags call-quorum-slot.cjs actually parses are emitted. --round is now
+  // passed so the child's roundNum is populated (telemetry → #175 calibration);
+  // the previously-pushed --dispatch-slot/--compact-actions/--retrieval-skipped/
+  // --quorum-invocation-id/--persist-sessions were never parsed by the child and
+  // have been removed. Their parent-side data still flows via emitResultBlock.
+  const spawnArgs = buildDispatchArgv(cqsPath, {
+    slot: dispatchSlot,
+    timeout: String(timeout),
+    round,                                                  // #202: child telemetry round
+    cwd,
+    // add --allowed-tools for ccr slots in review mode
+    allowedTools: (isReviewMode && isCcrSlot) ? 'Read,Grep,Glob' : null,
+    // Pass --output-file and --dispatch-nonce so the child can write the result file
+    // even if the outer script's argv was modified by Haiku (defense-in-depth)
+    outputFile: outputFile || null,
+    dispatchNonce,
+  });
 
   // Per-provider concurrency (SOLVE-10) is enforced inside the spawned
   // call-quorum-slot.cjs child via provider-concurrency.cjs (acquireSlot in
