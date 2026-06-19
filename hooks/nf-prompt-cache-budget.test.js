@@ -91,12 +91,18 @@ test('TC-206-A5: nf-prompt.js keys the cache on uniqueSlots, not cappedSlots', (
 
 // ── (b) PREFLIGHT TIME BUDGET ─────────────────────────────────────────────
 
+// Hermetic temp HOME so preflight never reads the developer's real ~/.claude
+// config or probes their installed slots. Created once, removed on test exit.
+const TEST_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-budget-home-'));
+require('node:test').after(() => { try { fs.rmSync(TEST_HOME, { recursive: true, force: true }); } catch (_) {} });
+
 function runPreflight(args, timeoutMs, extraEnv) {
   return spawnSync('node', [PREFLIGHT, ...args], {
     encoding: 'utf8',
     timeout: timeoutMs,
-    // Force a clean env so no real CLIs/services are probed unexpectedly.
-    env: { ...process.env, ...(extraEnv || {}) },
+    // Minimal, hermetic env: only PATH (to find node) + a throwaway HOME, plus
+    // explicit per-test overrides. Does NOT inherit the machine's real config.
+    env: { PATH: process.env.PATH, HOME: TEST_HOME, ...(extraEnv || {}) },
   });
 }
 
@@ -166,7 +172,7 @@ test('TC-206-B3: service auto-start stays off under --all even with --ensure-ser
   );
 });
 
-test('TC-206-B4: backward compatible — --all with no flags still produces tiered output', () => {
+test('TC-206-B4: backward compatible — --all --no-probe still produces tiered output', () => {
   // Absent --budget-ms, behavior must be unchanged (no budget-driven skips imposed).
   const r = runPreflight(['--all', '--no-probe'], 11000);
   assert.strictEqual(r.status, 0, 'preflight --all --no-probe must exit 0');
