@@ -9,8 +9,31 @@ const assert = require('node:assert');
 const fs     = require('fs');
 const path   = require('path');
 const os     = require('os');
+const { execFileSync } = require('node:child_process');
 
 const { checkConsensusGate, computeConsensusProbability, poissonBinomialCDF } = require('./quorum-consensus-gate.cjs');
+const { parseIntStrict } = require('./parse-int-strict.cjs');
+
+const GATE_CLI = path.join(__dirname, 'quorum-consensus-gate.cjs');
+
+// Run the gate CLI in a clean cwd (so it falls back to prior rates) and capture
+// exit code + stdout + stderr.
+function runGate(args, cwd) {
+  try {
+    const stdout = execFileSync(process.execPath, [GATE_CLI, ...args], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { code: 0, stdout, stderr: '' };
+  } catch (err) {
+    return {
+      code: typeof err.status === 'number' ? err.status : 1,
+      stdout: err.stdout ? err.stdout.toString() : '',
+      stderr: err.stderr ? err.stderr.toString() : '',
+    };
+  }
+}
 
 let tmpDir;
 
@@ -173,5 +196,73 @@ describe('checkConsensusGate', () => {
     });
     const elapsed = performance.now() - start;
     assert.ok(elapsed < 10, 'Should complete in under 10ms, took: ' + elapsed.toFixed(2) + 'ms');
+  });
+});
+
+// ── parseIntStrict tests (Issue #204) ────────────────────────────────────────
+
+describe('parseIntStrict', () => {
+  test('parses clean non-negative integers', () => {
+    assert.strictEqual(parseIntStrict('0'), 0);
+    assert.strictEqual(parseIntStrict('3'), 3);
+    assert.strictEqual(parseIntStrict('42'), 42);
+    assert.strictEqual(parseIntStrict('  7 '), 7);
+  });
+
+  test('parses signed integers', () => {
+    assert.strictEqual(parseIntStrict('-1'), -1);
+    assert.strictEqual(parseIntStrict('+5'), 5);
+  });
+
+  test('returns null for non-integer / malformed input (no fail-open NaN)', () => {
+    for (const bad of ['', '  ', 'abc', '2.5', '12abc', '0x10', 'NaN', 'Infinity', undefined, null, 3]) {
+      assert.strictEqual(parseIntStrict(bad), null, `expected null for ${JSON.stringify(bad)}`);
+    }
+  });
+});
+
+// ── CLI early-escalation: fail CLOSED on malformed --remaining-rounds (#204) ──
+
+describe('early-escalation CLI --remaining-rounds validation', () => {
+  test('non-numeric --remaining-rounds exits 2 and does NOT emit shouldEscalate:false / probability:null', () => {
+    const res = runGate(['--remaining-rounds=foo'], tmpDir);
+    assert.strictEqual(res.code, 2, 'should exit 2 on malformed input, got ' + res.code);
+    assert.ok(!/shouldEscalate/.test(res.stdout), 'must not emit a result object on stdout');
+    assert.ok(!/probability/.test(res.stdout), 'must not emit probability on stdout');
+    assert.match(res.stderr, /Usage:/, 'should print a usage message to stderr');
+    assert.match(res.stderr, /remaining-rounds/, 'usage should reference the flag');
+  });
+
+  test('empty --remaining-rounds value exits 2', () => {
+    const res = runGate(['--remaining-rounds='], tmpDir);
+    assert.strictEqual(res.code, 2);
+    assert.ok(!/shouldEscalate/.test(res.stdout));
+  });
+
+  test('negative --remaining-rounds exits 2', () => {
+    const res = runGate(['--remaining-rounds=-1'], tmpDir);
+    assert.strictEqual(res.code, 2);
+  });
+
+  test('valid --remaining-rounds still works and emits a result', () => {
+    // Priors (0.85 x4, minQuorum 2) over several rounds -> high P -> continue (exit 0).
+    const res = runGate(['--remaining-rounds=3'], tmpDir);
+    assert.ok(res.code === 0 || res.code === 1, 'valid input should exit 0 or 1, got ' + res.code);
+    // stdout may be prefixed by run-prism diagnostic lines; the result JSON is the
+    // trailing {...} object. Extract from the first '{' to the last '}'.
+    const start = res.stdout.indexOf('{');
+    const end = res.stdout.lastIndexOf('}');
+    assert.ok(start !== -1 && end !== -1, 'expected a JSON result object on stdout');
+    const parsed = JSON.parse(res.stdout.slice(start, end + 1));
+    assert.strictEqual(typeof parsed.probability, 'number', 'probability must be a number, not null');
+    assert.ok(!Number.isNaN(parsed.probability), 'probability must not be NaN');
+    assert.strictEqual(parsed.remainingRounds, 3);
+    assert.strictEqual(typeof parsed.shouldEscalate, 'boolean');
+  });
+
+  test('malformed --min-quorum exits 2', () => {
+    const res = runGate(['--remaining-rounds=3', '--min-quorum=foo'], tmpDir);
+    assert.strictEqual(res.code, 2);
+    assert.match(res.stderr, /min-quorum/);
   });
 });
