@@ -24,9 +24,13 @@
  * within one backoff cycle, not only at the next fresh acquireSlot() call.
  *
  * Exports:
- *   - acquireSlot(providerKey, maxConcurrency, timeoutMs): acquire a slot
- *   - releaseSlot(providerKey, slotIndex): release a slot
+ *   - acquireSlot(providerKey, maxConcurrency, timeoutMs): async — acquire a slot
+ *   - releaseSlot(providerKey, slotIndex): pid-checked release of a slot
  *   - providerKeyFromUrl(baseUrl): derive a lock key from a provider baseUrl
+ *
+ * acquireSlot is async: the inter-attempt wait is `await setTimeout` (not a busy-
+ * wait), so it yields the event loop and never pins a core or starves the I/O
+ * callback that would release the slot it is waiting for.
  */
 
 const fs = require('fs');
@@ -36,7 +40,11 @@ const crypto = require('crypto');
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 const LOCK_DIR = path.join(os.tmpdir(), 'nf-provider-locks');
-const STALE_TTL_MS = 5 * 60 * 1000; // 5 minutes — backstop for same-boot PID reuse
+// STALE_TTL_MS must stay strictly ABOVE the maximum quorum request timeout, otherwise
+// a lock can be reclaimed mid-flight while its holder is still legitimately waiting on
+// the HTTP response. The longest acquire/dispatch timeout in the codebase is ~5 min, so
+// 10 min leaves a safe margin while still bounding same-boot PID-reuse exposure.
+const STALE_TTL_MS = 10 * 60 * 1000; // 10 minutes — strictly > max request timeout
 const BACKOFF_BASE_MS = 200; // base backoff: 200ms * attempt + jitter
 // Boot time is derived from os.uptime(), which has second resolution and can drift
 // slightly under clock adjustments — only treat a difference beyond this as a reboot.
@@ -113,11 +121,47 @@ function cleanupStaleLocks(providerKey, maxConcurrency) {
       try {
         const content = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
         if (isLockStale(content, bootNow)) {
-          fs.unlinkSync(lockPath);
+          // Rename-then-verify reclaim. A bare read-judge-unlink races a fresh
+          // acquirer: between our stale verdict and the unlink, the original holder
+          // could release and a new holder write a live lock at the same path — and
+          // we would delete that live lock, admitting two holders to one slot.
+          // Instead, atomically rename the suspect lock out of the way (rename is the
+          // exclusive claim here), re-read the renamed file, and only delete it if it
+          // STILL matches the stale verdict. If the file changed (or rename failed
+          // because someone already replaced it), we leave the live lock untouched.
+          const reclaimPath = `${lockPath}.reclaim.${process.pid}.${Date.now()}`;
+          try {
+            fs.renameSync(lockPath, reclaimPath);
+          } catch (_) {
+            // Lost the race (file vanished or was replaced) — nothing to reclaim.
+            continue;
+          }
+          try {
+            const recheck = JSON.parse(fs.readFileSync(reclaimPath, 'utf8'));
+            if (isLockStale(recheck, bootNow)) {
+              fs.unlinkSync(reclaimPath); // confirmed stale → free the slot
+            } else {
+              // It became live between read and rename — restore it.
+              try { fs.renameSync(reclaimPath, lockPath); } catch (_) {
+                try { fs.unlinkSync(reclaimPath); } catch (_) {}
+              }
+            }
+          } catch (_) {
+            // Renamed file is unreadable/gone — it was at best a malformed stale lock.
+            try { fs.unlinkSync(reclaimPath); } catch (_) {}
+          }
         }
       } catch (_) {
-        // Malformed lock file (or it vanished mid-read) — remove it.
-        try { fs.unlinkSync(lockPath); } catch (_) {}
+        // Unparseable lock. With atomic link-publish above, a live lock is never
+        // visible half-written, so this is a genuinely corrupt leftover — but never
+        // naive-unlink it (that was the over-admission race): rename it out of the
+        // way to claim it exclusively, then drop the renamed copy. If the rename
+        // loses (someone already replaced the path with a fresh live lock), leave it.
+        const reclaimPath = `${lockPath}.reclaim.${process.pid}.${i}`;
+        try {
+          fs.renameSync(lockPath, reclaimPath);
+          try { fs.unlinkSync(reclaimPath); } catch (_) {}
+        } catch (_) { /* lost the race — a live lock now sits at lockPath; leave it */ }
       }
     }
   } catch (err) {
@@ -126,8 +170,33 @@ function cleanupStaleLocks(providerKey, maxConcurrency) {
   }
 }
 
-// ─── Acquire a slot with staggered backoff ─────────────────────────────────────
-function acquireSlot(providerKey, maxConcurrency, timeoutMs) {
+// ─── Helper: async sleep that yields the event loop ────────────────────────────
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ─── Helper: pid-checked release — unlink only if WE still hold the lock ────────
+// A bare unlink-by-path frees whatever lock sits at the path, even one that a
+// stale-reclaim handed to a different holder after ours expired. Read the lock
+// first and only remove it when its pid + slot match this process.
+function releaseOwnLock(lockPath, providerKey, slotIndex) {
+  try {
+    const content = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    if (content && content.pid === process.pid &&
+        content.slot === `${providerKey}-${slotIndex}`) {
+      fs.unlinkSync(lockPath);
+    }
+    // Not ours (reclaimed + re-acquired by someone else) — leave it alone.
+  } catch (_) {
+    // Missing/malformed → nothing of ours to remove. Idempotent.
+  }
+}
+
+// ─── Acquire a slot with staggered backoff (async) ─────────────────────────────
+// Async so the inter-attempt wait yields the event loop (callers are already
+// async). A synchronous busy-wait pinned a core at 100% and could starve the very
+// I/O callback that releases the lock we are waiting on.
+async function acquireSlot(providerKey, maxConcurrency, timeoutMs) {
   // Fail-open pattern: any error returns acquired:true (proceed without lock)
   try {
     // Ensure lock directory exists
@@ -149,7 +218,15 @@ function acquireSlot(providerKey, maxConcurrency, timeoutMs) {
       for (let slotIndex = 0; slotIndex < maxConcurrency; slotIndex++) {
         const lockPath = path.join(LOCK_DIR, `${providerKey}-${slotIndex}.lock`);
 
-        // Try to create the lock file exclusively (fail if exists)
+        // Atomically create the lock file exclusively AND fully-formed.
+        // A plain writeFileSync(..., {flag:'wx'}) creates the file and THEN writes
+        // content in separate steps, so a concurrent cleanupStaleLocks could read it
+        // mid-write, see partial/empty JSON, judge it "malformed", and delete this
+        // live lock — admitting two holders to one slot. Instead write the full
+        // content into a private temp file first, then linkSync it into place:
+        // linkSync is atomic and exclusive (EEXIST if the slot is taken), and the
+        // lock only ever becomes visible already complete.
+        const tmpPath = `${lockPath}.new.${process.pid}.${slotIndex}`;
         try {
           const lockContent = JSON.stringify({
             pid: process.pid,
@@ -157,21 +234,18 @@ function acquireSlot(providerKey, maxConcurrency, timeoutMs) {
             bootTime: currentBootTimeSec(),
             slot: `${providerKey}-${slotIndex}`,
           });
-          fs.writeFileSync(lockPath, lockContent, { flag: 'wx' }); // wx = write exclusive
+          fs.writeFileSync(tmpPath, lockContent); // fully written before it is visible
+          fs.linkSync(tmpPath, lockPath);         // atomic exclusive publish (EEXIST if taken)
+          fs.unlinkSync(tmpPath);                 // tmp no longer needed; lock lives at lockPath
 
           // Successfully acquired
           return {
             acquired: true,
             slotIndex,
-            release: () => {
-              try {
-                fs.unlinkSync(lockPath);
-              } catch (_) {
-                // Idempotent: double-release is safe
-              }
-            },
+            release: () => releaseOwnLock(lockPath, providerKey, slotIndex),
           };
         } catch (err) {
+          try { fs.unlinkSync(tmpPath); } catch (_) {} // never leak the temp file
           // EEXIST = slot occupied, try next slot
           if (err.code === 'EEXIST') continue;
           // Other errors are non-fatal in fail-open mode
@@ -195,12 +269,10 @@ function acquireSlot(providerKey, maxConcurrency, timeoutMs) {
       const remainingMs = timeoutMs - elapsedMs;
       const actualDelayMs = Math.min(delayMs, remainingMs);
 
-      // Sleep synchronously using busy-wait (non-blocking version would need async)
-      // For simplicity and synchronous API, we use setTimeout's event loop
-      const deadline = Date.now() + actualDelayMs;
-      while (Date.now() < deadline) {
-        // Busy-wait — fs operations implicitly yield
-      }
+      // Yield the event loop for the backoff window. Critically non-blocking: a
+      // SIGKILLed holder's lock is reclaimed by another waiter's I/O, and the HTTP
+      // response that releases the slot we want can fire while we wait here.
+      await sleep(actualDelayMs);
 
       attempt++;
     }
@@ -221,9 +293,9 @@ function releaseSlot(providerKey, slotIndex) {
   try {
     if (slotIndex === null) return; // Was acquired without lock (fail-open path)
     const lockPath = path.join(LOCK_DIR, `${providerKey}-${slotIndex}.lock`);
-    if (fs.existsSync(lockPath)) {
-      fs.unlinkSync(lockPath);
-    }
+    // pid-checked: only remove the lock if it is still ours — never a lock that a
+    // stale-reclaim has since handed to a different live holder.
+    releaseOwnLock(lockPath, providerKey, slotIndex);
   } catch (_) {
     // Non-fatal — fail-open
   }
