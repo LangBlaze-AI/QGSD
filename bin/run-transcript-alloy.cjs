@@ -21,6 +21,7 @@ const path = require('path');
 const { writeCheckResult } = require('./write-check-result.cjs');
 const { getRequirementIds } = require('./requirement-map.cjs');
 const { resolveAlloyJar } = require('./resolve-formal-tools.cjs');
+const { runAlloy } = require('./alloy-exec.cjs');
 
 // ── Resolve project root (--project-root= overrides __dirname-relative) ─────
 let ROOT = path.join(__dirname, '..');
@@ -121,52 +122,45 @@ process.stdout.write('[run-transcript-alloy] ALS:  ' + alsPath + '\n');
 process.stdout.write('[run-transcript-alloy] JAR:  ' + jarPath + '\n');
 
 const _startMs = Date.now();
+const TRANSCRIPT_PROPERTY = 'Hook transcript scanning — boundary detection, tool_use/tool_result pairing uniqueness, ceiling enforcement';
 
-// Use stdio: 'pipe' so we can scan stdout for counterexamples (Alloy exits 0 even on CEX)
+// ── 6. Invoke Alloy via shared executor and parse the structured receipt ──────
+// Alloy 6 exits 0 even when counterexamples are found, and never prints the word
+// "Counterexample" (issue #199). alloy-exec.cjs parses receipt.json: a `check`
+// that yields an instance is a counterexample => fail; a `run{}` with no instance
+// trips the vacuity guard => fail.
 process.stderr.write('[heap] Xms=64m Xmx=' + JAVA_HEAP_MAX + '\n');
-const alloyResult = spawnSync(javaExe, [
-  '-Djava.awt.headless=true',
-  '-Xms64m', '-Xmx' + JAVA_HEAP_MAX,
-  '-jar', jarPath,
-  'exec',
-  '--output', '-',
-  '--type', 'text',
-  '--quiet',
-  alsPath,
-], { encoding: 'utf8', stdio: 'pipe' });
+const alloyRun = runAlloy({ javaExe, jarPath, alsPath, heapMax: JAVA_HEAP_MAX });
 
-if (alloyResult.error) {
-  process.stderr.write('[run-transcript-alloy] Alloy invocation failed: ' + alloyResult.error.message + '\n');
+if (alloyRun.stdout) { process.stdout.write(alloyRun.stdout); }
+if (alloyRun.stderr) { process.stderr.write(alloyRun.stderr); }
+
+if (alloyRun.status === 'timeout') {
+  process.stderr.write('[run-transcript-alloy] Alloy timed out: ' + alloyRun.error + '\n');
   const _runtimeMs = Date.now() - _startMs;
-  try { writeCheckResult({ tool: 'run-transcript-alloy', formalism: 'alloy', result: 'fail', check_id: 'alloy:transcript', surface: 'alloy', property: 'Hook transcript scanning — boundary detection, tool_use/tool_result pairing uniqueness, ceiling enforcement', runtime_ms: _runtimeMs, summary: 'fail: alloy:transcript in ' + _runtimeMs + 'ms', triage_tags: _runtimeMs > 60000 ? ['timeout-risk'] : [], requirement_ids: getRequirementIds('alloy:transcript'), metadata: { spec: specName } }); } catch (e) { process.stderr.write('[run-transcript-alloy] Warning: failed to write check result: ' + e.message + '\n'); }
+  try { writeCheckResult({ tool: 'run-transcript-alloy', formalism: 'alloy', result: 'fail', check_id: 'alloy:transcript', surface: 'alloy', property: TRANSCRIPT_PROPERTY, runtime_ms: _runtimeMs, summary: 'timeout: alloy:transcript after ' + _runtimeMs + 'ms', triage_tags: ['timeout-killed'], requirement_ids: getRequirementIds('alloy:transcript'), metadata: { spec: specName } }); } catch (e) { process.stderr.write('[run-transcript-alloy] Warning: failed to write check result: ' + e.message + '\n'); }
   process.exit(1);
 }
 
-// ── 6. Scan stdout for counterexamples ───────────────────────────────────────
-// Alloy 6 exits 0 even when counterexamples are found. Scan stdout to detect them.
-const stdout = alloyResult.stdout || '';
-const stderr = alloyResult.stderr || '';
+if (alloyRun.status === 'error') {
+  process.stderr.write('[run-transcript-alloy] Alloy invocation failed: ' + alloyRun.error + '\n');
+  const _runtimeMs = Date.now() - _startMs;
+  try { writeCheckResult({ tool: 'run-transcript-alloy', formalism: 'alloy', result: 'error', check_id: 'alloy:transcript', surface: 'alloy', property: TRANSCRIPT_PROPERTY, runtime_ms: _runtimeMs, summary: 'error: alloy:transcript (' + alloyRun.error + ')', triage_tags: [], requirement_ids: getRequirementIds('alloy:transcript'), metadata: { spec: specName } }); } catch (e) { process.stderr.write('[run-transcript-alloy] Warning: failed to write check result: ' + e.message + '\n'); }
+  process.exit(1);
+}
 
-// Write stdout to process.stdout (mirrors stdio: 'inherit' output)
-if (stdout) { process.stdout.write(stdout); }
-if (stderr) { process.stderr.write(stderr); }
-
-if (/Counterexample/i.test(stdout)) {
+const outcome = alloyRun.outcome;
+if (!outcome.ok) {
   process.stderr.write(
-    '[run-transcript-alloy] WARNING: Counterexample found in ' + specName + '.als assertion.\n' +
+    '[run-transcript-alloy] WARNING: Alloy verification FAILED for ' + specName + '.als\n' +
+    '[run-transcript-alloy] ' + outcome.summary + '\n' +
     '[run-transcript-alloy] This indicates a spec violation — review .planning/formal/alloy/' + specName + '.als.\n'
   );
   const _runtimeMs = Date.now() - _startMs;
-  try { writeCheckResult({ tool: 'run-transcript-alloy', formalism: 'alloy', result: 'fail', check_id: 'alloy:transcript', surface: 'alloy', property: 'Hook transcript scanning — boundary detection, tool_use/tool_result pairing uniqueness, ceiling enforcement', runtime_ms: _runtimeMs, summary: 'fail: alloy:transcript in ' + _runtimeMs + 'ms', triage_tags: _runtimeMs > 60000 ? ['timeout-risk'] : [], requirement_ids: getRequirementIds('alloy:transcript'), metadata: { spec: specName } }); } catch (e) { process.stderr.write('[run-transcript-alloy] Warning: failed to write check result: ' + e.message + '\n'); }
+  try { writeCheckResult({ tool: 'run-transcript-alloy', formalism: 'alloy', result: 'fail', check_id: 'alloy:transcript', surface: 'alloy', property: TRANSCRIPT_PROPERTY, runtime_ms: _runtimeMs, summary: 'fail: alloy:transcript in ' + _runtimeMs + 'ms', triage_tags: _runtimeMs > 60000 ? ['timeout-risk'] : [], requirement_ids: getRequirementIds('alloy:transcript'), metadata: { spec: specName, failures: outcome.failures } }); } catch (e) { process.stderr.write('[run-transcript-alloy] Warning: failed to write check result: ' + e.message + '\n'); }
   process.exit(1);
 }
 
-if (alloyResult.status !== 0) {
-  const _runtimeMs = Date.now() - _startMs;
-  try { writeCheckResult({ tool: 'run-transcript-alloy', formalism: 'alloy', result: 'fail', check_id: 'alloy:transcript', surface: 'alloy', property: 'Hook transcript scanning — boundary detection, tool_use/tool_result pairing uniqueness, ceiling enforcement', runtime_ms: _runtimeMs, summary: 'fail: alloy:transcript in ' + _runtimeMs + 'ms', triage_tags: _runtimeMs > 60000 ? ['timeout-risk'] : [], requirement_ids: getRequirementIds('alloy:transcript'), metadata: { spec: specName } }); } catch (e) { process.stderr.write('[run-transcript-alloy] Warning: failed to write check result: ' + e.message + '\n'); }
-  process.exit(alloyResult.status || 1);
-}
-
 const _runtimeMs = Date.now() - _startMs;
-try { writeCheckResult({ tool: 'run-transcript-alloy', formalism: 'alloy', result: 'pass', check_id: 'alloy:transcript', surface: 'alloy', property: 'Hook transcript scanning — boundary detection, tool_use/tool_result pairing uniqueness, ceiling enforcement', runtime_ms: _runtimeMs, summary: 'pass: alloy:transcript in ' + _runtimeMs + 'ms', triage_tags: _runtimeMs > 60000 ? ['timeout-risk'] : [], requirement_ids: getRequirementIds('alloy:transcript'), metadata: { spec: specName } }); } catch (e) { process.stderr.write('[run-transcript-alloy] Warning: failed to write check result: ' + e.message + '\n'); }
+try { writeCheckResult({ tool: 'run-transcript-alloy', formalism: 'alloy', result: 'pass', check_id: 'alloy:transcript', surface: 'alloy', property: TRANSCRIPT_PROPERTY, runtime_ms: _runtimeMs, summary: 'pass: alloy:transcript in ' + _runtimeMs + 'ms', triage_tags: _runtimeMs > 60000 ? ['timeout-risk'] : [], requirement_ids: getRequirementIds('alloy:transcript'), metadata: { spec: specName } }); } catch (e) { process.stderr.write('[run-transcript-alloy] Warning: failed to write check result: ' + e.message + '\n'); }
 process.exit(0);
