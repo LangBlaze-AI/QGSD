@@ -243,7 +243,11 @@ function runPreflightFilter(slots) {
     // dead slots, defeating the purpose of preflight. The spawnSync timeout is set
     // comfortably above preflight's bounded worst case so the budget, not the
     // SIGTERM, governs degradation. Override via NF_PREFLIGHT_BUDGET_MS.
-    const budgetMs = Number(process.env.NF_PREFLIGHT_BUDGET_MS) || 6000;
+    // Validate the override is a positive finite number — `Number(...) || 6000`
+    // alone would let a negative ("-1") or NaN through, yielding a nonsensical
+    // budget and a too-small spawn timeout.
+    const rawBudgetMs = Number(process.env.NF_PREFLIGHT_BUDGET_MS);
+    const budgetMs = Number.isFinite(rawBudgetMs) && rawBudgetMs > 0 ? rawBudgetMs : 6000;
     const spawnTimeoutMs = budgetMs + 4000; // headroom over preflight's worst case
     const result = spawnSync('node', [preflightPath, '--all', '--budget-ms', String(budgetMs)], {
       timeout: spawnTimeoutMs,

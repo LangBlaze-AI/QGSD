@@ -12,6 +12,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 const cache = require(path.join(__dirname, '..', 'bin', 'quorum-cache.cjs'));
 const PREFLIGHT = path.join(__dirname, '..', 'bin', 'quorum-preflight.cjs');
@@ -89,13 +91,34 @@ test('TC-206-A5: nf-prompt.js keys the cache on uniqueSlots, not cappedSlots', (
 
 // ── (b) PREFLIGHT TIME BUDGET ─────────────────────────────────────────────
 
-function runPreflight(args, timeoutMs) {
+function runPreflight(args, timeoutMs, extraEnv) {
   return spawnSync('node', [PREFLIGHT, ...args], {
     encoding: 'utf8',
     timeout: timeoutMs,
     // Force a clean env so no real CLIs/services are probed unexpectedly.
-    env: { ...process.env },
+    env: { ...process.env, ...(extraEnv || {}) },
   });
+}
+
+// Write a providers.json fixture with a single HTTP slot and return its path.
+// Pointed at via UNIFIED_PROVIDERS_CONFIG so preflight has a real Layer-2 target
+// to (not) probe — without it the budget test is vacuous in a CI checkout where
+// no HTTP slots are installed.
+function writeHttpFixture() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-budget-'));
+  const file = path.join(dir, 'providers.json');
+  fs.writeFileSync(file, JSON.stringify({
+    providers: [{
+      // Named to match a default quorum_active slot so preflight probes it
+      // whether the active list is populated (filtered by name) or empty (all
+      // probed) — otherwise the slot is filtered out and the test goes vacuous.
+      name: 'codex-1',
+      type: 'http',
+      baseUrl: 'https://nonexistent.invalid/v1',
+      apiKeyEnv: 'NF_BUDGET_TEST_KEY',
+    }],
+  }));
+  return { dir, file };
 }
 
 test('TC-206-B1: --all --budget-ms 6000 returns valid JSON well within budget', () => {
@@ -110,20 +133,25 @@ test('TC-206-B1: --all --budget-ms 6000 returns valid JSON well within budget', 
 });
 
 test('TC-206-B2: tight budget skips Layer 2 upstream probes (degrade, not SIGTERM)', () => {
-  const r = runPreflight(['--all', '--budget-ms', '1000'], 11000);
-  assert.strictEqual(r.status, 0, 'preflight must exit 0 under a tight budget');
-  const out = JSON.parse(r.stdout);
-  // For any HTTP slot probed, layer2 must be marked skipped-for-budget rather than
-  // having run a 5s network round-trip.
-  const l2s = Object.values(out.health || {}).map(h => h.layer2).filter(Boolean);
-  for (const l2 of l2s) {
-    if (l2.skipped) {
-      // skip reason may be budget OR a structural skip (no upstream / no baseUrl)
+  // Inject a real HTTP slot so this test is NOT vacuous — without a fixture, a CI
+  // checkout has no HTTP slots and the loop below never runs.
+  const { dir, file } = writeHttpFixture();
+  try {
+    const start = Date.now();
+    const r = runPreflight(['--all', '--budget-ms', '1000'], 11000, { UNIFIED_PROVIDERS_CONFIG: file });
+    const elapsed = Date.now() - start;
+    assert.strictEqual(r.status, 0, 'preflight must exit 0 under a tight budget');
+    // Must degrade within budget, not run a ~5s network round-trip to the dead host.
+    assert.ok(elapsed < 4000, `tight-budget preflight must not block on a live probe (took ${elapsed}ms)`);
+    const out = JSON.parse(r.stdout);
+    const l2s = Object.values(out.health || {}).map(h => h.layer2).filter(Boolean);
+    assert.ok(l2s.length > 0, 'fixture HTTP slot must be probed (test must not be vacuous)');
+    for (const l2 of l2s) {
+      assert.ok(l2.skipped, `layer2 must be skipped under a 1s budget, got: ${JSON.stringify(l2)}`);
       assert.ok(typeof l2.reason === 'string', 'layer2 skip must carry a reason');
-    } else {
-      // If it ran at all under a 1s budget the gate failed.
-      assert.fail(`layer2 ran a live probe under a 1s budget: ${JSON.stringify(l2)}`);
     }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
