@@ -152,8 +152,16 @@ function cleanupStaleLocks(providerKey, maxConcurrency) {
           }
         }
       } catch (_) {
-        // Malformed lock file (or it vanished mid-read) — remove it.
-        try { fs.unlinkSync(lockPath); } catch (_) {}
+        // Unparseable lock. With atomic link-publish above, a live lock is never
+        // visible half-written, so this is a genuinely corrupt leftover — but never
+        // naive-unlink it (that was the over-admission race): rename it out of the
+        // way to claim it exclusively, then drop the renamed copy. If the rename
+        // loses (someone already replaced the path with a fresh live lock), leave it.
+        const reclaimPath = `${lockPath}.reclaim.${process.pid}.${i}`;
+        try {
+          fs.renameSync(lockPath, reclaimPath);
+          try { fs.unlinkSync(reclaimPath); } catch (_) {}
+        } catch (_) { /* lost the race — a live lock now sits at lockPath; leave it */ }
       }
     }
   } catch (err) {
@@ -210,7 +218,15 @@ async function acquireSlot(providerKey, maxConcurrency, timeoutMs) {
       for (let slotIndex = 0; slotIndex < maxConcurrency; slotIndex++) {
         const lockPath = path.join(LOCK_DIR, `${providerKey}-${slotIndex}.lock`);
 
-        // Try to create the lock file exclusively (fail if exists)
+        // Atomically create the lock file exclusively AND fully-formed.
+        // A plain writeFileSync(..., {flag:'wx'}) creates the file and THEN writes
+        // content in separate steps, so a concurrent cleanupStaleLocks could read it
+        // mid-write, see partial/empty JSON, judge it "malformed", and delete this
+        // live lock — admitting two holders to one slot. Instead write the full
+        // content into a private temp file first, then linkSync it into place:
+        // linkSync is atomic and exclusive (EEXIST if the slot is taken), and the
+        // lock only ever becomes visible already complete.
+        const tmpPath = `${lockPath}.new.${process.pid}.${slotIndex}`;
         try {
           const lockContent = JSON.stringify({
             pid: process.pid,
@@ -218,7 +234,9 @@ async function acquireSlot(providerKey, maxConcurrency, timeoutMs) {
             bootTime: currentBootTimeSec(),
             slot: `${providerKey}-${slotIndex}`,
           });
-          fs.writeFileSync(lockPath, lockContent, { flag: 'wx' }); // wx = write exclusive
+          fs.writeFileSync(tmpPath, lockContent); // fully written before it is visible
+          fs.linkSync(tmpPath, lockPath);         // atomic exclusive publish (EEXIST if taken)
+          fs.unlinkSync(tmpPath);                 // tmp no longer needed; lock lives at lockPath
 
           // Successfully acquired
           return {
@@ -227,6 +245,7 @@ async function acquireSlot(providerKey, maxConcurrency, timeoutMs) {
             release: () => releaseOwnLock(lockPath, providerKey, slotIndex),
           };
         } catch (err) {
+          try { fs.unlinkSync(tmpPath); } catch (_) {} // never leak the temp file
           // EEXIST = slot occupied, try next slot
           if (err.code === 'EEXIST') continue;
           // Other errors are non-fatal in fail-open mode
