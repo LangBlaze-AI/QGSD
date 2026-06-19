@@ -104,6 +104,68 @@ function findProjectRoot(cwd) {
   return cwd || process.cwd();
 }
 
+// ─── atomicUpdateJson: lock-free read-modify-write for a JSON array/object ─────
+// Multiple parallel slots (4-8) share quorum-failures. A plain read-modify-write
+// loses records under concurrency, and a torn read collapses to `[]`, wiping the
+// log exactly during the correlated outages #192/#190 need to observe.
+//
+// This serializes writers with an exclusive (wx) lock file and writes atomically
+// via tmp+rename (modeled on update-scoreboard.cjs's set-availability path). The
+// transform `fn` receives the freshly-read current value and returns the next one.
+// Fail-open: on any error the update is skipped — failure logging must never
+// interrupt the primary dispatch flow.
+function atomicUpdateJson(filePath, fn, fallback) {
+  const lockPath = filePath + '.lock';
+  const deadline = Date.now() + 5000;
+  let held = false;
+  try {
+    // Acquire an exclusive writer lock (best-effort, with a stale backstop).
+    while (Date.now() < deadline) {
+      try {
+        fs.writeFileSync(lockPath, String(process.pid), { flag: 'wx' });
+        held = true;
+        break;
+      } catch (err) {
+        if (err && err.code === 'EEXIST') {
+          // Reclaim a stale lock (>5s old → a crashed writer left it behind).
+          try {
+            const st = fs.statSync(lockPath);
+            if (Date.now() - st.mtimeMs > 5000) { fs.unlinkSync(lockPath); continue; }
+          } catch (_) {}
+          // Brief synchronous spin — this RMW is sub-millisecond, contention is rare.
+          const spinUntil = Date.now() + 5;
+          while (Date.now() < spinUntil) { /* yield to fs above on next pass */ }
+          continue;
+        }
+        throw err;
+      }
+    }
+    if (!held) {
+      // Could not get the lock in time — fail-open, do not corrupt by racing.
+      return;
+    }
+
+    // Read current value under the lock.
+    let current = fallback;
+    if (fs.existsSync(filePath)) {
+      try { current = JSON.parse(fs.readFileSync(filePath, 'utf8')); }
+      catch (_) { current = fallback; }
+    }
+
+    const next = fn(current);
+    if (next === undefined) return; // transform opted out
+
+    // Atomic write: tmp + rename so a reader never sees a torn file.
+    const tmpPath = filePath + '.' + process.pid + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(next, null, 2), 'utf8');
+    fs.renameSync(tmpPath, filePath);
+  } catch (_) {
+    // Fail-open: never throw out of failure logging.
+  } finally {
+    if (held) { try { fs.unlinkSync(lockPath); } catch (_) {} }
+  }
+}
+
 function classifyErrorType(msg) {
   if (/usage:|unknown flag|unknown option|invalid flag|unrecognized/i.test(msg)) return 'CLI_SYNTAX';
   if (/CONTEXT_OVERFLOW/i.test(msg) || /exceeds.*maximum context length|token count exceeds|too many tokens/i.test(msg)) return 'CONTEXT_OVERFLOW';
@@ -130,29 +192,25 @@ function writeFailureLog(slotName, errorMsg, stderrText) {
     const rawPattern = (stderrText && stderrText.length > 0) ? stderrText : errorMsg;
     const pattern = rawPattern.replace(/\x1b\[[0-9;]*m/g, '').slice(0, 200);
 
-    // Read existing log
-    let records = [];
-    if (fs.existsSync(logPath)) {
-      try {
-        records = JSON.parse(fs.readFileSync(logPath, 'utf8'));
-        if (!Array.isArray(records)) records = [];
-      } catch (_) { records = []; }
-    }
+    // Lock-free read-modify-write under an exclusive writer lock so parallel slots
+    // never lose records (and a torn read never wipes the whole log).
+    atomicUpdateJson(logPath, (current) => {
+      let records = Array.isArray(current) ? current : [];
 
-    // Garbage-collect stale records (older than 60 minutes) to prevent unbounded growth
-    const gcCutoff = Date.now() - 60 * 60 * 1000;
-    records = records.filter(r => new Date(r.last_seen).getTime() > gcCutoff);
+      // Garbage-collect stale records (older than 60 minutes) to prevent unbounded growth
+      const gcCutoff = Date.now() - 60 * 60 * 1000;
+      records = records.filter(r => new Date(r.last_seen).getTime() > gcCutoff);
 
-    // Update or insert record
-    const existing = records.find(r => r.slot === slotName && r.error_type === error_type);
-    if (existing) {
-      existing.count++;
-      existing.last_seen = new Date().toISOString();
-    } else {
-      records.push({ slot: slotName, error_type, pattern, count: 1, last_seen: new Date().toISOString() });
-    }
-
-    fs.writeFileSync(logPath, JSON.stringify(records, null, 2), 'utf8');
+      // Update or insert record
+      const existing = records.find(r => r.slot === slotName && r.error_type === error_type);
+      if (existing) {
+        existing.count++;
+        existing.last_seen = new Date().toISOString();
+      } else {
+        records.push({ slot: slotName, error_type, pattern, count: 1, last_seen: new Date().toISOString() });
+      }
+      return records;
+    }, []);
   } catch (_) { /* failure logging must never interrupt the primary flow */ }
 }
 
@@ -165,13 +223,12 @@ function clearFailureOnSuccess(slotName) {
     const pp = require('./planning-paths.cjs');
     const logPath = pp.resolve(findProjectRoot(spawnCwd), 'quorum-failures');
     if (!fs.existsSync(logPath)) return;
-    let records = JSON.parse(fs.readFileSync(logPath, 'utf8'));
-    if (!Array.isArray(records)) return;
-    const before = records.length;
-    records = records.filter(r => r.slot !== slotName);
-    if (records.length < before) {
-      fs.writeFileSync(logPath, JSON.stringify(records, null, 2), 'utf8');
-    }
+    atomicUpdateJson(logPath, (current) => {
+      if (!Array.isArray(current)) return undefined; // nothing coherent to clear
+      const before = current.length;
+      const next = current.filter(r => r.slot !== slotName);
+      return next.length < before ? next : undefined; // skip write if unchanged
+    }, []);
   } catch (_) { /* recovery logging must never interrupt the primary flow */ }
 }
 
@@ -586,7 +643,7 @@ function loadSlotEnv(slotName) {
 }
 
 // ─── HTTP dispatch ─────────────────────────────────────────────────────────────
-function runHttp(provider, prompt, timeoutMs, slotName) {
+async function runHttp(provider, prompt, timeoutMs, slotName) {
   // HTTP slots use PROVIDER_SLOT mode: API keys live in ~/.claude.json server env,
   // not in process.env. Load them from there, falling back to process.env.
   const slotEnv = loadSlotEnv(provider.name);
@@ -600,7 +657,9 @@ function runHttp(provider, prompt, timeoutMs, slotName) {
   // Provider concurrency control: acquire a slot before dispatching HTTP request
   const providerKey = providerKeyFromUrl(baseUrl);
   const maxConcurrency = provider.max_concurrency || 3;
-  const lock = acquireSlot(providerKey, maxConcurrency, 30000);
+  // acquireSlot is async (await-based backoff, no busy-wait). Await it before the
+  // request executor so the slot is held for the full request lifetime.
+  const lock = await acquireSlot(providerKey, maxConcurrency, 30000);
 
   return new Promise((resolve, reject) => {
     // Hold the provider slot for the FULL request lifetime — release it only when
@@ -922,4 +981,4 @@ if (require.main === module) {
 }
 
 // ─── Test exports (SHELL-ESCAPE-01, TRUNC-01, INFRA-367) ───────────────────────
-module.exports = { buildSpawnArgs, recordTelemetry, findProjectRoot };
+module.exports = { buildSpawnArgs, recordTelemetry, findProjectRoot, writeFailureLog, atomicUpdateJson };

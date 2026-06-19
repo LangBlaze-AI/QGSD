@@ -51,62 +51,13 @@ try {
 }
 
 // ─── Per-provider rate-limit semaphore (SOLVE-10) ───────────────────────────
-// Prevents concurrent API-backed slots from cascading rate-limit failures
-// when multiple slots hit the same provider (e.g., 6 api-* slots → Together.xyz).
-const SEM_DIR = path.join(os.homedir(), '.claude', 'nf-sem');
-
-function semKey(baseUrl) {
-  return crypto.createHash('sha256').update(baseUrl).digest('hex').slice(0, 12);
-}
-
-function semAcquire(baseUrl, maxConcurrency, timeoutMs = 30000) {
-  if (!baseUrl || !maxConcurrency) return null; // no-op for non-HTTP slots
-  try { fs.mkdirSync(SEM_DIR, { recursive: true }); } catch (_) {}
-  const key = semKey(baseUrl);
-  const lockFile = path.join(SEM_DIR, `${key}.${process.pid}.lock`);
-  const start = Date.now();
-  const backoffs = [100, 200, 500, 1000, 2000, 5000];
-
-  for (let attempt = 0; ; attempt++) {
-    // Count live locks for this provider (clean stale PIDs)
-    let activeLocks = 0;
-    try {
-      const files = fs.readdirSync(SEM_DIR).filter(f => f.startsWith(key + '.') && f.endsWith('.lock'));
-      for (const f of files) {
-        const pid = parseInt(f.split('.')[1], 10);
-        if (pid && pid !== process.pid) {
-          try { process.kill(pid, 0); activeLocks++; } catch (_) {
-            // PID dead — remove stale lock
-            try { fs.unlinkSync(path.join(SEM_DIR, f)); } catch (_) {}
-          }
-        }
-      }
-    } catch (_) {}
-
-    if (activeLocks < maxConcurrency) {
-      // Acquire: write our lock file
-      try { fs.writeFileSync(lockFile, String(Date.now())); } catch (_) {}
-      return lockFile;
-    }
-
-    if (Date.now() - start > timeoutMs) {
-      // Timeout — proceed anyway (fail-open)
-      process.stderr.write(`[sem] WARN: semaphore timeout for ${baseUrl} after ${timeoutMs}ms (${activeLocks}/${maxConcurrency} active). Proceeding.\n`);
-      try { fs.writeFileSync(lockFile, String(Date.now())); } catch (_) {}
-      return lockFile;
-    }
-
-    // Backoff
-    const delay = backoffs[Math.min(attempt, backoffs.length - 1)];
-    const { spawnSync: ss } = require('child_process');
-    ss('sleep', [String(delay / 1000)]);
-  }
-}
-
-function semRelease(lockFile) {
-  if (!lockFile) return;
-  try { fs.unlinkSync(lockFile); } catch (_) {}
-}
+// CONSOLIDATED (#201): the previous divergent semaphore here (sha256(baseUrl) key,
+// PATH `sleep`, count-then-write TOCTOU over-admission, no TTL, deleted live locks
+// on EPERM) was a SECOND guard over the same provider resource already protected by
+// bin/provider-concurrency.cjs. The spawned call-quorum-slot.cjs child acquires a
+// provider-concurrency slot in runHttp() for the FULL request lifetime, so the cap
+// is enforced there with the single hardened module. Guarding again at dispatch
+// level only doubled the bookkeeping with a buggier implementation, so it is removed.
 
 // ─── Config-loader integration (two-layer merge for nf.json settings) ────────
 function loadNfConfig(cwd) {
@@ -1736,15 +1687,10 @@ async function main() {
     spawnArgs.push('--output-file', outputFile, '--dispatch-nonce', dispatchNonce);
   }
 
-  // ─── Acquire per-provider semaphore (SOLVE-10) ───────────────────────
-  let semLock = null;
-  try {
-    const providers = loadDispatchProviders();
-    const provider = providers.find(p => p.name === dispatchSlot);
-    if (provider && provider.type === 'http' && provider.baseUrl && provider.max_concurrency) {
-      semLock = semAcquire(provider.baseUrl, provider.max_concurrency);
-    }
-  } catch (_) {}
+  // Per-provider concurrency (SOLVE-10) is enforced inside the spawned
+  // call-quorum-slot.cjs child via provider-concurrency.cjs (acquireSlot in
+  // runHttp), held for the full request lifetime. No second semaphore here — see
+  // the SOLVE-10 consolidation note near the top of this file (#201).
 
   // Spawn call-quorum-slot.cjs as child process with stdin pipe
   const rawOutput = await new Promise((resolve) => {
@@ -1796,8 +1742,7 @@ async function main() {
     });
   });
 
-  // ─── Release per-provider semaphore ──────────────────────────────────
-  semRelease(semLock);
+  // Per-provider slot is released by the child (runHttp) when the request completes.
 
   const { exitCode, output, truncated: l3Truncated, originalSize: l3OriginalSize } = rawOutput;
   const l1Truncated = output.includes('[OUTPUT TRUNCATED at 10MB');

@@ -54,8 +54,8 @@ function currentBootTimeSec() {
   return Math.floor(Date.now() / 1000 - os.uptime());
 }
 
-// Poll for a file to appear — used before entering the synchronous acquireSlot()
-// busy-wait, while the event loop is still free.
+// Poll for a file to appear — used to confirm a holder has grabbed its slot before
+// we contend for it.
 function waitForFile(p, timeoutMs) {
   return new Promise((resolve, reject) => {
     const start = Date.now();
@@ -102,8 +102,8 @@ function spawnHolder(key, selfKillMs) {
 // Launcher that spawns a DETACHED holder then exits. Once the launcher exits the
 // holder is re-parented to init/launchd, which reaps it the instant it dies — so
 // process.kill(pid, 0) reports ESRCH promptly. A direct child, by contrast, would
-// linger as an unreaped zombie (still "alive" to kill(pid,0)) for as long as the
-// test process is blocked inside acquireSlot's synchronous busy-wait.
+// linger as an unreaped zombie (still "alive" to kill(pid,0)) while the test
+// process is mid-acquire.
 const LAUNCHER_SCRIPT = [
   "const { spawn } = require('child_process');",
   "const h = spawn(process.execPath, ['-e', process.env.NF_PC_HOLDER_SRC], {",
@@ -134,10 +134,10 @@ after(() => {
 
 // ─── Basic acquire / release ───────────────────────────────────────────────────
 
-test('acquireSlot returns acquired:true and slot 0 when no locks exist', () => {
+test('acquireSlot returns acquired:true and slot 0 when no locks exist', async () => {
   const key = uniqueKey();
   try {
-    const result = acquireSlot(key, 1, 100);
+    const result = await acquireSlot(key, 1, 100);
     assert.equal(result.acquired, true);
     assert.equal(result.slotIndex, 0);
     assert.equal(typeof result.release, 'function');
@@ -147,20 +147,20 @@ test('acquireSlot returns acquired:true and slot 0 when no locks exist', () => {
   }
 });
 
-test('acquireSlot fills distinct slots up to max_concurrency, then fails open', () => {
+test('acquireSlot fills distinct slots up to max_concurrency, then fails open', async () => {
   const key = uniqueKey();
   const maxConc = 2;
   const slots = [];
   try {
     for (let i = 0; i < maxConc; i++) {
-      const result = acquireSlot(key, maxConc, 100);
+      const result = await acquireSlot(key, maxConc, 100);
       assert.equal(result.acquired, true);
       assert.equal(result.slotIndex, i, `slot ${i} should be acquired in order`);
       slots.push(result);
     }
     // Overflow: all slots held by this (live) process — must fail open without
     // a real slot, proving the concurrency cap is still enforced.
-    const overflow = acquireSlot(key, maxConc, 50);
+    const overflow = await acquireSlot(key, maxConc, 50);
     assert.equal(overflow.acquired, true);
     assert.equal(overflow.slotIndex, null);
     overflow.release();
@@ -170,10 +170,10 @@ test('acquireSlot fills distinct slots up to max_concurrency, then fails open', 
   }
 });
 
-test('release() removes the lock file', () => {
+test('release() removes the lock file', async () => {
   const key = uniqueKey();
   try {
-    const result = acquireSlot(key, 1, 100);
+    const result = await acquireSlot(key, 1, 100);
     const lockPath = lockPathFor(key, result.slotIndex);
     assert.ok(fs.existsSync(lockPath), 'lock file should exist after acquire');
     result.release();
@@ -183,10 +183,10 @@ test('release() removes the lock file', () => {
   }
 });
 
-test('releaseSlot(key, index) removes the lock file', () => {
+test('releaseSlot(key, index) removes the lock file', async () => {
   const key = uniqueKey();
   try {
-    const result = acquireSlot(key, 1, 100);
+    const result = await acquireSlot(key, 1, 100);
     const lockPath = lockPathFor(key, result.slotIndex);
     assert.ok(fs.existsSync(lockPath));
     releaseSlot(key, result.slotIndex);
@@ -196,10 +196,10 @@ test('releaseSlot(key, index) removes the lock file', () => {
   }
 });
 
-test('double-release is idempotent', () => {
+test('double-release is idempotent', async () => {
   const key = uniqueKey();
   try {
-    const result = acquireSlot(key, 1, 100);
+    const result = await acquireSlot(key, 1, 100);
     result.release();
     result.release(); // must not throw
     releaseSlot(key, 0); // also safe when already released
@@ -210,7 +210,7 @@ test('double-release is idempotent', () => {
 
 // ─── Stale lock reclamation (issue #176) ───────────────────────────────────────
 
-test('reclaims a slot whose holder PID no longer exists', () => {
+test('reclaims a slot whose holder PID no longer exists', async () => {
   const key = uniqueKey();
   try {
     // A crashed holder leaves a lock file with a dead PID.
@@ -220,7 +220,7 @@ test('reclaims a slot whose holder PID no longer exists', () => {
       bootTime: currentBootTimeSec(),
       slot: `${key}-0`,
     });
-    const result = acquireSlot(key, 1, 200);
+    const result = await acquireSlot(key, 1, 200);
     assert.equal(result.acquired, true);
     assert.equal(result.slotIndex, 0, 'stale lock with dead PID should be reclaimed');
     result.release();
@@ -229,17 +229,19 @@ test('reclaims a slot whose holder PID no longer exists', () => {
   }
 });
 
-test('reclaims a slot whose lock is older than the TTL', () => {
+test('reclaims a slot whose lock is older than the TTL', async () => {
   const key = uniqueKey();
   try {
-    // Live PID + current boot, but the timestamp is 6 minutes old (> 5min TTL).
+    // Live PID + current boot, but the timestamp is 11 minutes old (> 10min TTL).
+    // STALE_TTL_MS was raised to 10min (#201) so it stays strictly above the max
+    // request timeout — otherwise an in-flight request could be reclaimed mid-flight.
     writeLock(key, 0, {
       pid: process.pid,
-      ts: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
+      ts: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
       bootTime: currentBootTimeSec(),
       slot: `${key}-0`,
     });
-    const result = acquireSlot(key, 1, 200);
+    const result = await acquireSlot(key, 1, 200);
     assert.equal(result.slotIndex, 0, 'TTL-expired lock should be reclaimed');
     result.release();
   } finally {
@@ -247,7 +249,7 @@ test('reclaims a slot whose lock is older than the TTL', () => {
   }
 });
 
-test('reclaims a lock left over from a previous boot even if its PID is alive', () => {
+test('reclaims a lock left over from a previous boot even if its PID is alive', async () => {
   const key = uniqueKey();
   try {
     // Our own (alive) PID and a fresh timestamp — only the boot time betrays it
@@ -258,7 +260,7 @@ test('reclaims a lock left over from a previous boot even if its PID is alive', 
       bootTime: 1, // epoch — unmistakably a previous boot
       slot: `${key}-0`,
     });
-    const result = acquireSlot(key, 1, 200);
+    const result = await acquireSlot(key, 1, 200);
     assert.equal(result.slotIndex, 0, 'pre-boot lock should be reclaimed');
     result.release();
   } finally {
@@ -266,14 +268,14 @@ test('reclaims a lock left over from a previous boot even if its PID is alive', 
   }
 });
 
-test('does NOT reclaim a fresh lock held by a live process', () => {
+test('does NOT reclaim a fresh lock held by a live process', async () => {
   const key = uniqueKey();
   let held;
   try {
-    held = acquireSlot(key, 1, 100);
+    held = await acquireSlot(key, 1, 100);
     assert.equal(held.slotIndex, 0);
     // A second acquire (maxConcurrency 1) must not steal the live slot.
-    const overflow = acquireSlot(key, 1, 250);
+    const overflow = await acquireSlot(key, 1, 250);
     assert.equal(overflow.acquired, true);
     assert.equal(overflow.slotIndex, null, 'live lock must not be reclaimed');
     overflow.release();
@@ -283,12 +285,12 @@ test('does NOT reclaim a fresh lock held by a live process', () => {
   }
 });
 
-test('malformed lock file is removed and the slot reclaimed', () => {
+test('malformed lock file is removed and the slot reclaimed', async () => {
   const key = uniqueKey();
   try {
     ensureLockDir();
     fs.writeFileSync(lockPathFor(key, 0), 'not-json{{{');
-    const result = acquireSlot(key, 1, 200);
+    const result = await acquireSlot(key, 1, 200);
     assert.equal(result.slotIndex, 0, 'malformed lock should be reclaimed');
     result.release();
   } finally {
@@ -311,7 +313,7 @@ test('a SIGKILLed holder leaves no permanently stale lock', async () => {
     assert.ok(fs.existsSync(lockPath), 'killed holder should leave a stale lock file');
 
     // No manual `rm` — the next acquisition must reclaim it on its own.
-    const result = acquireSlot(key, 1, 3000);
+    const result = await acquireSlot(key, 1, 3000);
     assert.equal(result.acquired, true);
     assert.equal(result.slotIndex, 0, 'should reclaim the SIGKILLed holder\'s slot');
     result.release();
@@ -329,12 +331,12 @@ test('reclaims a slot when the holder dies mid-wait (in-loop stale cleanup)', as
   try {
     await once(launcher, 'exit'); // reap the launcher; holder now belongs to init
     await waitForFile(lockPath, 8000);
-    // We enter acquireSlot() while the holder is still alive. Its synchronous
-    // busy-wait blocks our event loop, but the holder is a separate OS process
-    // and dies on its own. Stale cleanup runs on every retry pass, so the freed
-    // slot must be handed to us — not left until our acquire times out.
+    // We enter acquireSlot() while the holder is still alive. Its await-based
+    // backoff yields the event loop while the holder (a separate OS process) dies
+    // on its own. Stale cleanup runs on every retry pass, so the freed slot must be
+    // handed to us — not left until our acquire times out.
     const t0 = Date.now();
-    const result = acquireSlot(key, 1, 10000);
+    const result = await acquireSlot(key, 1, 10000);
     const waited = Date.now() - t0;
 
     assert.equal(result.acquired, true);
@@ -357,14 +359,14 @@ test('reclaims a slot when the holder dies mid-wait (in-loop stale cleanup)', as
 
 // ─── Fail-open behavior ────────────────────────────────────────────────────────
 
-test('acquireSlot fails open (acquired:true, slotIndex:null) on fs errors', () => {
+test('acquireSlot fails open (acquired:true, slotIndex:null) on fs errors', async () => {
   const key = uniqueKey();
   const originalWrite = fs.writeFileSync;
   fs.writeFileSync = () => {
     throw new Error('simulated fs failure');
   };
   try {
-    const result = acquireSlot(key, 1, 100);
+    const result = await acquireSlot(key, 1, 100);
     assert.equal(result.acquired, true, 'must fail open so dispatch is never blocked');
     assert.equal(result.slotIndex, null);
     assert.equal(typeof result.release, 'function');
