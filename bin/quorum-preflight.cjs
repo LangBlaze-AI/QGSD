@@ -299,9 +299,12 @@ async function probeHealth(providers) {
     // Use the shared spawn-target resolver (issue #197, supersedes #196/#207):
     // raw p.cli is null when only mainTool is set, which previously reported the
     // entire fleet false-dead. resolveSpawnTarget falls back to mainTool.
+    const spawnTarget = resolveSpawnTarget(p);
     const layer1Promise = isHttp
       ? Promise.resolve({ ok: true, skipped: true, reason: 'HTTP slot — no CLI binary' })
-      : probeBinary(resolveSpawnTarget(p), p.health_check_args || []);
+      : spawnTarget
+        ? probeBinary(spawnTarget, p.health_check_args || [])
+        : Promise.resolve({ ok: false, reason: 'no CLI configured (cli, resolvedCli, mainTool all empty)' });
 
     // Layer 2: upstream API probe (HTTP slots only)
     let layer2Promise;
