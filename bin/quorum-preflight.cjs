@@ -38,6 +38,33 @@ const { loadProviders } = require('./resolve-providers.cjs');
 const NO_PROBE = process.argv.includes('--no-probe');
 const PROBE = !NO_PROBE;
 
+// ─── Time-budget parsing ────────────────────────────────────────────────────
+// --budget-ms <n> threads a soft deadline that --all degrades within: when the
+// budget is tight it skips service auto-start (ensureServices) and the Layer 2
+// upstream API probes (the slow paths) so the caller gets a timely answer rather
+// than a SIGTERM-induced fail-open. Absent flag → no budget (fully backward
+// compatible: ensureServices stays opt-in via --ensure-services / --start-services).
+function parseBudgetMs() {
+  const i = process.argv.indexOf('--budget-ms');
+  if (i !== -1 && process.argv[i + 1] !== undefined) {
+    const n = Number(process.argv[i + 1]);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+const BUDGET_MS = parseBudgetMs();
+// Layer 2 upstream probes are the slow, network-bound path. Skip them when the
+// budget cannot accommodate a full 5s round-trip with headroom.
+const L2_MIN_BUDGET_MS = 5500;
+const SKIP_L2 = BUDGET_MS !== null && BUDGET_MS < L2_MIN_BUDGET_MS;
+// Service auto-start can poll for tens of seconds; only ever runs when explicitly
+// requested AND the budget (if any) is generous enough to absorb it.
+const ENSURE_SERVICES_REQUESTED =
+  process.argv.includes('--ensure-services') || process.argv.includes('--start-services');
+const ENSURE_SERVICES_BUDGET_MS = 70000; // worst case ~65s/down service + slack
+const ALLOW_ENSURE_SERVICES =
+  ENSURE_SERVICES_REQUESTED && (BUDGET_MS === null || BUDGET_MS >= ENSURE_SERVICES_BUDGET_MS);
+
 // ─── TTL cache constants (shared with check-provider-health.cjs) ────────────
 const CACHE_FILE  = path.join(os.homedir(), '.claude', 'nf-provider-cache.json');
 const TTL_UP_MS   = 180000; // 3 minutes
@@ -317,6 +344,9 @@ async function probeHealth(providers) {
 
     if (!isHttp) {
       layer2Promise = Promise.resolve({ ok: true, skipped: true, reason: 'no upstream API' });
+    } else if (SKIP_L2) {
+      // Budget too tight for a network round-trip — degrade to Layer 1 only.
+      layer2Promise = Promise.resolve({ ok: true, skipped: true, reason: 'layer2 skipped (budget)' });
     } else if (!baseUrl) {
       layer2Promise = Promise.resolve({ ok: true, skipped: true, reason: 'baseUrl not configured' });
     } else {
@@ -475,7 +505,14 @@ async function main() {
         ? providers.filter(p => active.includes(p.name))
         : providers;
 
-      ensureServices(activeProviders);
+      // Service auto-start is OFF by default in --all: it can poll for tens of
+      // seconds per down service, blowing any time budget and (worse) auto-spawning
+      // services inside what callers treat as a read-only probe. It now runs only
+      // when explicitly requested AND the budget allows. Use the dedicated
+      // `--ensure-services` mode (or pass --ensure-services to --all) to start them.
+      if (ALLOW_ENSURE_SERVICES) {
+        ensureServices(activeProviders);
+      }
       const health = await probeHealth(activeProviders);
 
       // Layer 3: inference history — check if slots failed inference recently

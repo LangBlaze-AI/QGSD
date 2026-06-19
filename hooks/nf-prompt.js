@@ -237,8 +237,16 @@ function runPreflightFilter(slots) {
   try {
     const preflightPath = resolveBin('quorum-preflight.cjs');
     if (!preflightPath || !fs.existsSync(preflightPath)) return failOpen;
-    const result = spawnSync('node', [preflightPath, '--all'], {
-      timeout: 6000,
+    // Thread an explicit time budget into preflight so it degrades gracefully
+    // (skips service auto-start / Layer 2 upstream probes when the budget is tight)
+    // rather than being SIGTERM'd mid-probe — which would fail open and dispatch
+    // dead slots, defeating the purpose of preflight. The spawnSync timeout is set
+    // comfortably above preflight's bounded worst case so the budget, not the
+    // SIGTERM, governs degradation. Override via NF_PREFLIGHT_BUDGET_MS.
+    const budgetMs = Number(process.env.NF_PREFLIGHT_BUDGET_MS) || 6000;
+    const spawnTimeoutMs = budgetMs + 4000; // headroom over preflight's worst case
+    const result = spawnSync('node', [preflightPath, '--all', '--budget-ms', String(budgetMs)], {
+      timeout: spawnTimeoutMs,
       encoding: 'utf8',
     });
     if (result.status !== 0 || !result.stdout) return failOpen;
@@ -469,6 +477,7 @@ process.stdin.on('end', () => {
     let _nfCacheKey = null;
     let _nfCacheModule = null;
     let _nfCacheDir = null;
+    let _nfDispatchSlotCount = 0;
 
     // ── Priority 1: Circuit breaker active → inject resolution workflow ──────
     if (isBreakerActive(cwd)) {
@@ -713,11 +722,38 @@ process.stdin.on('end', () => {
         } catch { /* fail-open */ }
       }
 
+      // SC-4: Graceful fallback — ensure at least one slot in dispatch list
+      if (cappedSlots.length === 0 && orderedSlots.length > 0) {
+        const relaxedSlots = orderedSlots.filter(s => !skipSet.has(s.slot));
+        if (relaxedSlots.length > 0) {
+          cappedSlots = [relaxedSlots[0]];
+        } else {
+          cappedSlots = [orderedSlots[0]]; // last resort: any slot at all
+        }
+        process.stderr.write(`[nf-dispatch] FALLBACK: all slots filtered, restored ${cappedSlots[0].slot}\n`);
+      }
+
+      // ── MODEL DEDUPLICATION: Remove duplicate-model slots from primary dispatch ────
+      // Slots sharing the same underlying model are demoted to fallback tier for LLM diversity.
+      // This happens AFTER the externalSlotCap slice to ensure we maximize model diversity
+      // within the fan-out budget.
+      const providersList = findProviders();
+      const dedupResult = deduplicateByModel(cappedSlots, agentCfg, providersList);
+      const uniqueSlots = dedupResult.unique;
+      const modelDedupSlots = dedupResult.duplicates;
+
+      // Record the actually-dispatched roster size for the cache pending-entry write.
+      _nfDispatchSlotCount = uniqueSlots.length;
+
       // ── CACHE CHECK: Short-circuit quorum dispatch on valid cache hit ──────
+      // Keyed on uniqueSlots — the FINAL dispatched roster, computed AFTER the SC-4
+      // fallback restore and the model dedup above. Keying earlier (on cappedSlots)
+      // would let a hit replay a result for a composition that never ran, and let
+      // identical real compositions miss each other's cache.
       try {
         const cacheModule = require(resolveBin('quorum-cache.cjs'));
         const cacheDir = path.join(cwd, '.planning', '.quorum-cache');
-        const cacheKey = cacheModule.computeCacheKey(prompt, contextYaml, cappedSlots, config.quorum_active, cacheModule.getGitHead());
+        const cacheKey = cacheModule.computeCacheKey(prompt, contextYaml, uniqueSlots, config.quorum_active, cacheModule.getGitHead());
 
         const cachedEntry = cacheModule.readCache(cacheKey, cacheDir);
         if (cachedEntry && cacheModule.isCacheValid(cachedEntry, cacheModule.getGitHead(), config.quorum_active || [])) {
@@ -760,26 +796,6 @@ process.stdin.on('end', () => {
         _nfCacheModule = null;
         _nfCacheDir = null;
       }
-
-      // SC-4: Graceful fallback — ensure at least one slot in dispatch list
-      if (cappedSlots.length === 0 && orderedSlots.length > 0) {
-        const relaxedSlots = orderedSlots.filter(s => !skipSet.has(s.slot));
-        if (relaxedSlots.length > 0) {
-          cappedSlots = [relaxedSlots[0]];
-        } else {
-          cappedSlots = [orderedSlots[0]]; // last resort: any slot at all
-        }
-        process.stderr.write(`[nf-dispatch] FALLBACK: all slots filtered, restored ${cappedSlots[0].slot}\n`);
-      }
-
-      // ── MODEL DEDUPLICATION: Remove duplicate-model slots from primary dispatch ────
-      // Slots sharing the same underlying model are demoted to fallback tier for LLM diversity.
-      // This happens AFTER the externalSlotCap slice to ensure we maximize model diversity
-      // within the fan-out budget.
-      const providersList = findProviders();
-      const dedupResult = deduplicateByModel(cappedSlots, agentCfg, providersList);
-      const uniqueSlots = dedupResult.unique;
-      const modelDedupSlots = dedupResult.duplicates;
 
       // Generate step list, with optional section headers when preferSub is on
       let stepLines = [];
@@ -1039,7 +1055,7 @@ process.stdin.on('end', () => {
           ttl_ms: (config.cache_ttl_ms || 3600000),
           git_head: _nfCacheModule.getGitHead(),
           quorum_active: (config.quorum_active || []).slice(),
-          slot_count: cappedSlots ? cappedSlots.length : 0,
+          slot_count: _nfDispatchSlotCount,
         }, _nfCacheDir);
       } catch (pendingErr) {
         // Fail-open: pending entry write failure never blocks dispatch
