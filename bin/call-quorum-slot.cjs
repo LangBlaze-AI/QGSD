@@ -265,7 +265,17 @@ function clearFailureOnSuccess(slotName) {
 function setScoreboardCooldown(slotName, errorMsg) {
   try {
     const scoreboardScript = path.join(__dirname, 'update-scoreboard.cjs');
-    spawnSync('node', [scoreboardScript, 'set-availability', '--slot', slotName, '--message', errorMsg], { timeout: 3000, stdio: 'pipe' });
+    // Resolve the scoreboard path from the SAME basis the Layer 3 reader uses
+    // (findProjectRoot(spawnCwd) via --cwd), then pass it explicitly as
+    // --scoreboard. Without this the writer would resolve its default path from
+    // the spawned process's process.cwd() (the Bash cwd), which can differ from
+    // --cwd in subdir sessions, worktrees, or the Task harness — cooldowns would
+    // land in one .planning and be read from another, so Layer 3 skip never
+    // fires and dead slots get re-dispatched. Spawn with process.execPath rather
+    // than bare 'node' so the write still works where PATH lacks node (GUI hooks).
+    const pp = require('./planning-paths.cjs');
+    const sbPath = pp.resolveWithFallback(findProjectRoot(spawnCwd), 'quorum-scoreboard');
+    spawnSync(process.execPath, [scoreboardScript, 'set-availability', '--slot', slotName, '--message', errorMsg, '--scoreboard', sbPath], { timeout: 3000, stdio: 'pipe' });
     process.stderr.write(`[call-quorum-slot] Set cooldown for ${slotName} via set-availability\n`);
   } catch (_) { /* fail-open: scoreboard update must never block dispatch */ }
 }
