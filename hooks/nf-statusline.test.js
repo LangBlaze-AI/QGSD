@@ -266,11 +266,12 @@ test('TC15: River exploring when arm visits below minExplore', () => {
   const tempDir = makeTempDir('tc15');
   const river = makeRiverHome('tc15');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
+  const nowIso = new Date().toISOString();
   fs.writeFileSync(stateFile, JSON.stringify({
     qTable: {
       implement: {
-        'codex-1': { q: 0.5, visits: 5 },
-        'gemini-1': { q: 0.3, visits: 2 },
+        'codex-1': { q: 0.5, visits: 5, lastUpdate: nowIso },
+        'gemini-1': { q: 0.3, visits: 2, lastUpdate: nowIso },
       },
     },
   }), 'utf8');
@@ -294,11 +295,12 @@ test('TC16: River active when all arms above minExplore', () => {
   const tempDir = makeTempDir('tc16');
   const river = makeRiverHome('tc16');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
+  const nowIso = new Date().toISOString();
   fs.writeFileSync(stateFile, JSON.stringify({
     qTable: {
       implement: {
-        'codex-1': { q: 0.8, visits: 25 },
-        'gemini-1': { q: 0.6, visits: 30 },
+        'codex-1': { q: 0.8, visits: 25, lastUpdate: nowIso },
+        'gemini-1': { q: 0.6, visits: 30, lastUpdate: nowIso },
       },
     },
   }), 'utf8');
@@ -311,6 +313,26 @@ test('TC16: River active when all arms above minExplore', () => {
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
     assert.ok(stdout.includes('● River'), 'stdout must include "● River"');
     assert.ok(stdout.includes('\x1b[32m'), 'stdout must include green ANSI code');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    river.cleanup();
+  }
+});
+
+// TC16b: River has visits but learned long ago → idle ○, NOT active ● (recency fix)
+test('TC16b: stale River (old lastUpdate) shows idle, not active', () => {
+  const tempDir = makeTempDir('tc16b');
+  const river = makeRiverHome('tc16b');
+  const stateFile = path.join(tempDir, '.nf-river-state.json');
+  const oldIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days ago
+  fs.writeFileSync(stateFile, JSON.stringify({
+    qTable: { implement: { 'codex-1': { q: 0.8, visits: 25, lastUpdate: oldIso } } },
+  }), 'utf8');
+  try {
+    const { stdout, exitCode } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, river.env);
+    assert.strictEqual(exitCode, 0);
+    assert.ok(stdout.includes('○ River'), `stale River must show idle ○; got: ${JSON.stringify(stdout)}`);
+    assert.ok(!stdout.includes('● River'), `stale River must NOT show active ●; got: ${JSON.stringify(stdout)}`);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
     river.cleanup();
@@ -366,14 +388,15 @@ test('TC19: Mixed task types shows exploring when any arm below minExplore', () 
   const tempDir = makeTempDir('tc19');
   const river = makeRiverHome('tc19');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
+  const nowIso = new Date().toISOString();
   fs.writeFileSync(stateFile, JSON.stringify({
     qTable: {
       implement: {
-        'codex-1': { q: 0.8, visits: 25 },
-        'gemini-1': { q: 0.6, visits: 30 },
+        'codex-1': { q: 0.8, visits: 25, lastUpdate: nowIso },
+        'gemini-1': { q: 0.6, visits: 30, lastUpdate: nowIso },
       },
       review: {
-        'codex-1': { q: 0.1, visits: 3 },
+        'codex-1': { q: 0.1, visits: 3, lastUpdate: nowIso },
       },
     },
   }), 'utf8');
@@ -419,8 +442,8 @@ test('TC21: Shadow recommendation displayed when lastShadow present', () => {
   fs.writeFileSync(stateFile, JSON.stringify({
     qTable: {
       implement: {
-        'codex-1': { q: 0.8, visits: 25 },
-        'gemini-1': { q: 0.6, visits: 30 },
+        'codex-1': { q: 0.8, visits: 25, lastUpdate: new Date().toISOString() },
+        'gemini-1': { q: 0.6, visits: 30, lastUpdate: new Date().toISOString() },
       },
     },
     lastShadow: {
@@ -444,6 +467,42 @@ test('TC21: Shadow recommendation displayed when lastShadow present', () => {
   }
 });
 
+// TC21b: stale shadow recommendation (old timestamp) must NOT render the shadow
+// form — an old lastShadow lingering in state file should not keep River green.
+test('TC21b: stale shadow (old timestamp) does not show shadow recommendation', () => {
+  const tempDir = makeTempDir('tc21b');
+  const river = makeRiverHome('tc21b');
+  const stateFile = path.join(tempDir, '.nf-river-state.json');
+  const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days ago
+  fs.writeFileSync(stateFile, JSON.stringify({
+    qTable: {
+      implement: {
+        'codex-1': { q: 0.8, visits: 25, lastUpdate: old },
+        'gemini-1': { q: 0.6, visits: 30, lastUpdate: old },
+      },
+    },
+    lastShadow: {
+      recommendation: 'gemini-1',
+      confidence: 0.85,
+      taskType: 'implement',
+      timestamp: old,
+    },
+  }), 'utf8');
+
+  try {
+    const { stdout, exitCode } = runHook({
+      model: { display_name: 'M' },
+      workspace: { current_dir: tempDir },
+    }, river.env);
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.ok(!stdout.includes('River: gemini-1'), 'stale shadow must NOT render "River: gemini-1"');
+    assert.ok(stdout.includes('○ River'), 'stale state shows idle ○ River');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    river.cleanup();
+  }
+});
+
 // TC22: No shadow — falls back to River: active
 test('TC22: No shadow falls back to River: active', () => {
   const tempDir = makeTempDir('tc22');
@@ -452,8 +511,8 @@ test('TC22: No shadow falls back to River: active', () => {
   fs.writeFileSync(stateFile, JSON.stringify({
     qTable: {
       implement: {
-        'codex-1': { q: 0.8, visits: 25 },
-        'gemini-1': { q: 0.6, visits: 30 },
+        'codex-1': { q: 0.8, visits: 25, lastUpdate: new Date().toISOString() },
+        'gemini-1': { q: 0.6, visits: 30, lastUpdate: new Date().toISOString() },
       },
     },
   }), 'utf8');
@@ -480,8 +539,8 @@ test('TC23: Shadow with null recommendation falls back to normal indicator', () 
   fs.writeFileSync(stateFile, JSON.stringify({
     qTable: {
       implement: {
-        'codex-1': { q: 0.8, visits: 25 },
-        'gemini-1': { q: 0.6, visits: 30 },
+        'codex-1': { q: 0.8, visits: 25, lastUpdate: new Date().toISOString() },
+        'gemini-1': { q: 0.6, visits: 30, lastUpdate: new Date().toISOString() },
       },
     },
     lastShadow: { recommendation: null },
@@ -832,8 +891,9 @@ test('TC37: malformed slot-health.json falls back to ○ (fail-open)', () => {
   }
 });
 
-// TC38: slots line is rendered ABOVE the tools line (coderlm/River/embed)
-test('TC38: slots line renders above tools line', () => {
+// TC38: tools (coderlm/River/embed) now render on LINE 1 (visible even on short
+// terminals); the per-slot quorum detail moved to line 2 below them.
+test('TC38: tools render on line 1, per-slot quorum detail on line 2 below', () => {
   const tempHome = setupSlotsHome('tc38', {
     providers: [{ name: 'codex-1' }],
     mcpServers: { 'codex-1': { command: 'node' } },
@@ -849,12 +909,9 @@ test('TC38: slots line renders above tools line', () => {
       { HOME: tempHome }
     );
     assert.strictEqual(exitCode, 0);
-    const codexIdx = stdout.indexOf('codex-1');
-    const coderlmIdx = stdout.indexOf('coderlm');
-    assert.ok(codexIdx >= 0, 'slots line must contain codex-1');
-    assert.ok(coderlmIdx >= 0, 'tools line must contain coderlm');
-    assert.ok(codexIdx < coderlmIdx,
-      `slots line must come BEFORE tools line; got codex=${codexIdx}, coderlm=${coderlmIdx}`);
+    const lines = stdout.split('\n');
+    assert.ok(lines[0].includes('coderlm'), `tools must be on line 1; got line1=${JSON.stringify(lines[0])}`);
+    assert.ok((lines[1] || '').includes('codex-1'), `per-slot detail must be on line 2; got line2=${JSON.stringify(lines[1])}`);
   } finally {
     fs.rmSync(tempHome, { recursive: true, force: true });
     fs.rmSync(tempDir, { recursive: true, force: true });
