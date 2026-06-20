@@ -54,6 +54,15 @@ function synthesizeMcpEntry(providerName, claudeHomeDir) {
   };
 }
 
+// True when an mcpServers entry's args[0] points at unified-mcp-server.mjs but is
+// NOT under the installed nf-bin dir — i.e. it's still bound to the repo working
+// tree or an npx cache and must be repointed at the installed copy (issue #200).
+function mcpArgsNeedMigration(args0, nfBinDir) {
+  return typeof args0 === 'string'
+    && args0.endsWith('unified-mcp-server.mjs')
+    && !isUnderInstallDir(args0, nfBinDir);
+}
+
 /**
  * Merge the repo's providers.json into the user's installed copy, preserving user-added
  * entries. The repo source (`bin/providers.json`) ships the canonical default fleet; users
@@ -202,5 +211,6 @@ module.exports = {
   shouldCopyToNfBin,
   installedUnifiedMcpPath,
   isUnderInstallDir,
+  mcpArgsNeedMigration,
   synthesizeMcpEntry,
 };

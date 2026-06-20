@@ -540,6 +540,7 @@ const {
   shouldCopyToNfBin,
   installedUnifiedMcpPath,
   isUnderInstallDir,
+  mcpArgsNeedMigration,
   synthesizeMcpEntry,
 } = require('./install-helpers.cjs');
 
@@ -683,6 +684,8 @@ function ensureMcpSlotsFromProviders() {
             if (claudeJsonForBackfill?.mcpServers) {
               let backfilled = 0;
               const legacyProvidersJson = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
+              const nfBinDir = path.join(os.homedir(), '.claude', 'nf-bin');
+              const installedMcp = path.join(nfBinDir, 'unified-mcp-server.mjs');
               for (const slotName of mcpSlots) {
                 const entry = claudeJsonForBackfill.mcpServers[slotName];
                 if (!entry) continue;
@@ -692,12 +695,25 @@ function ensureMcpSlotsFromProviders() {
                   entry.env.UNIFIED_PROVIDERS_CONFIG = globalProvidersJson;
                   backfilled++;
                 }
+                // Args migration (issue #200): the early `return` above means the
+                // main Step-4 args migration never runs when the repo source
+                // providers.json is empty (the typical case after install). So a slot
+                // whose args[0] points at the repo working tree (<repo>/bin/...mjs) or
+                // an npx cache would never be repointed at the installed nf-bin copy,
+                // leaving the whole fleet coupled to the repo tree. Self-heal it here.
+                if (fs.existsSync(installedMcp)) {
+                  const a0 = Array.isArray(entry.args) ? entry.args[0] : undefined;
+                  if (mcpArgsNeedMigration(a0, nfBinDir)) {
+                    entry.args = [installedMcp, ...entry.args.slice(1)];
+                    backfilled++;
+                  }
+                }
               }
               if (backfilled > 0) {
                 const tmpPath = claudeJsonPath + '.tmp';
                 fs.writeFileSync(tmpPath, JSON.stringify(claudeJsonForBackfill, null, 2) + '\n', 'utf8');
                 fs.renameSync(tmpPath, claudeJsonPath);
-                console.log(`  ${green}✓${reset} Backfilled UNIFIED_PROVIDERS_CONFIG on ${backfilled} mcpServers entry/entries`);
+                console.log(`  ${green}✓${reset} Self-healed ${backfilled} mcpServers entry/entries (UNIFIED_PROVIDERS_CONFIG + args → nf-bin)`);
               }
             }
           } catch (e) {
