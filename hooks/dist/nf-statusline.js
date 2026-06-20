@@ -194,7 +194,11 @@ function buildQuorumSummary(homeDir, ctx) {
   if (!fresh) return `\x1b[2m${total}○ quorum\x1b[0m`;
   const healthy = mcpSlots.filter(p => { const e = cache && cache.slots && cache.slots[p.name]; return e && e.ok; }).length;
   if (healthy === total) return `\x1b[32m${total}● quorum\x1b[0m`;
-  return `\x1b[31m${healthy}/${total}⊘ quorum\x1b[0m`;
+  // Some slots down → make it a call-to-action, not just a status (like ⬆ /nf:update).
+  // One identifiable failed slot → restart just it; otherwise repair the fleet.
+  const down = mcpSlots.filter(p => { const e = cache && cache.slots && cache.slots[p.name]; return e && e.ok === false; });
+  const cmd = down.length === 1 ? `/nf:mcp-restart ${down[0].name}` : '/nf:mcp-repair';
+  return `\x1b[31m${healthy}/${total}⊘\x1b[0m \x1b[33m${cmd}\x1b[0m`;
 }
 
 // Fire-and-forget: when the slot-health cache is NOT fresh, kick off the probe in

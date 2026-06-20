@@ -881,7 +881,7 @@ test('QS1: all MCP slots healthy + fresh -> green N dot quorum on line 1', () =>
   } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
 });
 
-test('QS2: some slots down + fresh -> red H/N quorum', () => {
+test('QS2: exactly one slot down -> red count + /nf:mcp-restart <slot> CTA', () => {
   const tempHome = setupSlotsHome('qs2', {
     providers: [{ name: 'codex-1' }, { name: 'gemini-1' }, { name: 'claude-1' }],
     mcpServers: { 'codex-1': {}, 'gemini-1': {}, 'claude-1': {} },
@@ -890,7 +890,22 @@ test('QS2: some slots down + fresh -> red H/N quorum', () => {
   const tempDir = makeTempDir('qs2-dir');
   try {
     const { stdout } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, { HOME: tempHome });
-    assert.ok(line1(stdout).includes('\x1b[31m2/3⊘ quorum\x1b[0m'), `expected red 2/3 quorum; got: ${JSON.stringify(line1(stdout))}`);
+    assert.ok(line1(stdout).includes('\x1b[31m2/3⊘\x1b[0m'), `expected red 2/3 count; got: ${JSON.stringify(line1(stdout))}`);
+    assert.ok(line1(stdout).includes('\x1b[33m/nf:mcp-restart gemini-1\x1b[0m'), `expected restart CTA for the single down slot; got: ${JSON.stringify(line1(stdout))}`);
+  } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
+});
+
+test('QS2b: multiple slots down -> /nf:mcp-repair CTA', () => {
+  const tempHome = setupSlotsHome('qs2b', {
+    providers: [{ name: 'codex-1' }, { name: 'gemini-1' }, { name: 'claude-1' }],
+    mcpServers: { 'codex-1': {}, 'gemini-1': {}, 'claude-1': {} },
+    health: { checked_at: qsFreshIso(), slots: { 'codex-1': { ok: true }, 'gemini-1': { ok: false }, 'claude-1': { ok: false } } },
+  });
+  const tempDir = makeTempDir('qs2b-dir');
+  try {
+    const { stdout } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, { HOME: tempHome });
+    assert.ok(line1(stdout).includes('\x1b[31m1/3⊘\x1b[0m'), `expected red 1/3 count; got: ${JSON.stringify(line1(stdout))}`);
+    assert.ok(line1(stdout).includes('\x1b[33m/nf:mcp-repair\x1b[0m'), `expected repair CTA for multiple down; got: ${JSON.stringify(line1(stdout))}`);
   } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
 });
 
