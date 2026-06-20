@@ -20,8 +20,27 @@ const {
   isUnderInstallDir,
   synthesizeMcpEntry,
   installedUnifiedMcpPath,
+  mcpArgsNeedMigration,
   NF_BIN_RUNTIME_MJS,
 } = require('../bin/install-helpers.cjs');
+
+describe('mcpArgsNeedMigration — repo-tree → nf-bin args migration (issue #200)', () => {
+  const nfBin = '/home/u/.claude/nf-bin';
+  it('flags a repo-tree args[0] for migration (the bug: slots ran from the repo)', () => {
+    assert.equal(mcpArgsNeedMigration('/home/u/code/QGSD/bin/unified-mcp-server.mjs', nfBin), true);
+  });
+  it('flags an npx-cache args[0] for migration', () => {
+    assert.equal(mcpArgsNeedMigration('/home/u/.npm/_npx/abc/node_modules/@nforma.ai/nforma/bin/unified-mcp-server.mjs', nfBin), true);
+  });
+  it('does NOT flag an already-installed nf-bin path', () => {
+    assert.equal(mcpArgsNeedMigration('/home/u/.claude/nf-bin/unified-mcp-server.mjs', nfBin), false);
+  });
+  it('ignores non-unified args and non-string input', () => {
+    assert.equal(mcpArgsNeedMigration('/home/u/code/QGSD/bin/some-other.mjs', nfBin), false);
+    assert.equal(mcpArgsNeedMigration(undefined, nfBin), false);
+    assert.equal(mcpArgsNeedMigration(null, nfBin), false);
+  });
+});
 
 describe('shouldCopyToNfBin — nf-bin copy filter (issue #200)', () => {
   it('selects unified-mcp-server.mjs (the bug: .mjs was skipped)', () => {
