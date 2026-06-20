@@ -179,9 +179,11 @@ function buildSlotsLine(homeDir, ctx) {
 // Compact one-line quorum indicator for line 1, so quorum health is visible even
 // when the terminal only paints the first status row (multi-line status lines
 // depend on vertical space). `ctx` is the shared readSlotHealth() result.
-//   N● quorum   (green)  — all N MCP-registered slots healthy & fresh
-//   H/N⊘ quorum (red)    — H of N healthy (some down)
-//   N○ quorum   (dim)    — no fresh probe data yet (cache stale/missing)
+//   N● quorum                  (green)  — all N MCP slots healthy & fresh
+//   H/N⊘ /nf:mcp-restart <slot> (red+CTA) — one slot probed FAILED → restart it
+//   H/N⊘ /nf:mcp-repair         (red+CTA) — several slots failed → repair the fleet
+//   H/N○ quorum                (dim)    — fresh, but some slots not yet probed (no failure)
+//   N○ quorum                  (dim)    — no fresh probe data yet (cache stale/missing)
 function buildQuorumSummary(homeDir, ctx) {
   const h = ctx || readSlotHealth(homeDir);
   if (!h) return null;
@@ -194,9 +196,15 @@ function buildQuorumSummary(homeDir, ctx) {
   if (!fresh) return `\x1b[2m${total}○ quorum\x1b[0m`;
   const healthy = mcpSlots.filter(p => { const e = cache && cache.slots && cache.slots[p.name]; return e && e.ok; }).length;
   if (healthy === total) return `\x1b[32m${total}● quorum\x1b[0m`;
-  // Some slots down → make it a call-to-action, not just a status (like ⬆ /nf:update).
-  // One identifiable failed slot → restart just it; otherwise repair the fleet.
+
+  // A slot counts as DOWN only if it was actually probed and FAILED (ok === false).
+  // Slots merely MISSING from the cache (added since the last probe) are unknown,
+  // not failures — don't raise a repair CTA for them, just show a dim count.
   const down = mcpSlots.filter(p => { const e = cache && cache.slots && cache.slots[p.name]; return e && e.ok === false; });
+  if (down.length === 0) return `\x1b[2m${healthy}/${total}○ quorum\x1b[0m`;
+
+  // Real failure → make it a call-to-action, not just a status (like ⬆ /nf:update).
+  // One identifiable failed slot → restart just it; otherwise repair the fleet.
   const cmd = down.length === 1 ? `/nf:mcp-restart ${down[0].name}` : '/nf:mcp-repair';
   return `\x1b[31m${healthy}/${total}⊘\x1b[0m \x1b[33m${cmd}\x1b[0m`;
 }

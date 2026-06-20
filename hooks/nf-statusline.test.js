@@ -984,3 +984,19 @@ test('QS7: no provider inventory -> no probe spawn / no marker (no churn)', () =
     assert.ok(!fs.existsSync(markerPath), 'no probe marker when there is no provider inventory (readSlotHealth null)');
   } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
 });
+
+test('QS2c: fresh cache but a slot is MISSING its entry -> dim count, NO false repair CTA', () => {
+  const tempHome = setupSlotsHome('qs2c', {
+    providers: [{ name: 'codex-1' }, { name: 'gemini-1' }, { name: 'claude-1' }],
+    mcpServers: { 'codex-1': {}, 'gemini-1': {}, 'claude-1': {} },
+    // claude-1 added since last probe → no cache entry; codex-1/gemini-1 healthy. None FAILED.
+    health: { checked_at: qsFreshIso(), slots: { 'codex-1': { ok: true }, 'gemini-1': { ok: true } } },
+  });
+  const tempDir = makeTempDir('qs2c-dir');
+  try {
+    const { stdout } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, { HOME: tempHome });
+    assert.ok(line1(stdout).includes('2/3○ quorum'), `expected dim 2/3○ quorum (no failure); got: ${JSON.stringify(line1(stdout))}`);
+    assert.ok(!line1(stdout).includes('/nf:mcp-repair') && !line1(stdout).includes('/nf:mcp-restart'),
+      `must NOT show a repair/restart CTA when slots are merely unprobed; got: ${JSON.stringify(line1(stdout))}`);
+  } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
+});
