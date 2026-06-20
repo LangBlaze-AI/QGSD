@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawnSync } = require('child_process');
+const { spawnSync, spawn } = require('child_process');
 const { loadConfig, shouldRunHook, validateHookInput } = require('./config-loader');
 
 // Detect context window size from data
@@ -161,6 +161,71 @@ function buildSlotsLine(homeDir) {
   return parts.join(' \x1b[2m│\x1b[0m ');
 }
 
+// Compact one-line quorum indicator for line 1 of the statusline, so quorum
+// health is visible even when the terminal only paints the first status row
+// (multi-line status lines depend on vertical space). Reuses the same cache +
+// freshness logic as buildSlotsLine.
+//   N● quorum   (green)  — all N MCP-registered slots healthy & fresh
+//   H/N⊘ quorum (red)    — H of N healthy (some down)
+//   N○ quorum   (dim)    — no fresh probe data yet (cache stale/missing)
+function buildQuorumSummary(homeDir) {
+  const providersPath = path.join(homeDir, '.claude', 'nf-bin', 'providers.json');
+  const claudeJsonPath = path.join(homeDir, '.claude.json');
+  const cachePath = path.join(homeDir, '.claude', 'nf', 'slot-health.json');
+
+  let providers, mcpServers, cache;
+  try { providers = JSON.parse(fs.readFileSync(providersPath, 'utf8')).providers; } catch (_) { return null; }
+  if (!Array.isArray(providers) || providers.length === 0) return null;
+  try { mcpServers = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8')).mcpServers || {}; } catch (_) { mcpServers = {}; }
+  try { cache = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch (_) { cache = null; }
+
+  const FRESH_MS = 5 * 60 * 1000;
+  const checkedAt = cache && cache.checked_at ? Date.parse(cache.checked_at) : 0;
+  const fresh = checkedAt && (Date.now() - checkedAt) < FRESH_MS;
+
+  const mcpSlots = providers.filter(p => mcpServers[p.name]);
+  const total = mcpSlots.length;
+  if (total === 0) return null;
+
+  if (!fresh) return `\x1b[2m${total}○ quorum\x1b[0m`;
+  const healthy = mcpSlots.filter(p => { const e = cache.slots && cache.slots[p.name]; return e && e.ok; }).length;
+  if (healthy === total) return `\x1b[32m${total}● quorum\x1b[0m`;
+  return `\x1b[31m${healthy}/${total}⊘ quorum\x1b[0m`;
+}
+
+// Fire-and-forget: if the slot-health cache is stale/missing, kick off the
+// probe in a DETACHED background process so the NEXT render is fresh. The
+// statusline itself must stay instant — this never blocks. Throttled so a slow
+// probe can't cause spawn storms across frequent statusline renders.
+function maybeRefreshSlotCache(homeDir) {
+  try {
+    const nfDir = path.join(homeDir, '.claude', 'nf');
+    const cachePath = path.join(nfDir, 'slot-health.json');
+    const markerPath = path.join(nfDir, '.slot-probe-spawned');
+    const FRESH_MS = 5 * 60 * 1000;
+    const THROTTLE_MS = 60 * 1000;
+
+    // Still fresh → nothing to do.
+    try {
+      const c = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+      if (c.checked_at && (Date.now() - Date.parse(c.checked_at)) < FRESH_MS) return;
+    } catch (_) { /* missing/unreadable → refresh */ }
+
+    // Don't spawn again if we spawned a probe recently.
+    try {
+      const m = fs.statSync(markerPath);
+      if (Date.now() - m.mtimeMs < THROTTLE_MS) return;
+    } catch (_) { /* no marker yet → ok to spawn */ }
+
+    const probe = path.join(homeDir, '.claude', 'hooks', 'nf-slot-health-probe.js');
+    if (!fs.existsSync(probe)) return;
+    try { fs.mkdirSync(nfDir, { recursive: true }); } catch (_) {}
+    try { fs.writeFileSync(markerPath, String(Date.now())); } catch (_) {}
+    const child = spawn(process.execPath, [probe], { detached: true, stdio: 'ignore' });
+    child.unref();
+  } catch (_) { /* never block the statusline */ }
+}
+
 // Read JSON from stdin
 let input = '';
 process.stdin.setEncoding('utf8');
@@ -305,12 +370,23 @@ process.stdin.on('end', () => {
       } catch (e) {}
     }
 
+    // Kick off a background slot-health refresh if the cache is stale (non-blocking).
+    try { maybeRefreshSlotCache(homeDir); } catch (_e) {}
+
+    // Compact quorum indicator for line 1 — always visible even when the terminal
+    // only paints the first status row.
+    let quorumTag = '';
+    try {
+      const q = buildQuorumSummary(homeDir);
+      if (q) quorumTag = ` \x1b[2m│\x1b[0m ${q}`;
+    } catch (_e) {}
+
     // Output (tools line is assembled and written after the main line)
     const dirname = path.basename(dir);
     if (task) {
-      process.stdout.write(`${nfUpdate}\x1b[2m${model}\x1b[0m │ \x1b[1m${task}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}`);
+      process.stdout.write(`${nfUpdate}\x1b[2m${model}\x1b[0m │ \x1b[1m${task}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}${quorumTag}`);
     } else {
-      process.stdout.write(`${nfUpdate}\x1b[2m${model}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}`);
+      process.stdout.write(`${nfUpdate}\x1b[2m${model}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}${quorumTag}`);
     }
 
     // Quorum slots line (above the tools line)
