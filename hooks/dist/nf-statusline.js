@@ -375,7 +375,10 @@ process.stdin.on('end', () => {
     try { slotHealth = readSlotHealth(homeDir); } catch (_e) {}
 
     // Kick off a background slot-health refresh if the cache is stale (non-blocking).
-    try { maybeRefreshSlotCache(homeDir, slotHealth ? slotHealth.fresh : false); } catch (_e) {}
+    // Only when there's a provider inventory to probe — if readSlotHealth returned
+    // null (providers.json missing/unreadable), spawning the probe every render
+    // would be pointless churn.
+    if (slotHealth) { try { maybeRefreshSlotCache(homeDir, slotHealth.fresh); } catch (_e) {} }
 
     // Compact quorum indicator for line 1 — always visible even when the terminal
     // only paints the first status row.
