@@ -19,6 +19,26 @@ const API_PREFIX = '/api/v1';
 const DEFAULT_TIMEOUT_QUERY = 5000;
 const DEFAULT_TIMEOUT_HEALTH = 2000;
 
+// Documentation / prose file extensions that coderlm indexes but which are NOT
+// real call sites. The server reports text mentions in these files as "callers",
+// which inflates caller-count priority ranking in nf:solve (sweepGitHeatmap /
+// sweepCtoR / sweepTtoR). Filtering them out keeps caller counts source-accurate.
+const NON_SOURCE_CALLER_EXT = new Set(['.md', '.markdown', '.mdx', '.txt', '.rst', '.adoc']);
+
+// Drop caller entries that live in documentation/prose files (a prose mention of
+// a symbol is not a call). Conservative: only removes known doc extensions, never
+// touches code files. Tolerates string entries and missing/odd shapes (fail-open).
+function filterSourceCallers(callers) {
+  if (!Array.isArray(callers)) return callers;
+  return callers.filter(c => {
+    const file = typeof c === 'string' ? c : (c && c.file);
+    if (typeof file !== 'string') return true; // unknown shape — keep, don't lose data
+    const dot = file.lastIndexOf('.');
+    if (dot < 0) return true;
+    return !NON_SOURCE_CALLER_EXT.has(file.slice(dot).toLowerCase());
+  });
+}
+
 /**
  * Parse a URL string into components.
  * @param {string} url
@@ -330,7 +350,7 @@ check().then(r => console.log(JSON.stringify(r)));
         if (result.status === 200) {
           try {
             const parsed = JSON.parse(result.body);
-            const out = { callers: parsed.callers || [] };
+            const out = { callers: filterSourceCallers(parsed.callers || []) };
             _cache.set(cacheKey, out);
             return out;
           } catch {
@@ -431,6 +451,7 @@ getCallers().then(r => console.log(JSON.stringify(r)));
         _metrics.totalLatencyMs += Date.now() - start;
         if (result.status === 0 && result.stdout) {
           const out = JSON.parse(result.stdout.trim());
+          if (out && Array.isArray(out.callers)) out.callers = filterSourceCallers(out.callers);
           _cache.set(cacheKey, out);
           return out;
         }
@@ -532,6 +553,7 @@ getImplementation().then(r => console.log(JSON.stringify(r)));
         _metrics.totalLatencyMs += Date.now() - start;
         if (result.status === 0 && result.stdout) {
           const out = JSON.parse(result.stdout.trim());
+          if (out && Array.isArray(out.callers)) out.callers = filterSourceCallers(out.callers);
           _cache.set(cacheKey, out);
           return out;
         }
@@ -725,4 +747,5 @@ async function healthCheck(host, timeout) {
 module.exports = {
   createAdapter,
   healthCheck,
+  filterSourceCallers,
 };

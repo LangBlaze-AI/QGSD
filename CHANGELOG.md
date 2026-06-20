@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- fix(coderlm): `coderlm-adapter` now filters documentation/prose files (`.md`, `.markdown`, `.mdx`, `.txt`, `.rst`, `.adoc`) out of caller results. coderlm indexes Markdown and reports prose mentions of a symbol as "callers", which inflated caller-count priority ranking in `nf:solve` (`sweepGitHeatmap`/`sweepCtoR`/`sweepTtoR`) — e.g. `ensureRunning` returned 11 "callers", 4 of them doc mentions. Caller counts now reflect real source call sites only. New `bin/coderlm-adapter-filter.test.cjs` regression gate, wired into `test:ci` (the existing `coderlm-adapter.test.cjs` mock suite predates the v0.42 session API and never ran in CI).
 - fix(quorum): `quorum-consensus-gate.cjs` no longer requires `run-prism.cjs` to borrow `readMCPAvailabilityRates`. Requiring `run-prism.cjs` used to run its entire PRISM pipeline at import time (`process.exit`, `spawnSync`, scoreboard `argv` forwarding), which could kill the consensus gate (read as a permanent defer/escalate) and append spurious `prism:quorum` records. The helper is now in a side-effect-free `bin/scoreboard-rates.cjs`, and `run-prism.cjs`'s pipeline is wrapped in `main()` behind `require.main === module`. Added `bin/no-side-effects-on-require.test.cjs` regression gate. (#198)
 
 ## [0.44.0] - 2026-05-21 — Quorum reliability & provider resolution hardening
