@@ -76,11 +76,16 @@ function buildToolsLine(homeDir, dir) {
           const riverState = JSON.parse(fs.readFileSync(riverPath, 'utf8'));
           const qTable = riverState && riverState.qTable;
           if (qTable && typeof qTable === 'object') {
-            // Check if ANY arm has been visited — means "ready to start learning"
+            // The bandit learns slowly (only during Mode C coding-task delegation),
+            // so "active" must mean RECENTLY active — otherwise a bandit that learned
+            // months ago would show green forever. Require a qTable update within the
+            // window below (or a live lastShadow). Stale visits → ○ idle, not ●.
             const RIVER_MIN_EXPLORE = 20;
+            const RIVER_ACTIVE_MS = 24 * 60 * 60 * 1000; // learned within the last day
             let hasArms = false;
             let hasVisits = false;
             let allAbove = true;
+            let recentlyActive = false;
             for (const taskType of Object.keys(qTable)) {
               const arms = qTable[taskType];
               if (arms && typeof arms === 'object') {
@@ -89,14 +94,18 @@ function buildToolsLine(homeDir, dir) {
                   const visits = arms[armName].visits || 0;
                   if (visits > 0) hasVisits = true;
                   if (visits < RIVER_MIN_EXPLORE) allAbove = false;
+                  const lu = Date.parse(arms[armName].lastUpdate);
+                  if (!Number.isNaN(lu) && (Date.now() - lu) < RIVER_ACTIVE_MS) recentlyActive = true;
                 }
               }
             }
-            if (hasArms && hasVisits) {
+            // Has learned but not recently → idle (honest: River isn't doing anything now).
+            if (hasArms && hasVisits && recentlyActive) {
               toolsRiver = allAbove
-                ? '\x1b[32m● River\x1b[0m'   // trained
-                : '\x1b[36m● River\x1b[0m';   // exploring (has learning data, not all trained)
+                ? '\x1b[32m● River\x1b[0m'   // trained & recently active
+                : '\x1b[36m● River\x1b[0m';   // exploring (recent learning, not all trained)
             }
+            // A live shadow recommendation is by definition current → always active.
             if (riverState.lastShadow && typeof riverState.lastShadow.recommendation === 'string' && riverState.lastShadow.recommendation) {
               toolsRiver = `\x1b[33m● River: ${riverState.lastShadow.recommendation}\x1b[0m`;
             }
@@ -400,27 +409,28 @@ process.stdin.on('end', () => {
       if (q) quorumTag = ` \x1b[2m│\x1b[0m ${q}`;
     } catch (_e) {}
 
-    // Output (tools line is assembled and written after the main line)
+    // Tools (coderlm/River/embed) on LINE 1 too — they used to live on a separate
+    // bottom row that terminals with little vertical space never paint, so they were
+    // effectively invisible. Surface them next to the quorum indicator instead.
+    let toolsTag = '';
+    try {
+      const t = buildToolsLine(homeDir, dir);
+      if (t) toolsTag = ` \x1b[2m│\x1b[0m ${t}`;
+    } catch (_e) {}
+
+    // Output: everything actionable on line 1; per-slot quorum detail on line 2.
     const dirname = path.basename(dir);
     if (task) {
-      process.stdout.write(`${nfUpdate}\x1b[2m${model}\x1b[0m │ \x1b[1m${task}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}${quorumTag}`);
+      process.stdout.write(`${nfUpdate}\x1b[2m${model}\x1b[0m │ \x1b[1m${task}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}${quorumTag}${toolsTag}`);
     } else {
-      process.stdout.write(`${nfUpdate}\x1b[2m${model}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}${quorumTag}`);
+      process.stdout.write(`${nfUpdate}\x1b[2m${model}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}${quorumTag}${toolsTag}`);
     }
 
-    // Quorum slots line (above the tools line)
+    // Per-slot quorum detail on line 2 (for terminals tall enough to show it).
     try {
       const slotsLine = buildSlotsLine(homeDir, slotHealth);
       if (slotsLine) {
         process.stdout.write('\n' + slotsLine);
-      }
-    } catch (_e) {}
-
-    // Tools status second line
-    try {
-      const toolsLine = buildToolsLine(homeDir, dir);
-      if (toolsLine) {
-        process.stdout.write('\n' + toolsLine);
       }
     } catch (_e) {}
   } catch (e) {
