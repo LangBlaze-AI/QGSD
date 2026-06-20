@@ -123,24 +123,39 @@ function buildToolsLine(homeDir, dir) {
   return parts.join(' \x1b[2m│\x1b[0m ');
 }
 
-// Build the quorum-slots line. Reads providers.json (the configured slot inventory),
-// ~/.claude.json mcpServers (which slots are MCP-registered), and the slot-health
-// cache written by nf-slot-health-probe.js. Statusline rendering must stay fast,
-// so this is purely cache-read — the probe runs out-of-band (e.g. SessionStart).
-function buildSlotsLine(homeDir) {
+const SLOT_FRESH_MS = 5 * 60 * 1000;
+
+// Read the slot-health context ONCE per render: providers.json (configured slot
+// inventory), ~/.claude.json mcpServers (which slots are MCP-registered), and the
+// slot-health cache written by nf-slot-health-probe.js. Returns null when there is
+// no usable provider inventory. Null/invalid provider entries are dropped here so
+// every consumer can assume `{ name }`. Statusline rendering must stay fast, so
+// this is a pure cache-read — the probe runs out-of-band (SessionStart / the
+// background refresh below).
+function readSlotHealth(homeDir) {
   const providersPath = path.join(homeDir, '.claude', 'nf-bin', 'providers.json');
   const claudeJsonPath = path.join(homeDir, '.claude.json');
   const cachePath = path.join(homeDir, '.claude', 'nf', 'slot-health.json');
 
   let providers, mcpServers, cache;
-  try { providers = JSON.parse(fs.readFileSync(providersPath, 'utf8')).providers; } catch (_) { return null; }
-  if (!Array.isArray(providers) || providers.length === 0) return null;
+  try { providers = JSON.parse(fs.readFileSync(providersPath, 'utf8')).providers; } catch (_) { providers = null; }
+  if (!Array.isArray(providers)) return null;
+  providers = providers.filter(p => p && typeof p.name === 'string' && p.name);
+  if (providers.length === 0) return null;
   try { mcpServers = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8')).mcpServers || {}; } catch (_) { mcpServers = {}; }
   try { cache = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch (_) { cache = null; }
 
-  const FRESH_MS = 5 * 60 * 1000;
   const checkedAt = cache && cache.checked_at ? Date.parse(cache.checked_at) : 0;
-  const fresh = checkedAt && (Date.now() - checkedAt) < FRESH_MS;
+  const fresh = !!(checkedAt && (Date.now() - checkedAt) < SLOT_FRESH_MS);
+  return { providers, mcpServers, cache, fresh };
+}
+
+// Build the detailed per-slot row (line 2). `ctx` is the shared readSlotHealth()
+// result so a render doesn't re-read the same files three times.
+function buildSlotsLine(homeDir, ctx) {
+  const h = ctx || readSlotHealth(homeDir);
+  if (!h) return null;
+  const { providers, mcpServers, cache, fresh } = h;
 
   const parts = [];
   for (const p of providers) {
@@ -161,55 +176,38 @@ function buildSlotsLine(homeDir) {
   return parts.join(' \x1b[2m│\x1b[0m ');
 }
 
-// Compact one-line quorum indicator for line 1 of the statusline, so quorum
-// health is visible even when the terminal only paints the first status row
-// (multi-line status lines depend on vertical space). Reuses the same cache +
-// freshness logic as buildSlotsLine.
+// Compact one-line quorum indicator for line 1, so quorum health is visible even
+// when the terminal only paints the first status row (multi-line status lines
+// depend on vertical space). `ctx` is the shared readSlotHealth() result.
 //   N● quorum   (green)  — all N MCP-registered slots healthy & fresh
 //   H/N⊘ quorum (red)    — H of N healthy (some down)
 //   N○ quorum   (dim)    — no fresh probe data yet (cache stale/missing)
-function buildQuorumSummary(homeDir) {
-  const providersPath = path.join(homeDir, '.claude', 'nf-bin', 'providers.json');
-  const claudeJsonPath = path.join(homeDir, '.claude.json');
-  const cachePath = path.join(homeDir, '.claude', 'nf', 'slot-health.json');
-
-  let providers, mcpServers, cache;
-  try { providers = JSON.parse(fs.readFileSync(providersPath, 'utf8')).providers; } catch (_) { return null; }
-  if (!Array.isArray(providers) || providers.length === 0) return null;
-  try { mcpServers = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8')).mcpServers || {}; } catch (_) { mcpServers = {}; }
-  try { cache = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch (_) { cache = null; }
-
-  const FRESH_MS = 5 * 60 * 1000;
-  const checkedAt = cache && cache.checked_at ? Date.parse(cache.checked_at) : 0;
-  const fresh = checkedAt && (Date.now() - checkedAt) < FRESH_MS;
+function buildQuorumSummary(homeDir, ctx) {
+  const h = ctx || readSlotHealth(homeDir);
+  if (!h) return null;
+  const { providers, mcpServers, cache, fresh } = h;
 
   const mcpSlots = providers.filter(p => mcpServers[p.name]);
   const total = mcpSlots.length;
   if (total === 0) return null;
 
   if (!fresh) return `\x1b[2m${total}○ quorum\x1b[0m`;
-  const healthy = mcpSlots.filter(p => { const e = cache.slots && cache.slots[p.name]; return e && e.ok; }).length;
+  const healthy = mcpSlots.filter(p => { const e = cache && cache.slots && cache.slots[p.name]; return e && e.ok; }).length;
   if (healthy === total) return `\x1b[32m${total}● quorum\x1b[0m`;
   return `\x1b[31m${healthy}/${total}⊘ quorum\x1b[0m`;
 }
 
-// Fire-and-forget: if the slot-health cache is stale/missing, kick off the
-// probe in a DETACHED background process so the NEXT render is fresh. The
-// statusline itself must stay instant — this never blocks. Throttled so a slow
-// probe can't cause spawn storms across frequent statusline renders.
-function maybeRefreshSlotCache(homeDir) {
+// Fire-and-forget: when the slot-health cache is NOT fresh, kick off the probe in
+// a DETACHED background process so the NEXT render reads fresh. The statusline
+// itself must stay instant — this never blocks. Throttled (1/min) so a slow probe
+// can't cause spawn storms across frequent renders. `fresh` comes from the shared
+// readSlotHealth() result so we don't re-read the cache here.
+function maybeRefreshSlotCache(homeDir, fresh) {
   try {
+    if (fresh) return; // already fresh — nothing to do
     const nfDir = path.join(homeDir, '.claude', 'nf');
-    const cachePath = path.join(nfDir, 'slot-health.json');
     const markerPath = path.join(nfDir, '.slot-probe-spawned');
-    const FRESH_MS = 5 * 60 * 1000;
     const THROTTLE_MS = 60 * 1000;
-
-    // Still fresh → nothing to do.
-    try {
-      const c = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-      if (c.checked_at && (Date.now() - Date.parse(c.checked_at)) < FRESH_MS) return;
-    } catch (_) { /* missing/unreadable → refresh */ }
 
     // Don't spawn again if we spawned a probe recently.
     try {
@@ -370,14 +368,20 @@ process.stdin.on('end', () => {
       } catch (e) {}
     }
 
+    // Read the slot-health context ONCE and share it across the quorum tag,
+    // the slots row, and the background-refresh decision (avoids re-reading the
+    // same HOME-scoped JSON files three times per render).
+    let slotHealth = null;
+    try { slotHealth = readSlotHealth(homeDir); } catch (_e) {}
+
     // Kick off a background slot-health refresh if the cache is stale (non-blocking).
-    try { maybeRefreshSlotCache(homeDir); } catch (_e) {}
+    try { maybeRefreshSlotCache(homeDir, slotHealth ? slotHealth.fresh : false); } catch (_e) {}
 
     // Compact quorum indicator for line 1 — always visible even when the terminal
     // only paints the first status row.
     let quorumTag = '';
     try {
-      const q = buildQuorumSummary(homeDir);
+      const q = buildQuorumSummary(homeDir, slotHealth);
       if (q) quorumTag = ` \x1b[2m│\x1b[0m ${q}`;
     } catch (_e) {}
 
@@ -391,7 +395,7 @@ process.stdin.on('end', () => {
 
     // Quorum slots line (above the tools line)
     try {
-      const slotsLine = buildSlotsLine(homeDir);
+      const slotsLine = buildSlotsLine(homeDir, slotHealth);
       if (slotsLine) {
         process.stdout.write('\n' + slotsLine);
       }
