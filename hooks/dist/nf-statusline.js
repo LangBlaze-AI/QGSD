@@ -105,9 +105,17 @@ function buildToolsLine(homeDir, dir) {
                 ? '\x1b[32m● River\x1b[0m'   // trained & recently active
                 : '\x1b[36m● River\x1b[0m';   // exploring (recent learning, not all trained)
             }
-            // A live shadow recommendation is by definition current → always active.
+            // A shadow recommendation counts as active only when it's RECENT —
+            // routing-policy stamps lastShadow.timestamp on every write, so an old
+            // recommendation lingering in the state file must not keep River green
+            // forever (same staleness trap as the visit counters above). A missing
+            // timestamp is treated as recent for backward compat with pre-stamp state.
             if (riverState.lastShadow && typeof riverState.lastShadow.recommendation === 'string' && riverState.lastShadow.recommendation) {
-              toolsRiver = `\x1b[33m● River: ${riverState.lastShadow.recommendation}\x1b[0m`;
+              const sts = Date.parse(riverState.lastShadow.timestamp);
+              const shadowRecent = Number.isNaN(sts) || (Date.now() - sts) < RIVER_ACTIVE_MS;
+              if (shadowRecent) {
+                toolsRiver = `\x1b[33m● River: ${riverState.lastShadow.recommendation}\x1b[0m`;
+              }
             }
           }
         }

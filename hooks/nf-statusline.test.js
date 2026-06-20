@@ -467,6 +467,42 @@ test('TC21: Shadow recommendation displayed when lastShadow present', () => {
   }
 });
 
+// TC21b: stale shadow recommendation (old timestamp) must NOT render the shadow
+// form — an old lastShadow lingering in state file should not keep River green.
+test('TC21b: stale shadow (old timestamp) does not show shadow recommendation', () => {
+  const tempDir = makeTempDir('tc21b');
+  const river = makeRiverHome('tc21b');
+  const stateFile = path.join(tempDir, '.nf-river-state.json');
+  const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days ago
+  fs.writeFileSync(stateFile, JSON.stringify({
+    qTable: {
+      implement: {
+        'codex-1': { q: 0.8, visits: 25, lastUpdate: old },
+        'gemini-1': { q: 0.6, visits: 30, lastUpdate: old },
+      },
+    },
+    lastShadow: {
+      recommendation: 'gemini-1',
+      confidence: 0.85,
+      taskType: 'implement',
+      timestamp: old,
+    },
+  }), 'utf8');
+
+  try {
+    const { stdout, exitCode } = runHook({
+      model: { display_name: 'M' },
+      workspace: { current_dir: tempDir },
+    }, river.env);
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.ok(!stdout.includes('River: gemini-1'), 'stale shadow must NOT render "River: gemini-1"');
+    assert.ok(stdout.includes('○ River'), 'stale state shows idle ○ River');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    river.cleanup();
+  }
+});
+
 // TC22: No shadow — falls back to River: active
 test('TC22: No shadow falls back to River: active', () => {
   const tempDir = makeTempDir('tc22');
