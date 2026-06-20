@@ -860,3 +860,112 @@ test('TC38: slots line renders above tools line', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+// ── Line-1 compact quorum indicator (buildQuorumSummary) ────────────────────
+// Reuses setupSlotsHome(); the indicator is the LAST element of stdout line 1.
+function line1(stdout) { return (stdout.split('\n')[0] || ''); }
+const qsFreshIso = () => new Date(Date.now() - 1000).toISOString();
+const qsStaleIso = () => new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+test('QS1: all MCP slots healthy + fresh -> green N dot quorum on line 1', () => {
+  const tempHome = setupSlotsHome('qs1', {
+    providers: [{ name: 'codex-1' }, { name: 'gemini-1' }, { name: 'claude-1' }],
+    mcpServers: { 'codex-1': {}, 'gemini-1': {}, 'claude-1': {} },
+    health: { checked_at: qsFreshIso(), slots: { 'codex-1': { ok: true }, 'gemini-1': { ok: true }, 'claude-1': { ok: true } } },
+  });
+  const tempDir = makeTempDir('qs1-dir');
+  try {
+    const { stdout, exitCode } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, { HOME: tempHome });
+    assert.strictEqual(exitCode, 0);
+    assert.ok(line1(stdout).includes('\x1b[32m3● quorum\x1b[0m'), `expected green 3 dot quorum; got: ${JSON.stringify(line1(stdout))}`);
+  } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
+});
+
+test('QS2: some slots down + fresh -> red H/N quorum', () => {
+  const tempHome = setupSlotsHome('qs2', {
+    providers: [{ name: 'codex-1' }, { name: 'gemini-1' }, { name: 'claude-1' }],
+    mcpServers: { 'codex-1': {}, 'gemini-1': {}, 'claude-1': {} },
+    health: { checked_at: qsFreshIso(), slots: { 'codex-1': { ok: true }, 'gemini-1': { ok: false }, 'claude-1': { ok: true } } },
+  });
+  const tempDir = makeTempDir('qs2-dir');
+  try {
+    const { stdout } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, { HOME: tempHome });
+    assert.ok(line1(stdout).includes('\x1b[31m2/3⊘ quorum\x1b[0m'), `expected red 2/3 quorum; got: ${JSON.stringify(line1(stdout))}`);
+  } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
+});
+
+test('QS3: stale cache -> dim N circle quorum', () => {
+  const tempHome = setupSlotsHome('qs3', {
+    providers: [{ name: 'codex-1' }, { name: 'gemini-1' }],
+    mcpServers: { 'codex-1': {}, 'gemini-1': {} },
+    health: { checked_at: qsStaleIso(), slots: { 'codex-1': { ok: true }, 'gemini-1': { ok: true } } },
+  });
+  const tempDir = makeTempDir('qs3-dir');
+  try {
+    const { stdout } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, { HOME: tempHome });
+    assert.ok(line1(stdout).includes('2○ quorum'), `expected dim 2 circle quorum; got: ${JSON.stringify(line1(stdout))}`);
+  } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
+});
+
+test('QS4: missing cache -> dim N circle quorum (no crash)', () => {
+  const tempHome = setupSlotsHome('qs4', {
+    providers: [{ name: 'codex-1' }],
+    mcpServers: { 'codex-1': {} },
+  });
+  const tempDir = makeTempDir('qs4-dir');
+  try {
+    const { stdout, exitCode } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, { HOME: tempHome });
+    assert.strictEqual(exitCode, 0);
+    assert.ok(line1(stdout).includes('1○ quorum'), `expected dim 1 circle quorum; got: ${JSON.stringify(line1(stdout))}`);
+  } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
+});
+
+test('QS5: null/invalid provider entries are dropped, not crashed (robustness)', () => {
+  const tempHome = setupSlotsHome('qs5', {
+    providers: [null, { name: 'codex-1' }, { foo: 'bar' }],
+    mcpServers: { 'codex-1': {} },
+    health: { checked_at: qsFreshIso(), slots: { 'codex-1': { ok: true } } },
+  });
+  const tempDir = makeTempDir('qs5-dir');
+  try {
+    const { stdout, exitCode } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, { HOME: tempHome });
+    assert.strictEqual(exitCode, 0);
+    assert.ok(line1(stdout).includes('\x1b[32m1● quorum\x1b[0m'), `expected green 1 dot quorum; got: ${JSON.stringify(line1(stdout))}`);
+  } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
+});
+
+// ── Background self-refresh (maybeRefreshSlotCache) ─────────────────────────
+test('QS6: stale/missing cache + probe present -> creates throttle marker, throttled on 2nd render', () => {
+  const tempHome = setupSlotsHome('qs6', {
+    providers: [{ name: 'codex-1' }],
+    mcpServers: { 'codex-1': {} },
+    // no health file -> not fresh -> should kick a refresh
+  });
+  const hooksDir = path.join(tempHome, '.claude', 'hooks');
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(path.join(hooksDir, 'nf-slot-health-probe.js'), 'process.exit(0)\n', 'utf8');
+  const markerPath = path.join(tempHome, '.claude', 'nf', '.slot-probe-spawned');
+  const tempDir = makeTempDir('qs6-dir');
+  try {
+    runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, { HOME: tempHome });
+    assert.ok(fs.existsSync(markerPath), 'throttle marker must be created on stale/missing cache');
+    const m1 = fs.statSync(markerPath).mtimeMs;
+    runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, { HOME: tempHome });
+    const m2 = fs.statSync(markerPath).mtimeMs;
+    assert.strictEqual(m1, m2, 'marker must not be rewritten within the throttle window (no re-spawn)');
+  } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
+});
+
+test('QS7: no provider inventory -> no probe spawn / no marker (no churn)', () => {
+  const tempHome = makeTempDir('qs7-home');
+  const hooksDir = path.join(tempHome, '.claude', 'hooks');
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(path.join(hooksDir, 'nf-slot-health-probe.js'), 'process.exit(0)\n', 'utf8');
+  const markerPath = path.join(tempHome, '.claude', 'nf', '.slot-probe-spawned');
+  const tempDir = makeTempDir('qs7-dir');
+  try {
+    const { exitCode } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, { HOME: tempHome });
+    assert.strictEqual(exitCode, 0);
+    assert.ok(!fs.existsSync(markerPath), 'no probe marker when there is no provider inventory (readSlotHealth null)');
+  } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
+});
