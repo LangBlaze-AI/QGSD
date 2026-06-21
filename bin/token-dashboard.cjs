@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const planningPaths = require('./planning-paths.cjs');
 
 // Cost per million tokens (estimated, approximate)
 const COST_PER_M = {
@@ -268,7 +269,7 @@ if (require.main === module) {
       '',
       'Options:',
       '  --last N        Show last N sessions (default: 5)',
-      '  --jsonl PATH    Path to token-usage.jsonl (default: .planning/token-usage.jsonl)',
+      '  --jsonl PATH    Path to token-usage.jsonl (default: .planning/telemetry/token-usage.jsonl, with legacy fallback)',
       '  --json          Output as JSON instead of formatted table',
       '  --help, -h      Show this help message',
       '',
@@ -278,7 +279,10 @@ if (require.main === module) {
 
   // Parse args
   let last = 5;
-  let jsonlPath = path.join(process.cwd(), '.planning', 'token-usage.jsonl');
+  // Default to the canonical telemetry path (with legacy flat-layout fallback).
+  // Previously hardcoded the legacy `.planning/token-usage.jsonl`, which no
+  // longer exists post-migration — so the dashboard always reported "no data".
+  let jsonlPath = planningPaths.resolveWithFallback(process.cwd(), 'token-usage');
   let jsonOutput = false;
 
   for (let i = 0; i < args.length; i++) {

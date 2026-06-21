@@ -168,3 +168,60 @@ describe('token-dashboard', () => {
     });
   });
 });
+
+// Regression: the CLI default path. token-dashboard previously hardcoded the
+// legacy `.planning/token-usage.jsonl`, which no longer exists after the v0.27
+// migration moved telemetry into `.planning/telemetry/` — so it always reported
+// "No token usage data found" despite real data being present.
+describe('token-dashboard default path resolution', () => {
+  const { spawnSync } = require('child_process');
+  const os = require('os');
+  const CLI = path.join(__dirname, 'token-dashboard.cjs');
+  const REC = '{"slot":"codex-1","input_tokens":100,"output_tokens":50}\n';
+
+  function runIn(projectDir) {
+    return spawnSync(process.execPath, [CLI], { cwd: projectDir, encoding: 'utf8', timeout: 15000 });
+  }
+  function mkProject() {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'tokdash-'));
+  }
+
+  it('reads the canonical telemetry path by default', () => {
+    const dir = mkProject();
+    try {
+      fs.mkdirSync(path.join(dir, '.planning', 'telemetry'), { recursive: true });
+      fs.writeFileSync(path.join(dir, '.planning', 'telemetry', 'token-usage.jsonl'), REC);
+      const r = runIn(dir);
+      assert.equal(r.status, 0);
+      assert.ok(/codex/.test(r.stdout), `expected slot data, got: ${r.stdout}`);
+      assert.ok(!/No token usage data found/.test(r.stdout), 'must not report empty when telemetry data exists');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to the legacy flat path when telemetry is absent', () => {
+    const dir = mkProject();
+    try {
+      fs.mkdirSync(path.join(dir, '.planning'), { recursive: true });
+      fs.writeFileSync(path.join(dir, '.planning', 'token-usage.jsonl'), REC);
+      const r = runIn(dir);
+      assert.equal(r.status, 0);
+      assert.ok(!/No token usage data found/.test(r.stdout), 'legacy fallback should find data');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports empty gracefully when neither path exists', () => {
+    const dir = mkProject();
+    try {
+      fs.mkdirSync(path.join(dir, '.planning'), { recursive: true });
+      const r = runIn(dir);
+      assert.equal(r.status, 0);
+      assert.ok(/No token usage data found/.test(r.stdout));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

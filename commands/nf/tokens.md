@@ -19,7 +19,7 @@ node bin/token-dashboard.cjs
 ### Options
 - `--last N` -- Show last N sessions (default: 5)
 - `--json` -- Output as JSON instead of formatted table
-- `--jsonl PATH` -- Path to token-usage.jsonl (default: .planning/token-usage.jsonl)
+- `--jsonl PATH` -- Path to token-usage.jsonl (default: .planning/telemetry/token-usage.jsonl, falling back to the legacy `.planning/token-usage.jsonl`)
 
 ## Examples
 
