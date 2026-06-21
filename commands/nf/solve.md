@@ -407,9 +407,10 @@ Display all tables and reports as described in the process section."
 
 **This phase runs automatically inside `bin/nf-solve.cjs`** — no manual orchestration needed. At the end of every solve run, `nf-solve.cjs` calls `bin/solve-commit-artifacts.cjs` which:
 
-1. Stages all solve-touched paths (`.planning/formal/`, `bin/`, `test/`, etc.)
-2. Commits with message `chore(solve): update formal verification artifacts`
-3. Uses `--no-verify` to skip pre-commit hooks (evidence files may not pass lint)
+1. Stages all solve-touched paths (`.planning/formal/`, `bin/`, `test/`, etc.), **excluding machine-local snapshots under `test/golden/`** (those embed absolute developer paths and are never solve artifacts)
+2. **Refuses to commit when on a protected/default branch** (`main`/`master`) — solve commits its artifacts and code fixes on a working branch, never directly onto the default branch. On a protected branch it returns early — before staging — with `committed: false, reason: "on protected branch ..."`, so it stages nothing and leaves the index unmodified.
+3. Commits with message `chore(solve): update formal verification artifacts`
+4. Uses `--no-verify` to skip pre-commit hooks (evidence files may not pass lint)
 
 **To disable:** pass `--no-auto-commit` flag to nf-solve.
 
