@@ -44,6 +44,36 @@ function findClosingQuote(str, startIdx, quoteChar) {
 }
 
 /**
+ * Determines whether the character at `index` sits inside an open shell quote
+ * (single or double) when scanning the command from the start.
+ *
+ * This prevents false positives: a `node -e "..."` substring that appears
+ * INSIDE another command's quoted argument (e.g. `grep 'node -e "x"' src` or
+ * `echo "node -e 'y'"`) is not a real eval invocation and must not be rewritten.
+ *
+ * Shell quoting rules honored: single quotes are literal (no escapes); double
+ * quotes and unquoted context honor backslash escaping of the next character.
+ */
+function isInsideQuotes(str, index) {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < index && i < str.length; i++) {
+    const c = str[i];
+    if (inSingle) {
+      if (c === "'") inSingle = false;
+    } else if (inDouble) {
+      if (c === '\\') { i++; continue; }
+      if (c === '"') inDouble = false;
+    } else {
+      if (c === '\\') { i++; continue; }
+      if (c === "'") inSingle = true;
+      else if (c === '"') inDouble = true;
+    }
+  }
+  return inSingle || inDouble;
+}
+
+/**
  * Rewrites all `node -e "..."` / `node -e '...'` occurrences in a command
  * string to heredoc syntax: `node << 'NF_EVAL'\n<code>\nNF_EVAL`
  *
@@ -62,6 +92,10 @@ function rewriteCommand(command) {
   NODE_EVAL_RE.lastIndex = 0;
 
   while ((m = NODE_EVAL_RE.exec(command)) !== null) {
+    // Skip occurrences that are themselves inside another command's quoted
+    // argument (e.g. a grep pattern or echo string) — not real eval calls.
+    if (isInsideQuotes(command, m.index)) continue;
+
     const quoteChar = m[1];
     const jsStart = m.index + m[0].length;
     const closeIdx = findClosingQuote(command, jsStart, quoteChar);
@@ -160,4 +194,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { rewriteCommand, findClosingQuote };
+module.exports = { rewriteCommand, findClosingQuote, isInsideQuotes };

@@ -10,7 +10,7 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 
 const HOOK_PATH = path.join(__dirname, 'nf-node-eval-guard.js');
-const { rewriteCommand, findClosingQuote } = require('./nf-node-eval-guard');
+const { rewriteCommand, findClosingQuote, isInsideQuotes } = require('./nf-node-eval-guard');
 
 // ─── findClosingQuote ───────────────────────────────────────
 
@@ -141,6 +141,61 @@ describe('rewriteCommand skip cases', () => {
 
   it('skips unterminated quotes gracefully', () => {
     assert.equal(rewriteCommand('node -e "console.log(1)'), null);
+  });
+});
+
+// ─── isInsideQuotes ────────────────────────────────────────
+
+describe('isInsideQuotes', () => {
+  it('is false at start of command', () => {
+    assert.equal(isInsideQuotes('node -e "x"', 0), false);
+  });
+
+  it('is true inside an open single quote', () => {
+    // index of "node" inside grep 'node -e "x"'
+    const cmd = "grep 'node -e \"x\"' src";
+    assert.equal(isInsideQuotes(cmd, cmd.indexOf('node')), true);
+  });
+
+  it('is true inside an open double quote', () => {
+    const cmd = 'echo "run node -e foo"';
+    assert.equal(isInsideQuotes(cmd, cmd.indexOf('node')), true);
+  });
+
+  it('is false after a balanced quote closes', () => {
+    const cmd = 'AGENT="foo" node -e "x"';
+    assert.equal(isInsideQuotes(cmd, cmd.indexOf('node')), false);
+  });
+
+  it('single quotes do not honor backslash escapes', () => {
+    // Backslash is literal inside single quotes, so the next ' DOES close the
+    // quote (it is not escaped) — leaving `b node` unquoted, hence outside.
+    const cmd = "echo 'a\\'b node";
+    assert.equal(isInsideQuotes(cmd, cmd.indexOf('node')), false);
+  });
+});
+
+// ─── rewriteCommand: quoted-substring false positives ──────
+
+describe('rewriteCommand quoted-substring guard', () => {
+  it('does NOT rewrite node -e inside a single-quoted grep pattern (the repro)', () => {
+    const input = "grep -rl 'node -e \"' get-shit-done core 2>/dev/null";
+    assert.equal(rewriteCommand(input), null);
+  });
+
+  it('does NOT rewrite node -e inside a double-quoted echo string', () => {
+    const input = 'echo "always rewrite node -e \'code\' to heredoc"';
+    assert.equal(rewriteCommand(input), null);
+  });
+
+  it('still rewrites a real node -e even when a quoted mention precedes it', () => {
+    const input = "echo 'use node -e' && node -e \"console.log(1)\"";
+    const result = rewriteCommand(input);
+    assert.ok(result !== null);
+    assert.ok(result.includes("node << 'NF_EVAL'"));
+    assert.ok(result.includes('console.log(1)'));
+    // the echo'd mention must be left untouched
+    assert.ok(result.includes("echo 'use node -e'"));
   });
 });
 
