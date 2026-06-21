@@ -108,7 +108,7 @@ NF_CODERLM_SYMBOL="<symbol>"
 NF_CODERLM_FILE="<file>"
 node << 'NF_EVAL'
 const adapterPath = (require('fs').existsSync(process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs') ? process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs' : './bin/coderlm-adapter.cjs');
-const adapter = require(adapterPath);
+const adapter = require(adapterPath).createAdapter();
 const symbol = process.env.NF_CODERLM_SYMBOL;
 const file = process.env.NF_CODERLM_FILE || undefined;
 adapter.getCallers(symbol, file).then(r => {
@@ -146,7 +146,7 @@ Set the symbol as an environment variable, then run:
 NF_CODERLM_SYMBOL="<symbol>"
 node << 'NF_EVAL'
 const adapterPath = (require('fs').existsSync(process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs') ? process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs' : './bin/coderlm-adapter.cjs');
-const adapter = require(adapterPath);
+const adapter = require(adapterPath).createAdapter();
 const symbol = process.env.NF_CODERLM_SYMBOL;
 adapter.getImplementation(symbol).then(r => {
   process.stdout.write(JSON.stringify(r));
@@ -177,7 +177,7 @@ Set the file as an environment variable, then run:
 NF_CODERLM_FILE="<file>"
 node << 'NF_EVAL'
 const adapterPath = (require('fs').existsSync(process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs') ? process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs' : './bin/coderlm-adapter.cjs');
-const adapter = require(adapterPath);
+const adapter = require(adapterPath).createAdapter();
 const file = process.env.NF_CODERLM_FILE;
 adapter.findTests(file).then(r => {
   process.stdout.write(JSON.stringify(r));
@@ -215,7 +215,7 @@ NF_CODERLM_START="<startLine>"
 NF_CODERLM_END="<endLine>"
 node << 'NF_EVAL'
 const adapterPath = (require('fs').existsSync(process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs') ? process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs' : './bin/coderlm-adapter.cjs');
-const adapter = require(adapterPath);
+const adapter = require(adapterPath).createAdapter();
 const file = process.env.NF_CODERLM_FILE;
 const startLine = parseInt(process.env.NF_CODERLM_START, 10);
 const endLine = parseInt(process.env.NF_CODERLM_END, 10);

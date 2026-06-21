@@ -10,7 +10,28 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { filterSourceCallers } = require('./coderlm-adapter.cjs');
+const coderlmAdapter = require('./coderlm-adapter.cjs');
+const { filterSourceCallers } = coderlmAdapter;
+
+// Contract guard: the /nf:coderlm skill's query subcommands call the query
+// methods on the object returned by createAdapter() — NOT on the module itself.
+// The query methods are instance methods, so calling them on the bare module
+// (the original skill bug) throws "adapter.getCallers is not a function".
+// This locks the API shape the skill depends on.
+describe('adapter API contract (consumed by /nf:coderlm skill)', () => {
+  it('module exports createAdapter (a factory), not the query methods directly', () => {
+    assert.equal(typeof coderlmAdapter.createAdapter, 'function');
+    assert.equal(typeof coderlmAdapter.getCallers, 'undefined',
+      'query methods must live on the instance, not the module');
+  });
+
+  it('createAdapter() returns an instance exposing the skill query methods', () => {
+    const inst = coderlmAdapter.createAdapter();
+    for (const m of ['getCallers', 'getImplementation', 'findTests', 'peek']) {
+      assert.equal(typeof inst[m], 'function', `instance must expose ${m}()`);
+    }
+  });
+});
 
 describe('filterSourceCallers', () => {
   it('is exported as a function', () => {
