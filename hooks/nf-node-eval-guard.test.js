@@ -168,7 +168,8 @@ describe('isInsideQuotes', () => {
   });
 
   it('single quotes do not honor backslash escapes', () => {
-    // the \' does NOT close the single quote in shell single-quote rules
+    // Backslash is literal inside single quotes, so the next ' DOES close the
+    // quote (it is not escaped) — leaving `b node` unquoted, hence outside.
     const cmd = "echo 'a\\'b node";
     assert.equal(isInsideQuotes(cmd, cmd.indexOf('node')), false);
   });
