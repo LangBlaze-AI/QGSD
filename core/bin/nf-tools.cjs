@@ -1371,7 +1371,9 @@ function cmdStateUpdateProgress(cwd, raw) {
 
   const percent = totalPlans > 0 ? Math.round(totalSummaries / totalPlans * 100) : 0;
   const barWidth = 10;
-  const filled = Math.round(percent / 100 * barWidth);
+  // Clamp to [0, barWidth] \u2014 percent can exceed 100 when summaries > plans
+  // (orphan SUMMARY files), which would make repeat() throw on a negative count.
+  const filled = Math.max(0, Math.min(barWidth, Math.round(percent / 100 * barWidth)));
   const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(barWidth - filled);
   const progressStr = `[${bar}] ${percent}%`;
 
@@ -4274,7 +4276,7 @@ function cmdProgressRender(cwd, format, raw) {
   if (format === 'table') {
     // Render markdown table
     const barWidth = 10;
-    const filled = Math.round((percent / 100) * barWidth);
+    const filled = Math.max(0, Math.min(barWidth, Math.round((percent / 100) * barWidth)));
     const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(barWidth - filled);
     let out = `# ${milestone.version} ${milestone.name}\n\n`;
     out += `**Progress:** [${bar}] ${totalSummaries}/${totalPlans} plans (${percent}%)\n\n`;
@@ -4286,7 +4288,7 @@ function cmdProgressRender(cwd, format, raw) {
     output({ rendered: out }, raw, out);
   } else if (format === 'bar') {
     const barWidth = 20;
-    const filled = Math.round((percent / 100) * barWidth);
+    const filled = Math.max(0, Math.min(barWidth, Math.round((percent / 100) * barWidth)));
     const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(barWidth - filled);
     const text = `[${bar}] ${totalSummaries}/${totalPlans} plans (${percent}%)`;
     output({ bar: text, percent, completed: totalSummaries, total: totalPlans }, raw, text);
