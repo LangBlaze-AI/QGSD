@@ -4522,3 +4522,35 @@ describe('init quick atomic task_id assignment', () => {
     assert.strictEqual(data.next_num, 1, `RC-08: next_num should be 1, got ${data.next_num}`);
   });
 });
+
+describe('progress bar render (regression: percent > 100 must not crash)', () => {
+  let tmpDir;
+  beforeEach(() => { tmpDir = createTempProject(); });
+  afterEach(() => { cleanup(tmpDir); });
+
+  // Orphan SUMMARY files (more summaries than plans) drive percent above 100,
+  // which used to make the bar's `'░'.repeat(barWidth - filled)` throw
+  // `RangeError: Invalid count value: -N`. The bar must clamp instead.
+  function seedOverComplete(dir) {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', dir);
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '01-01-PLAN.md'), '# Plan');
+    fs.writeFileSync(path.join(phaseDir, '01-01-SUMMARY.md'), '# Summary 1');
+    fs.writeFileSync(path.join(phaseDir, '01-02-SUMMARY.md'), '# Summary 2'); // 1 plan, 2 summaries -> 200%
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'), '# Roadmap\n\n## Milestones\n- v0.1 Test\n');
+  }
+
+  test('progress bar --raw does not crash at >100% and clamps the bar full', () => {
+    seedOverComplete('01-foo');
+    const result = runNfTools('progress bar --raw', tmpDir);
+    assert.ok(result.success, `progress bar crashed instead of clamping: ${result.error}`);
+    assert.ok(/200%/.test(result.output), `expected 200% in output, got: ${result.output}`);
+    assert.ok(!/░/.test(result.output), `bar should be fully filled (no empty cells) at >100%, got: ${result.output}`);
+  });
+
+  test('progress table --raw does not crash at >100%', () => {
+    seedOverComplete('01-bar');
+    const result = runNfTools('progress table --raw', tmpDir);
+    assert.ok(result.success, `progress table crashed instead of clamping: ${result.error}`);
+  });
+});
