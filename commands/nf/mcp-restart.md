@@ -66,7 +66,7 @@ Valid agents: <$VALID_SLOTS joined with spaces>
 Run this inline node script via Bash:
 
 ```bash
-node -e "
+AGENT="$AGENT" node -e "
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -105,7 +105,7 @@ if (command === 'node' && args.length > 0) {
 }
 
 process.stdout.write(JSON.stringify(result) + '\n');
-" AGENT="$AGENT"
+"
 ```
 
 Store output as `$PROCESS_INFO`.
