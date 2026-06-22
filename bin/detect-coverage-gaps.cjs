@@ -187,7 +187,7 @@ if (require.main === module) {
     console.log([
       'Usage: detect-coverage-gaps.cjs [--spec=NAME] [--log=PATH] [--help]',
       '  Analyze formal-model requirement coverage.',
-      '  Writes .planning/formal/coverage-gaps.md and candidates.json.',
+      '  Writes .planning/formal/coverage-gaps.md when gaps exist.',
     ].join('\n'));
     process.exit(0);
   }
