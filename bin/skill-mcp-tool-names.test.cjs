@@ -46,8 +46,11 @@ describe('skill MCP tool name hygiene (commands/nf/*.md)', () => {
       MCP_REF.lastIndex = 0;
       while ((m = MCP_REF.exec(text)) !== null) {
         const server = m[1];
-        // Bare family name (e.g. "opencode") or "-cli" suffix → stale
-        if (/^(codex|gemini|copilot|opencode)(-cli)?$/.test(server)) {
+        // A CLI-family server MUST be exactly `<family>-<N>` (e.g. codex-1).
+        // Anything else for a known family — bare `codex`, `codex-cli`,
+        // `codex-cli-1`, `gemini-cli-2` — is a stale/invalid server name.
+        const fam = server.match(/^(codex|gemini|copilot|opencode)(?![a-z])/);
+        if (fam && !new RegExp(`^${fam[1]}-\\d+$`).test(server)) {
           offenders.push(`${path.basename(file)}: mcp__${server}__${m[2]}`);
         }
       }
