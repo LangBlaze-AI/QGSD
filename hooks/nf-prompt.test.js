@@ -29,7 +29,10 @@ function runHook(stdinPayload, extraEnv) {
   const result = spawnSync('node', [HOOK_PATH], {
     input: payload,
     encoding: 'utf8',
-    timeout: 5000,
+    // Generous timeout so a cold hook subprocess under heavy parallel test:ci
+    // load (measured ~9s for the git-walking hooks) isn't killed at 5s, which
+    // yields status=null and a spurious assertion failure. Healthy run ~1s.
+    timeout: 30000,
     env,
   });
   return {
