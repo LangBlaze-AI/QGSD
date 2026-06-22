@@ -13,6 +13,8 @@
  *    use ~/ or $HOME (the installer expands these per-user; literal paths ship verbatim)
  * 5. Inline-eval env/arg placement: nothing may trail an inline `node -e "<js>"`
  *    except a redirect/operator (see bin/skill-eval-lint.cjs for the standard).
+ * 6. MCP tool names: CLI-slot tool refs must use the real `<family>-<N>` slot and a
+ *    tool the server exposes (see bin/skill-mcp-lint.cjs).
  *
  * These patterns break when nForma is used in repos other than the NF source repo,
  * because ./bin/ and commands/nf/ only exist locally in the source checkout, and a
@@ -22,6 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const { findEvalTrailingViolations } = require('../bin/skill-eval-lint.cjs');
+const { findMcpToolViolations } = require('../bin/skill-mcp-lint.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const SCAN_DIRS = ['commands/nf', 'core/workflows'];
@@ -167,6 +170,18 @@ function scan(dir) {
           file: v.file,
           line: v.line,
           text: v.text,
+        });
+      }
+      // Rule 6 — MCP tool references for CLI slots (see skill-mcp-lint.cjs)
+      for (const v of findMcpToolViolations(content, rel)) {
+        violations.push({
+          rule: v.rule,
+          message: v.rule === 'mcp-stale-slot'
+            ? 'stale MCP slot name — use the real `<family>-<N>` slot (e.g. codex-1, gemini-1, copilot-1, opencode-1)'
+            : 'unknown MCP tool for this slot family — use a tool the server actually exposes',
+          file: v.file,
+          line: v.line,
+          text: `${v.ref}  (${v.hint})`,
         });
       }
     }

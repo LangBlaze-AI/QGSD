@@ -39,9 +39,22 @@ unit-tested in `bin/skill-eval-lint.test.cjs`. To check locally: `npm run lint:i
 - Never hardcode `/Users/<name>/.claude` or `/home/<name>/.config`; use `~/` or `$HOME`.
 - Don't reference `get-shit-done/` segments; use `~/.claude/nf/`.
 
-## MCP tool names
+## MCP tool names (enforced — lint-isolation Rule 6)
 
-- Reference live slot tools by their real, current names (`mcp__codex-1__codex`,
-  `mcp__gemini-1__gemini`, …), not stale aliases (`mcp__gemini-cli__gemini`). When a skill
-  calls `mcp__<slot>__identity` **directly** (not via a Task sub-agent), the slot must be in
-  the skill's `allowed-tools` frontmatter or the call is blocked.
+For the four CLI quorum families (`codex`, `gemini`, `copilot`, `opencode`):
+
+- Use the real `<family>-<N>` slot name — `mcp__codex-1__codex`, `mcp__gemini-1__gemini`,
+  `mcp__copilot-1__copilot`, `mcp__opencode-1__opencode`. **Never** the CLI-style aliases
+  `mcp__gemini-cli__…`, `mcp__codex-cli__…`, `mcp__copilot-cli__…`, or a bare
+  `mcp__opencode__…` — those slots don't exist, so every worker silently fails to find its
+  tool and the quorum/debug table renders all-UNAVAIL.
+- Use a tool the server actually exposes — e.g. copilot has `copilot`/`suggest`/`explain`,
+  there is **no `ask` tool**. (`bin/skill-mcp-lint.cjs` holds the per-family tool surface.)
+- This applies in prose/examples too (so a "don't use the Skill tool" note still names the
+  real tools). Template placeholders — `mcp__<slot>__identity`, `mcp__<$AGENT>__identity` —
+  are exempt (the skill substitutes them at runtime).
+
+Install-specific (`claude-*`, `ccr-*`) and external (`context7`, `sentry`, `plugin_*`) slots
+are NOT validated — their names/tools aren't fixed. When a skill calls `mcp__<slot>__identity`
+**directly** (not via a Task sub-agent), the slot must also be in the skill's `allowed-tools`
+frontmatter or the call is blocked.
