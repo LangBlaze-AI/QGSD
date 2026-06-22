@@ -63,4 +63,14 @@ node bin/audit-agent-payloads.cjs
 Scans skill .md files for `node bin/*.cjs --json` invocations and measures each script's
 output size against the 128KB GUARD-01 threshold. Flags scripts whose payloads risk
 exceeding agent context budget. Run standalone or as part of /nf:health.
+
+### Requirements Staleness (legacy paths)
+```bash
+node bin/validate-requirements-staleness.cjs
+```
+Reports requirement texts in `.planning/formal/requirements.json` that still reference
+pre-rename paths/names (`qgsd.json` → `nf.json`, `.formal/` → `.planning/formal/`,
+`get-shit-done`). DETECT-ONLY — it never edits the (hash-protected) requirements
+envelope; it prints the offending requirement IDs and suggested replacements so a human
+can update them. `--json` for machine output; `--strict` exits 1 when stale refs exist.
 </diagnostics>
