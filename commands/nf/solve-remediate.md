@@ -190,7 +190,7 @@ Extract the list of uncovered requirement IDs from `residual_vector.r_to_f.detai
 For each uncovered requirement ID (after applying cascade budget truncation), run the following node snippet to collect seed files via coderlm's synchronous API:
 
 ```bash
-node -e "
+NF_REQ_ID="$REQ_ID" NF_SYMBOL_HINT="$SYMBOL_HINT" node -e "
 const _nfBin = (n) => { const p = require('path').join(require('os').homedir(), '.claude/nf-bin', n); return require('fs').existsSync(p) ? p : './bin/' + n; };
 const { createAdapter } = require(_nfBin('coderlm-adapter.cjs'));
 const adapter = createAdapter({ enabled: true });
@@ -202,7 +202,7 @@ if (health.error) {
   process.exit(0);
 }
 
-const reqId = process.argv[1];
+const reqId = process.env.NF_REQ_ID;
 const seedSet = new Set();
 
 // Parse the requirement text to extract a function name heuristic.
@@ -215,8 +215,8 @@ function extractSymbolHint(id) {
   return id.replace(/-/g, '').toLowerCase();
 }
 
-// Attempt with symbol hint derived from requirement text (caller must pass as argv[2] if known)
-const symbolHint = process.argv[2] || extractSymbolHint(reqId);
+// Attempt with symbol hint derived from requirement text (caller passes it via the NF_SYMBOL_HINT env var if known)
+const symbolHint = process.env.NF_SYMBOL_HINT || extractSymbolHint(reqId);
 
 const impl = adapter.getImplementationSync(symbolHint);
 if (impl && impl.file && !impl.error) {
@@ -231,7 +231,7 @@ if (impl && impl.file && !impl.error) {
 }
 
 process.stdout.write(JSON.stringify({ seed_files: [...seedSet], skipped: false }));
-" -- \"\$REQ_ID\" \"\$SYMBOL_HINT\" 2>/dev/null || echo '{"seed_files":[],"skipped":true,"reason":"node error"}'
+" 2>/dev/null || echo '{"seed_files":[],"skipped":true,"reason":"node error"}'
 ```
 
 For each requirement ID:

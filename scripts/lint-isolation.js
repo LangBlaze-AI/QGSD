@@ -11,6 +11,10 @@
  * 3. Portable dispatch: no bare "commands/nf/" in Agent prompts — use $HOME/.claude/commands/nf/
  * 4. Absolute home path: no literal /Users/<name>/.claude or /home/<name>/.config —
  *    use ~/ or $HOME (the installer expands these per-user; literal paths ship verbatim)
+ * 5. Inline-eval env/arg placement: nothing may trail an inline `node -e "<js>"`
+ *    except a redirect/operator (see bin/skill-eval-lint.cjs for the standard).
+ * 6. MCP tool names: CLI-slot tool refs must use the real `<family>-<N>` slot and a
+ *    tool the server exposes (see bin/skill-mcp-lint.cjs).
  *
  * These patterns break when nForma is used in repos other than the NF source repo,
  * because ./bin/ and commands/nf/ only exist locally in the source checkout, and a
@@ -19,6 +23,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const { findEvalTrailingViolations } = require('../bin/skill-eval-lint.cjs');
+const { findMcpToolViolations } = require('../bin/skill-mcp-lint.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const SCAN_DIRS = ['commands/nf', 'core/workflows'];
@@ -138,21 +144,46 @@ function scan(dir) {
     if (entry.isDirectory()) {
       scan(full);
     } else if (entry.isFile() && entry.name.endsWith('.md')) {
-      const lines = fs.readFileSync(full, 'utf8').split('\n');
-      lines.forEach((line, i) => {
+      const content = fs.readFileSync(full, 'utf8');
+      const rel = path.relative(ROOT, full);
+      content.split('\n').forEach((line, i) => {
         for (const rule of RULES) {
           rule.re.lastIndex = 0;
           if (rule.re.test(line)) {
             violations.push({
               rule: rule.id,
               message: rule.message,
-              file: path.relative(ROOT, full),
+              file: rel,
               line: i + 1,
               text: line.trim(),
             });
           }
         }
       });
+      // Rule 5 — inline-eval env/arg placement (multi-line; see skill-eval-lint.cjs)
+      for (const v of findEvalTrailingViolations(content, rel)) {
+        violations.push({
+          rule: v.rule,
+          message: v.rule === 'eval-env-after'
+            ? 'env assignment AFTER `node -e` is argv, not env (process.env undefined) — move it BEFORE node'
+            : 'argument AFTER `node -e` breaks the eval-guard heredoc rewrite — pass it via an env var read with process.env',
+          file: v.file,
+          line: v.line,
+          text: v.text,
+        });
+      }
+      // Rule 6 — MCP tool references for CLI slots (see skill-mcp-lint.cjs)
+      for (const v of findMcpToolViolations(content, rel)) {
+        violations.push({
+          rule: v.rule,
+          message: v.rule === 'mcp-stale-slot'
+            ? 'stale MCP slot name — use the real `<family>-<N>` slot (e.g. codex-1, gemini-1, copilot-1, opencode-1)'
+            : 'unknown MCP tool for this slot family — use a tool the server actually exposes',
+          file: v.file,
+          line: v.line,
+          text: `${v.ref}  (${v.hint})`,
+        });
+      }
     }
   }
 }

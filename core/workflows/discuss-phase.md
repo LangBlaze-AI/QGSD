@@ -587,7 +587,7 @@ Context captured. Spawning plan-phase...
 
 Spawn plan-phase as Task:
 
-> **Note:** Use the Task tool to spawn this sub-agent. Do NOT invoke any Skill tool (e.g., `mcp__gemini-cli-1__gemini`, `mcp__codex-cli-1__review`, `mcp__opencode__opencode`, `mcp__copilot-cli__ask`) as a substitute. Skill tool calls do not spawn sub-agents — they call external models directly, bypassing the agent system.
+> **Note:** Use the Task tool to spawn this sub-agent. Do NOT invoke any Skill tool (e.g., `mcp__gemini-1__gemini`, `mcp__codex-1__review`, `mcp__opencode-1__opencode`, `mcp__copilot-1__copilot`) as a substitute. Skill tool calls do not spawn sub-agents — they call external models directly, bypassing the agent system.
 
 ```
 Task(
