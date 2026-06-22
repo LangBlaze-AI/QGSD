@@ -171,9 +171,9 @@ var cp = require("child_process");
 var providers = JSON.parse(fs.readFileSync("bin/providers.json", "utf8"));
 var result = {};
 providers.providers.forEach(function(p) {
-  if (p.cli && p.mainTool) {
+  if (p.mainTool) {
     var found = false;
-    try { found = fs.existsSync(p.cli); } catch(_) {}
+    try { found = p.cli ? fs.existsSync(p.cli) : false; } catch(_) {}
     if (!found) {
       try { cp.execFileSync("which", [p.mainTool], {encoding:"utf8"}); found = true; } catch(_) {}
     }
