@@ -17,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const SCAN_DIRS = ['commands/nf'];
+const SCAN_DIRS = ['commands/nf', 'core/workflows'];
 
 // --- Rule definitions ---
 const RULES = [
@@ -40,6 +40,15 @@ const RULES = [
     // Does NOT match: $HOME/.claude/commands/nf/ or ~/.claude/commands/nf/
     re: /(?:Read and follow|read and follow)\s+commands\/nf\//g,
     message: 'Non-portable Agent dispatch — use $HOME/.claude/commands/nf/ with CWD fallback',
+  },
+  {
+    id: 'absolute-home-path',
+    // Literal /Users/<name>/.claude/... or /home/<name>/.config/... home paths
+    // are non-portable: they ship verbatim and break on every other user's
+    // machine (install does NOT rewrite them). Use ~/ or $HOME instead, which
+    // the installer expands per-user.
+    re: /\/(?:Users|home)\/[A-Za-z0-9._-]+\/\.(?:claude|config)\b/g,
+    message: 'Non-portable absolute home path (e.g. /Users/<name>/.claude/...) — use ~/.claude/ or $HOME/.claude/',
   },
 ];
 

@@ -33,7 +33,7 @@ rm -f .planning/ddmin-discover.json .planning/ddmin-manifest.json .planning/ddmi
 ### Step 1.1: Set Activity
 
 ```bash
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs activity-set \
+node ~/.claude/nf/bin/nf-tools.cjs activity-set \
   '{"activity":"fix_tests","sub_activity":"ddmin_isolation","state_file":".planning/maintain-tests-state.json"}'
 ```
 
@@ -42,7 +42,7 @@ Print: `nForma fix-tests: Phase 1 — ddmin isolation`
 ### Step 1.2: Discover Tests
 
 ```bash
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs maintain-tests discover \
+node ~/.claude/nf/bin/nf-tools.cjs maintain-tests discover \
   --output-file .planning/ddmin-discover.json
 ```
 
@@ -58,14 +58,14 @@ Pin execution order with a fixed seed. **This seed MUST be used for all subseque
 BASELINE_SEED=42
 
 # Create a single mega-batch containing ALL tests in seed-pinned order
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs maintain-tests batch \
+node ~/.claude/nf/bin/nf-tools.cjs maintain-tests batch \
   --input-file .planning/ddmin-discover.json \
   --seed $BASELINE_SEED \
   --size 9999 \
   --manifest-file .planning/ddmin-manifest.json
 
 # Run all tests (single batch, index 0)
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs maintain-tests run-batch \
+node ~/.claude/nf/bin/nf-tools.cjs maintain-tests run-batch \
   --batch-file .planning/ddmin-manifest.json \
   --batch-index 0 \
   --timeout 3600 \
@@ -150,7 +150,7 @@ Write an inline Python script to `/tmp/flakiness-filter.py` using the Write tool
 
 Note: `stable` is the union of `independent_failures` + `pollution_victims` (all tests proceeding to ddmin). This preserves backward compatibility with Step 1.6 which reads `stable`.
 
-Script uses the same `BASELINE_SEED` for all single-test reruns. The NF_TOOLS path is `/Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs`. Each single-test rerun invocation MUST include `--timeout 60` to prevent hung runners from stalling the flakiness loop indefinitely.
+Script uses the same `BASELINE_SEED` for all single-test reruns. The NF_TOOLS path is `~/.claude/nf/bin/nf-tools.cjs`. Each single-test rerun invocation MUST include `--timeout 60` to prevent hung runners from stalling the flakiness loop indefinitely.
 
 ```bash
 python3 /tmp/flakiness-filter.py
@@ -196,7 +196,7 @@ Write a Python orchestration script to `/tmp/ddmin-orchestrator.py`. The script:
 
    c. Run ddmin via shell:
    ```bash
-   node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs maintain-tests ddmin \
+   node ~/.claude/nf/bin/nf-tools.cjs maintain-tests ddmin \
      --failing-test <target_test> \
      --candidates-file .planning/ddmin-candidates-<hash>.json \
      --run-cap 200 \
@@ -293,7 +293,7 @@ Save the full Phase 1 state using `maintain-tests save-state`. Build the state J
 ```
 
 ```bash
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs maintain-tests save-state \
+node ~/.claude/nf/bin/nf-tools.cjs maintain-tests save-state \
   --state-json '<state JSON>'
 ```
 
@@ -399,7 +399,7 @@ Print: `nForma fix-tests: Triage quorum verdict: {verdict}`
 Update state: set `triage_quorum_verdict = "APPROVED"`, `pipeline_phase = "fixing"`.
 
 ```bash
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs maintain-tests save-state \
+node ~/.claude/nf/bin/nf-tools.cjs maintain-tests save-state \
   --state-json '<updated state with triage_quorum_verdict = "APPROVED" and pipeline_phase = "fixing">'
 ```
 
@@ -504,7 +504,7 @@ Print: `nForma fix-tests: Fixing [{current_fix_index + 1}/{len(fix_order)}] {tes
 
 Set activity:
 ```bash
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs activity-set \
+node ~/.claude/nf/bin/nf-tools.cjs activity-set \
   '{"activity":"fix_tests","sub_activity":"fixing","test_file":"{test_file}","fix_index":{current_fix_index},"state_file":".planning/maintain-tests-state.json"}'
 ```
 
@@ -512,7 +512,7 @@ node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs activity-set \
 
 Run the failing test once in isolation to capture its current failure output:
 ```bash
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs maintain-tests run-batch \
+node ~/.claude/nf/bin/nf-tools.cjs maintain-tests run-batch \
   --batch-file /tmp/single-test-manifest-{hash}.json \
   --batch-index 0 \
   --timeout 120 \
@@ -639,7 +639,7 @@ Instructions:
    - If a regression test is not applicable (e.g., the fix is a beforeEach cleanup): create a minimal regression test that verifies the cleanup runs correctly.
 3. Run the fixed test in isolation to confirm it passes:
    ```bash
-   node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs maintain-tests run-batch \
+   node ~/.claude/nf/bin/nf-tools.cjs maintain-tests run-batch \
      --batch-file /tmp/single-test-manifest-{hash}.json \
      --batch-index 0 \
      --timeout 120 \
@@ -679,7 +679,7 @@ Wait for Task to return.
 After each successful commit, re-run the full suite to detect regressions:
 
 ```bash
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs maintain-tests run-batch \
+node ~/.claude/nf/bin/nf-tools.cjs maintain-tests run-batch \
   --batch-file .planning/ddmin-manifest.json \
   --batch-index 0 \
   --timeout 3600 \
@@ -770,7 +770,7 @@ If `current_fix_index == len(fix_order)`: all fixes processed.
 Update state: `pipeline_phase = "verification"`. Save state.
 
 ```bash
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs activity-set \
+node ~/.claude/nf/bin/nf-tools.cjs activity-set \
   '{"activity":"fix_tests","sub_activity":"verification","state_file":".planning/maintain-tests-state.json"}'
 ```
 
@@ -783,7 +783,7 @@ Print: `nForma fix-tests: Phase 3 complete — {len(fix_log)} fixes applied. Adv
 ### Step 4.1: Final Full-Suite Run
 
 ```bash
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs activity-set \
+node ~/.claude/nf/bin/nf-tools.cjs activity-set \
   '{"activity":"fix_tests","sub_activity":"final_verification","state_file":".planning/maintain-tests-state.json"}'
 ```
 
@@ -792,7 +792,7 @@ Print: `nForma fix-tests: Phase 4 — final verification run`
 Run the full suite one final time with the same pinned seed:
 
 ```bash
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs maintain-tests run-batch \
+node ~/.claude/nf/bin/nf-tools.cjs maintain-tests run-batch \
   --batch-file .planning/ddmin-manifest.json \
   --batch-index 0 \
   --timeout 3600 \
@@ -910,9 +910,9 @@ Print: `nForma fix-tests: Final quorum verdict: {verdict}`
 ### Step 4.4: Clear Activity + Terminal Summary
 
 ```bash
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs activity-set \
+node ~/.claude/nf/bin/nf-tools.cjs activity-set \
   '{"activity":"fix_tests","sub_activity":"complete","state_file":".planning/maintain-tests-state.json"}'
-node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs activity-clear
+node ~/.claude/nf/bin/nf-tools.cjs activity-clear
 ```
 
 Print the terminal summary:
@@ -948,7 +948,7 @@ Print the terminal summary:
 
 If any Bash or Python step exits with non-zero:
 1. Print: `nForma fix-tests: ERROR at <step name> — <stderr first 300 chars>`
-2. Run: `node /Users/jonathanborduas/.claude/nf/bin/nf-tools.cjs activity-clear`
+2. Run: `node ~/.claude/nf/bin/nf-tools.cjs activity-clear`
 3. Surface the original error to the user.
 4. Do NOT continue to the next step.
 

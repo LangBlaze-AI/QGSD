@@ -18,11 +18,11 @@ Close formal model coverage gaps by generating new formal specifications for unc
 </objective>
 
 <execution_context>
-@/Users/jonathanborduas/.claude/nf/workflows/close-formal-gaps.md
+@~/.claude/nf/workflows/close-formal-gaps.md
 </execution_context>
 
 <process>
-Execute the close-formal-gaps workflow from @/Users/jonathanborduas/.claude/nf/workflows/close-formal-gaps.md end-to-end.
+Execute the close-formal-gaps workflow from @~/.claude/nf/workflows/close-formal-gaps.md end-to-end.
 Pass through all --flags from arguments:
   --batch                     Fully autonomous mode — skip all user prompts, auto-approve clusters
   --category="Category Name"  Focus on a specific category

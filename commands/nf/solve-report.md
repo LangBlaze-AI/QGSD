@@ -145,7 +145,7 @@ Note: R->D gaps are auto-remediated by generating developer doc entries in docs/
 After the before/after summary, run `state-candidates.cjs` to discover missing states that should be modeled:
 
 ```bash
-node /Users/jonathanborduas/.claude/nf-bin/state-candidates.cjs --json 2>/dev/null || node bin/state-candidates.cjs --json 2>/dev/null || true
+node $HOME/.claude/nf-bin/state-candidates.cjs --json 2>/dev/null || node bin/state-candidates.cjs --json 2>/dev/null || true
 ```
 
 If the script produces output, display a summary of unmodeled state candidates: count of unmapped actions and suggested missing transitions. These are informational — they feed into the next `/nf:solve` iteration if new formal models are created. Fail-open: if the script is not found or errors, skip silently.
@@ -154,7 +154,7 @@ If the script produces output, display a summary of unmodeled state candidates: 
 
 Re-run a lightweight diagnostic to get a fresh residual snapshot:
 ```bash
-DRIFT_SNAPSHOT=$(node /Users/jonathanborduas/.claude/nf-bin/nf-solve.cjs --json --report-only --fast --project-root=$(pwd) 2>/dev/null)
+DRIFT_SNAPSHOT=$(node $HOME/.claude/nf-bin/nf-solve.cjs --json --report-only --fast --project-root=$(pwd) 2>/dev/null)
 ```
 If nf-bin path doesn't exist, fall back to `bin/nf-solve.cjs`.
 
@@ -227,10 +227,10 @@ If `input.timing` is null or empty, skip this section silently (fail-open — ol
 Display the convergence section showing trend sparklines, oscillation status, and action items:
 
 ```bash
-node /Users/jonathanborduas/.claude/nf-bin/convergence-report.cjs --project-root=$(pwd) 2>/dev/null || node bin/convergence-report.cjs --project-root=$(pwd) 2>/dev/null || true
+node $HOME/.claude/nf-bin/convergence-report.cjs --project-root=$(pwd) 2>/dev/null || node bin/convergence-report.cjs --project-root=$(pwd) 2>/dev/null || true
 ```
 
-If `/Users/jonathanborduas/.claude/nf-bin/convergence-report.cjs` exists, prefer the installed path. Falls back to `bin/convergence-report.cjs` (CWD-relative).
+If `$HOME/.claude/nf-bin/convergence-report.cjs` exists, prefer the installed path. Falls back to `bin/convergence-report.cjs` (CWD-relative).
 
 This section is only meaningful after 5+ solve sessions (per MIN_POINTS threshold). On early runs, it displays a brief note indicating more sessions are needed. Fail-open: if the script errors, skip silently and continue to Step 7.
 
@@ -240,10 +240,10 @@ This section is only meaningful after 5+ solve sessions (per MIN_POINTS threshol
 
 After the before/after table, run the full formal verification using absolute paths if not already run during remediation:
 ```bash
-node /Users/jonathanborduas/.claude/nf-bin/run-formal-verify.cjs --project-root=$(pwd)
+node $HOME/.claude/nf-bin/run-formal-verify.cjs --project-root=$(pwd)
 ```
 
-If /Users/jonathanborduas/.claude/nf-bin/run-formal-verify.cjs does not exist, fall back to bin/run-formal-verify.cjs (CWD-relative).
+If $HOME/.claude/nf-bin/run-formal-verify.cjs does not exist, fall back to bin/run-formal-verify.cjs (CWD-relative).
 
 Parse `.planning/formal/check-results.ndjson` and display **every check** grouped by result:
 
@@ -289,7 +289,7 @@ Check if any gates can be promoted based on sustained zero residual. A gate qual
 node bin/promote-gate-maturity.cjs --check --json --project-root=$(pwd)
 ```
 
-If `/Users/jonathanborduas/.claude/nf-bin/promote-gate-maturity.cjs` exists, prefer the installed path. Parse the JSON output and log any promotions or demotions:
+If `$HOME/.claude/nf-bin/promote-gate-maturity.cjs` exists, prefer the installed path. Parse the JSON output and log any promotions or demotions:
 - If models are eligible for promotion: log `"Gate maturity: {N} model(s) eligible for promotion"`
 - If models need demotion (violations detected): log `"Gate maturity: {N} model(s) demoted due to violations"`
 - If `--fix` would be appropriate (models have violations), log the suggestion but do NOT auto-fix — gate maturity changes require deliberate action.
