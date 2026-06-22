@@ -74,12 +74,6 @@ function isInsideQuotes(str, index) {
 }
 
 /**
- * Rewrites all `node -e "..."` / `node -e '...'` occurrences in a command
- * string to heredoc syntax: `node << 'NF_EVAL'\n<code>\nNF_EVAL`
- *
- * Returns null if no rewrite needed, or the rewritten command string.
- */
-/**
  * Finds the [start, end) ranges of heredoc BODIES in a command string.
  * A `node -e "..."` appearing inside a heredoc body (e.g. a `git commit -F -`
  * message that merely mentions an inline eval) is not a real invocation and
@@ -110,6 +104,12 @@ function findHeredocRanges(command) {
   return ranges;
 }
 
+/**
+ * Rewrites all `node -e "..."` / `node -e '...'` occurrences in a command
+ * string to heredoc syntax: `node << 'NF_EVAL'\n<code>\nNF_EVAL`
+ *
+ * Returns null if no rewrite needed, or the rewritten command string.
+ */
 function rewriteCommand(command) {
   // Skip if already using our heredoc marker
   if (/<<\s*'?NF_EVAL/.test(command)) return null;

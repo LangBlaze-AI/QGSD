@@ -217,8 +217,11 @@ describe('rewriteCommand heredoc-body guard', () => {
     assert.ok(result.includes('console.log(1)'));
   });
 
+  it('findHeredocRanges returns no ranges when there is no heredoc', () => {
+    assert.equal(findHeredocRanges('a\n').length, 0);
+  });
+
   it('findHeredocRanges spans the body of quoted/dash/bare heredocs', () => {
-    assert.deepEqual(findHeredocRanges('a\n').length === 0, true);
     const r = findHeredocRanges("x <<'E'\nbody\nE");
     assert.equal(r.length, 1);
     // body is "body\n" (between the opening line and the closing delimiter line)
