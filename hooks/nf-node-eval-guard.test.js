@@ -199,6 +199,33 @@ describe('rewriteCommand quoted-substring guard', () => {
   });
 });
 
+// ─── rewriteCommand: heredoc-body guard (F2b) ──────────────
+
+describe('rewriteCommand heredoc-body guard', () => {
+  const { findHeredocRanges } = require('./nf-node-eval-guard');
+
+  it('does NOT rewrite an inline-eval mention inside a heredoc body (e.g. a commit message)', () => {
+    const cmd = "git commit -F - <<'COMMIT_MSG'\nfix: the step ran node -e \"<js>\" and broke\nbody line\nCOMMIT_MSG";
+    assert.equal(rewriteCommand(cmd), null);
+  });
+
+  it('still rewrites a real node -e that follows a CLOSED heredoc', () => {
+    const cmd = "cat <<'EOF'\nsome text\nEOF\nnode -e \"console.log(1)\"";
+    const result = rewriteCommand(cmd);
+    assert.ok(result !== null);
+    assert.ok(result.includes("node << 'NF_EVAL'"));
+    assert.ok(result.includes('console.log(1)'));
+  });
+
+  it('findHeredocRanges spans the body of quoted/dash/bare heredocs', () => {
+    assert.deepEqual(findHeredocRanges('a\n').length === 0, true);
+    const r = findHeredocRanges("x <<'E'\nbody\nE");
+    assert.equal(r.length, 1);
+    // body is "body\n" (between the opening line and the closing delimiter line)
+    assert.ok(r[0].end > r[0].start);
+  });
+});
+
 // ─── rewriteCommand: edge cases ────────────────────────────
 
 describe('rewriteCommand edge cases', () => {

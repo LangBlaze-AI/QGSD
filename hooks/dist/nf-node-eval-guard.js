@@ -79,6 +79,33 @@ function isInsideQuotes(str, index) {
  *
  * Returns null if no rewrite needed, or the rewritten command string.
  */
+/**
+ * Finds the [start, end) ranges of heredoc BODIES in a command string.
+ * A `node -e "..."` appearing inside a heredoc body (e.g. a `git commit -F -`
+ * message that merely mentions an inline eval) is not a real invocation and
+ * must not be rewritten. Handles `<< DELIM`, `<<-DELIM`, `<< 'DELIM'`,
+ * `<< "DELIM"`; the body runs from the next line to the closing delimiter line.
+ */
+function findHeredocRanges(command) {
+  const ranges = [];
+  const re = /<<(-?)\s*(['"]?)([A-Za-z_]\w*)\2/g;
+  let m;
+  while ((m = re.exec(command)) !== null) {
+    const dashLess = m[1] === '-';
+    const delim = m[3];
+    const nl = command.indexOf('\n', re.lastIndex);
+    if (nl === -1) continue; // no body on a single line
+    const bodyStart = nl + 1;
+    const closeRe = new RegExp(`^${dashLess ? '\\t*' : ''}${delim}[ \\t]*$`, 'm');
+    const rest = command.slice(bodyStart);
+    const cm = closeRe.exec(rest);
+    const bodyEnd = cm ? bodyStart + cm.index : command.length;
+    ranges.push({ start: bodyStart, end: bodyEnd });
+    re.lastIndex = bodyEnd;
+  }
+  return ranges;
+}
+
 function rewriteCommand(command) {
   // Skip if already using our heredoc marker
   if (/<<\s*'?NF_EVAL/.test(command)) return null;
@@ -90,11 +117,15 @@ function rewriteCommand(command) {
   const matches = [];
   let m;
   NODE_EVAL_RE.lastIndex = 0;
+  const heredocRanges = findHeredocRanges(command);
 
   while ((m = NODE_EVAL_RE.exec(command)) !== null) {
     // Skip occurrences that are themselves inside another command's quoted
     // argument (e.g. a grep pattern or echo string) — not real eval calls.
     if (isInsideQuotes(command, m.index)) continue;
+    // Skip occurrences inside a heredoc body (e.g. a commit message that
+    // merely mentions an inline eval) — also not a real invocation.
+    if (heredocRanges.some(r => m.index >= r.start && m.index < r.end)) continue;
 
     const quoteChar = m[1];
     const jsStart = m.index + m[0].length;
@@ -194,4 +225,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { rewriteCommand, findClosingQuote, isInsideQuotes };
+module.exports = { rewriteCommand, findClosingQuote, isInsideQuotes, findHeredocRanges };
