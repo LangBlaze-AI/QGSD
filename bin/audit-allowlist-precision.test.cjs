@@ -56,4 +56,14 @@ describe('F38 — mcp-set-model allow-lists the real default slots', () => {
       assert.ok(md.includes(`mcp__${s}__identity`), `${s} must stay allow-listed`);
     }
   });
+
+  it('its Step 5 eval passes env BEFORE node (process.env.AGENT/MODEL not undefined)', () => {
+    // Same class as the mcp-setup F1 bug: `node -e "<js>" AGENT="x" MODEL="y"` puts
+    // the assignments in argv, not env, so process.env.AGENT/MODEL were undefined
+    // and the write stored model_preferences[undefined]=undefined.
+    assert.ok(!/node -e "(?:[^"\\]|\\.)*"[ \t]+[A-Z_][A-Z0-9_]*=/.test(md),
+      'no trailing-env-after-eval may remain');
+    assert.ok(/AGENT="\$AGENT" MODEL="\$MODEL" node -e "/.test(md),
+      'env must be assigned before node -e');
+  });
 });

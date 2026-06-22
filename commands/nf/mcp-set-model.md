@@ -99,7 +99,7 @@ Run /nf:mcp-set-model $AGENT <model> with one of the above models.
 Run this inline node script via Bash:
 
 ```bash
-node -e "
+AGENT="$AGENT" MODEL="$MODEL" node -e "
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -122,7 +122,7 @@ fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
 
 const result = { oldModel, newModel: process.env.MODEL, agent: process.env.AGENT };
 process.stdout.write(JSON.stringify(result) + '\n');
-" AGENT="$AGENT" MODEL="$MODEL"
+"
 ```
 
 Parse the JSON output to get `oldModel` and `newModel`.
