@@ -62,7 +62,12 @@ function fetchReleases(repo, since, limit, execFn) {
     const output = execFile('gh', [
       'release', 'list', '--repo', repo,
       '--limit', String(limit),
-      '--json', 'tagName,name,publishedAt,isPrerelease,url'
+      // NOTE: `url` is NOT a valid field for `gh release list --json` (it exists
+      // only on `gh release view`). Including it makes gh exit non-zero with
+      // "Unknown JSON field: url", which the caller's try/catch swallows → ALL
+      // upstream release detection silently returns []. The release URL is
+      // reconstructed from `tagName` below.
+      '--json', 'tagName,name,publishedAt,isPrerelease'
     ], { encoding: 'utf8' });
     let releases = JSON.parse(output);
     if (since) {

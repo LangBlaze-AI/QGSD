@@ -246,3 +246,30 @@ describe('INSPIRATION_KEYWORDS', () => {
     assert.ok(INSPIRATION_KEYWORDS.includes('agent'));
   });
 });
+
+// Regression: `url` is NOT a valid `gh release list --json` field — requesting it
+// makes gh exit non-zero ("Unknown JSON field: url"), the try/catch swallows it,
+// and ALL upstream release detection silently returns []. The URL is reconstructed
+// from tagName instead.
+describe('fetchReleases — gh release list field hygiene', () => {
+  it('does not request the invalid `url` json field', () => {
+    let capturedArgs = null;
+    const execFn = (_cmd, args) => {
+      capturedArgs = args;
+      return JSON.stringify([
+        { tagName: 'v1.2.3', name: 'Release', publishedAt: new Date().toISOString(), isPrerelease: false },
+      ]);
+    };
+    const releases = fetchReleases('owner/repo', null, 5, execFn);
+    const jsonIdx = capturedArgs.indexOf('--json');
+    const fields = capturedArgs[jsonIdx + 1];
+    assert.ok(!/\burl\b/.test(fields), `gh release list must not request 'url' (got: ${fields})`);
+    assert.equal(releases.length, 1);
+    assert.equal(releases[0].tagName, 'v1.2.3');
+  });
+
+  it('fails open to [] when gh errors (does not throw)', () => {
+    const execFn = () => { throw new Error('Unknown JSON field: "url"'); };
+    assert.deepEqual(fetchReleases('owner/repo', null, 5, execFn), []);
+  });
+});
