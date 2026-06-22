@@ -644,7 +644,6 @@ Commit milestone completion.
 ```bash
 node ~/.claude/nf/bin/nf-tools.cjs commit "chore: complete v[X.Y] milestone" --files .planning/milestones/v[X.Y]-ROADMAP.md .planning/milestones/v[X.Y]-REQUIREMENTS.md .planning/milestones/v[X.Y]-MILESTONE-AUDIT.md .planning/MILESTONES.md .planning/PROJECT.md .planning/STATE.md
 ```
-```
 
 Confirm: "Committed: chore: complete v[X.Y] milestone"
 

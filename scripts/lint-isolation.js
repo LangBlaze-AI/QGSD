@@ -2,15 +2,19 @@
 /**
  * lint-isolation.js
  *
- * Guards against non-portable paths in nForma skill files.
+ * Guards against non-portable paths in nForma skill files. Scans both
+ * `commands/nf/` and `core/workflows/`.
  *
  * Rules:
  * 1. NF interference: no /get-shit-done/ directory segments (use ~/.claude/nf/)
  * 2. Portable require: no require('./bin/...') — use $HOME/.claude/nf-bin/ with CWD fallback
  * 3. Portable dispatch: no bare "commands/nf/" in Agent prompts — use $HOME/.claude/commands/nf/
+ * 4. Absolute home path: no literal /Users/<name>/.claude or /home/<name>/.config —
+ *    use ~/ or $HOME (the installer expands these per-user; literal paths ship verbatim)
  *
  * These patterns break when nForma is used in repos other than the NF source repo,
- * because ./bin/ and commands/nf/ only exist locally in the source checkout.
+ * because ./bin/ and commands/nf/ only exist locally in the source checkout, and a
+ * hardcoded home path only exists on the author's machine.
  */
 
 const fs = require('fs');
@@ -48,7 +52,7 @@ const RULES = [
     // machine (install does NOT rewrite them). Use ~/ or $HOME instead, which
     // the installer expands per-user.
     re: /\/(?:Users|home)\/[A-Za-z0-9._-]+\/\.(?:claude|config)\b/g,
-    message: 'Non-portable absolute home path (e.g. /Users/<name>/.claude/...) — use ~/.claude/ or $HOME/.claude/',
+    message: 'Non-portable absolute home path (e.g. /Users/<name>/.claude or /home/<name>/.config) — use a ~/ or $HOME-relative path instead',
   },
 ];
 
