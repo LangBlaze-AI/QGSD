@@ -23,6 +23,7 @@ const path = require('path');
 const CMD_DIR = path.join(__dirname, '..', 'commands', 'nf');
 
 // Known MCP tool surface per slot family (from the installed servers).
+// (CLI families: codex, gemini, copilot, opencode.)
 const VALID_TOOLS = {
   codex: ['codex', 'review', 'identity', 'health_check', 'deep_health_check', 'help', 'ping'],
   gemini: ['gemini', 'identity', 'health_check', 'deep_health_check', 'help', 'ping'],
