@@ -124,7 +124,7 @@ If "Continue": use a second AskUserQuestion to collect the key:
 Store the key using this Bash command (substitute AGENT_KEY and API_KEY):
 
 ```bash
-KEY_RESULT=$(node -e "
+KEY_RESULT=$(AGENT_KEY="{agent-name}" API_KEY="{user-key}" node -e "
 const { set, SERVICE } = require('~/.claude/nf-bin/secrets.cjs');
 const agentKey = process.env.AGENT_KEY;
 const apiKey   = process.env.API_KEY;
@@ -137,7 +137,7 @@ const apiKey   = process.env.API_KEY;
     process.stdout.write(JSON.stringify({ stored: false, error: e.message }) + '\n');
   }
 })();
-" AGENT_KEY="{agent-name}" API_KEY="{user-key}")
+")
 ```
 
 Parse KEY_RESULT:
@@ -159,12 +159,12 @@ If "Store unencrypted": mark agent as `method: env_block` with the key value in 
 
 ```bash
 mkdir -p ~/.claude/debug
-node -e "
+AGENT_KEY="{agent-name}" node -e "
 const fs = require('fs');
 const ts = new Date().toISOString();
 const msg = ts + ' nForma mcp-setup: secrets store unavailable for ' + process.env.AGENT_KEY + ' — API key stored unencrypted in env block\n';
 fs.appendFileSync(require('os').homedir() + '/.claude/debug/mcp-setup-audit.log', msg);
-" AGENT_KEY="{agent-name}"
+"
 ```
 
 ### Step 2c: Add another or finish
@@ -271,7 +271,7 @@ fi
 For each pending agent, add the mcpServers entry. Use this inline node script as a template (adapt for the actual pending agents in the session):
 
 ```bash
-node -e "
+PENDING_AGENTS_JSON='...' CLAUDE_MCP_PATH="$CLAUDE_MCP_PATH" node -e "
 const fs  = require('fs');
 const path = require('path');
 const os  = require('os');
@@ -300,7 +300,7 @@ for (const agent of pendingAgents) {
 
 fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2));
 process.stdout.write(JSON.stringify({ written: true, count: pendingAgents.length }) + '\n');
-" PENDING_AGENTS_JSON='...' CLAUDE_MCP_PATH="$CLAUDE_MCP_PATH"
+"
 ```
 
 ### Step 3d: Write auth_type to nf.json for all pending agents
@@ -308,7 +308,7 @@ process.stdout.write(JSON.stringify({ written: true, count: pendingAgents.length
 After writing mcpServers entries, synchronize `auth_type` from `providers.json` to `~/.claude/nf.json` `agent_config` for each pending agent. This ensures correct T1/T2 tiered dispatch (FALLBACK-01) by classifying each slot as `sub` (subscription CLI) or `api` (ccr-routed API).
 
 ```bash
-node -e "
+SELECTED_SLOTS_JSON='[list of pending agent names as JSON array]' node -e "
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -337,7 +337,7 @@ for (const slot of selectedSlots) {
 nfCfg.agent_config = agentConfig;
 fs.writeFileSync(nfPath, JSON.stringify(nfCfg, null, 2) + '\n');
 console.log('auth_type written for: ' + selectedSlots.join(', '));
-" SELECTED_SLOTS_JSON='[list of pending agent names as JSON array]'
+"
 ```
 
 The `SELECTED_SLOTS_JSON` value comes from the pending batch built in Steps 2a-2c. Pass all agent names that were configured (not skipped) as a JSON array string.
@@ -599,7 +599,7 @@ If "Cancel": display "No changes made." Return to roster display.
 Store the key using bin/secrets.cjs (agent name and key passed via env vars — never interpolated):
 
 ```bash
-KEY_RESULT=$(node -e "
+KEY_RESULT=$(AGENT_KEY="{agent-name}" API_KEY="{user-key}" node -e "
 const { set, SERVICE } = require('~/.claude/nf-bin/secrets.cjs');
 const agentKey = process.env.AGENT_KEY;
 const apiKey   = process.env.API_KEY;
@@ -612,7 +612,7 @@ const apiKey   = process.env.API_KEY;
     process.stdout.write(JSON.stringify({ stored: false, error: e.message }) + '\n');
   }
 })();
-" AGENT_KEY="{agent-name}" API_KEY="{user-key}")
+")
 ```
 
 Parse KEY_RESULT:
@@ -631,12 +631,12 @@ Parse KEY_RESULT:
   If "Store unencrypted in ~/.claude.json (less secure)": write audit log then mark agent as `method: env_block` in pending changes and proceed to Step C:
   ```bash
   mkdir -p ~/.claude/debug
-  node -e "
+  AGENT_KEY="{agent-name}" node -e "
   const fs = require('fs');
   const ts = new Date().toISOString();
   const msg = ts + ' nForma mcp-setup: secrets store unavailable for ' + process.env.AGENT_KEY + ' — API key stored unencrypted in env block\n';
   fs.appendFileSync(require('os').homedir() + '/.claude/debug/mcp-setup-audit.log', msg);
-  " AGENT_KEY="{agent-name}"
+  "
   ```
 
 **Step C — Confirm + apply**
@@ -703,7 +703,7 @@ If `CLAUDE_MCP_PATH` is empty: display warning and use placeholder args `["claud
 
 3. Write new mcpServers entry via inline node (all values passed via env vars — never interpolated):
 ```bash
-node -e "
+AGENT_NAME="{agent-name}" BASE_URL="{base-url}" MODEL="{model}" MCP_PATH="$CLAUDE_MCP_PATH" API_KEY_ENV="{api-key-if-env-block-method}" node -e "
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
@@ -727,7 +727,7 @@ claudeJson.mcpServers[agentName] = {
 };
 fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2));
 process.stdout.write(JSON.stringify({ written: true }) + '\n');
-" AGENT_NAME="{agent-name}" BASE_URL="{base-url}" MODEL="{model}" MCP_PATH="$CLAUDE_MCP_PATH" API_KEY_ENV="{api-key-if-env-block-method}"
+"
 ```
 
 4. Sync secrets store secrets to ~/.claude.json:
@@ -806,7 +806,7 @@ cp ~/.claude.json ~/.claude.json.backup-$(date +%Y-%m-%d-%H%M%S) 2>/dev/null || 
 
 2. Copy mcpServers entry from source slot to new slot (deep copy — command, args, env all preserved):
 ```bash
-node -e "
+SOURCE_SLOT="{source-slot-name}" NEW_SLOT="{new-slot-name}" node -e "
 const fs   = require('fs');
 const os   = require('os');
 const claudeJsonPath = os.homedir() + '/.claude.json';
@@ -820,14 +820,14 @@ cj.mcpServers = cj.mcpServers || {};
 cj.mcpServers[newSlot] = JSON.parse(JSON.stringify(src)); // deep copy
 fs.writeFileSync(claudeJsonPath, JSON.stringify(cj, null, 2));
 process.stdout.write(JSON.stringify({ written: true, newSlot, sourceSlot: srcSlot }) + '\n');
-" SOURCE_SLOT="{source-slot-name}" NEW_SLOT="{new-slot-name}"
+"
 ```
 
 If `written: false`: display error and return to roster.
 
 3. Append new slot to `quorum_active` in `~/.claude/nf.json`:
 ```bash
-node -e "
+NEW_SLOT="{new-slot-name}" node -e "
 const fs = require('fs'), os = require('os');
 const nfPath = os.homedir() + '/.claude/nf.json';
 let cfg = {};
@@ -841,7 +841,7 @@ if (!active.includes(newSlot)) {
 } else {
   process.stdout.write(JSON.stringify({ added: false, slot: newSlot, reason: 'already present' }) + '\n');
 }
-" NEW_SLOT="{new-slot-name}"
+"
 ```
 
 4. Invoke `/nf:mcp-restart {new-slot-name}` to start the new agent process.
@@ -962,7 +962,7 @@ Re-display the AskUserQuestion with updated statuses after each toggle.
 **Apply handler:** When "Apply" selected:
 
 ```bash
-node -e "
+PENDING_ACTIVE="{JSON.stringify(PENDING_ACTIVE)}" node -e "
 const fs = require('fs'), os = require('os');
 const nfPath = os.homedir() + '/.claude/nf.json';
 let cfg = {};
@@ -970,7 +970,7 @@ try { cfg = JSON.parse(fs.readFileSync(nfPath, 'utf8')); } catch(e) {}
 cfg.quorum_active = JSON.parse(process.env.PENDING_ACTIVE);
 fs.writeFileSync(nfPath, JSON.stringify(cfg, null, 2) + '\n');
 process.stdout.write(JSON.stringify({ written: true, count: cfg.quorum_active.length }) + '\n');
-" PENDING_ACTIVE="{JSON.stringify(PENDING_ACTIVE)}"
+"
 ```
 
 If `written: true`: display:
@@ -1090,7 +1090,7 @@ Return to Agent Sub-Menu after each edit.
 Run an inline node script to check whether a key is already stored in secrets store for the selected agent:
 
 ```bash
-KEY_CHECK_RESULT=$(node -e "
+KEY_CHECK_RESULT=$(AGENT_NAME="{agent-name}" node -e "
 const { get, SERVICE } = require('~/.claude/nf-bin/secrets.cjs');
 (async () => {
   try {
@@ -1117,7 +1117,7 @@ const { get, SERVICE } = require('~/.claude/nf-bin/secrets.cjs');
     process.stdout.write(JSON.stringify({ hasKey: false, method: 'none', error: e.message }) + '\n');
   }
 })();
-" AGENT_NAME="{agent-name}")
+")
 ```
 
 Parse KEY_CHECK_RESULT for: `hasKey` (boolean), `method` ('secrets store'|'env_block'|'none').
@@ -1152,7 +1152,7 @@ If "Cancel": display "No changes made." Return to Agent Sub-Menu.
 Run inline node script using `set()` from `bin/secrets.cjs`. Pass key via environment variable only — never interpolate into the script body:
 
 ```bash
-KEY_STORE_RESULT=$(node -e "
+KEY_STORE_RESULT=$(AGENT_NAME="{agent-name}" API_KEY="{user-entered-key}" node -e "
 const { set, SERVICE } = require('~/.claude/nf-bin/secrets.cjs');
 (async () => {
   try {
@@ -1165,7 +1165,7 @@ const { set, SERVICE } = require('~/.claude/nf-bin/secrets.cjs');
     process.stdout.write(JSON.stringify({ stored: false, error: e.message }) + '\n');
   }
 })();
-" AGENT_NAME="{agent-name}" API_KEY="{user-entered-key}")
+")
 ```
 
 Parse KEY_STORE_RESULT:
@@ -1184,12 +1184,12 @@ Parse KEY_STORE_RESULT:
   If "Store unencrypted in ~/.claude.json (less secure)": write audit log then proceed to Step E with `method: env_block`:
   ```bash
   mkdir -p ~/.claude/debug
-  node -e "
+  AGENT_KEY="{agent-name}" node -e "
   const fs = require('fs');
   const ts = new Date().toISOString();
   const msg = ts + ' nForma mcp-setup: secrets store unavailable for ' + process.env.AGENT_KEY + ' — API key stored unencrypted in env block\n';
   fs.appendFileSync(require('os').homedir() + '/.claude/debug/mcp-setup-audit.log', msg);
-  " AGENT_KEY="{agent-name}"
+  "
   ```
 
 **Step E — Confirm + apply**
@@ -1222,7 +1222,7 @@ cp ~/.claude.json ~/.claude.json.backup-$(date +%Y-%m-%d-%H%M%S) 2>/dev/null || 
 
 2. Patch ANTHROPIC_API_KEY in the agent's env block. Pass key via environment variable only — never interpolate the value into the script body:
 ```bash
-node -e "
+AGENT_NAME="{agent-name}" API_KEY="{user-entered-key}" node -e "
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
@@ -1237,7 +1237,7 @@ if (claudeJson.mcpServers && claudeJson.mcpServers[agentName]) {
 }
 fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2));
 process.stdout.write(JSON.stringify({ written: true }) + '\n');
-" AGENT_NAME="{agent-name}" API_KEY="{user-entered-key}"
+"
 ```
 
 3. Sync all secrets store secrets back to ~/.claude.json:
@@ -1272,7 +1272,7 @@ Return to Agent Sub-Menu (user can make further changes or go Back).
 Read the agent's current `ANTHROPIC_BASE_URL` from `~/.claude.json`:
 
 ```bash
-CURRENT_PROVIDER=$(node -e "
+CURRENT_PROVIDER=$(AGENT_NAME="{agent-name}" node -e "
 const fs = require('fs'), path = require('path'), os = require('os');
 let url = '—';
 try {
@@ -1280,7 +1280,7 @@ try {
   url = (cj.mcpServers && cj.mcpServers[process.env.AGENT_NAME] && cj.mcpServers[process.env.AGENT_NAME].env && cj.mcpServers[process.env.AGENT_NAME].env.ANTHROPIC_BASE_URL) || '—';
 } catch (e) {}
 process.stdout.write(url + '\n');
-" AGENT_NAME="{agent-name}")
+")
 ```
 
 Map the raw URL to a friendly provider name for display:
@@ -1351,7 +1351,7 @@ cp ~/.claude.json ~/.claude.json.backup-$(date +%Y-%m-%d-%H%M%S) 2>/dev/null || 
 
 2. Patch ANTHROPIC_BASE_URL in the agent's env block. Pass the new URL via environment variable — never interpolate into the script body:
 ```bash
-node -e "
+AGENT_NAME="{agent-name}" NEW_URL="{new-url}" node -e "
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
@@ -1366,7 +1366,7 @@ if (claudeJson.mcpServers && claudeJson.mcpServers[agentName]) {
 }
 fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2));
 process.stdout.write(JSON.stringify({ written: true }) + '\n');
-" AGENT_NAME="{agent-name}" NEW_URL="{new-url}"
+"
 ```
 
 3. Sync secrets store secrets to ~/.claude.json:
@@ -1430,7 +1430,7 @@ cp ~/.claude.json ~/.claude.json.backup-$(date +%Y-%m-%d-%H%M%S) 2>/dev/null || 
 
 2. Delete the agent's mcpServers entry via inline node (agent name passed via env var — never interpolated):
 ```bash
-node -e "
+AGENT_NAME="{agent-name}" node -e "
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
@@ -1443,7 +1443,7 @@ if (claudeJson.mcpServers && claudeJson.mcpServers[agentName]) {
 }
 fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2));
 process.stdout.write(JSON.stringify({ removed: true, agent: agentName }) + '\n');
-" AGENT_NAME="{agent-name}"
+"
 ```
 
 3. Display:
