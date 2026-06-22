@@ -26,7 +26,12 @@ function runHook(stdinPayload) {
   const result = spawnSync('node', [HOOK_PATH], {
     input: JSON.stringify(stdinPayload),
     encoding: 'utf8',
-    timeout: 5000,
+    // Generous timeout: the hook does node startup + `git log` + per-pair diff
+    // analysis. Measured cold-cache under heavy parallel load (full test:ci on
+    // CI) at ~9s — a 5s cap killed the subprocess, yielding status=null and a
+    // spurious "exit code must be 0" failure (the CB-TC9 flake). 30s is pure
+    // test-side headroom; a healthy hook still returns in ~1s.
+    timeout: 30000,
   });
   return {
     stdout: result.stdout || '',
@@ -495,7 +500,7 @@ test('CB-TC14: Malformed stdin JSON exits 0 fail-open', () => {
   const result = spawnSync('node', [HOOK_PATH], {
     input: '{ malformed json',
     encoding: 'utf8',
-    timeout: 5000,
+    timeout: 30000, // headroom for loaded CI (see runHook note)
   });
   assert.strictEqual(result.status, 0, 'exit code must be 0 on malformed input');
   assert.strictEqual(result.stdout, '', 'stdout must be empty');
