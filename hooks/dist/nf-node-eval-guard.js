@@ -94,7 +94,10 @@ function findHeredocRanges(command) {
     const nl = command.indexOf('\n', re.lastIndex);
     if (nl === -1) continue; // no body on a single line
     const bodyStart = nl + 1;
-    const closeRe = new RegExp(`^${dashLess ? '\\t*' : ''}${delim}[ \\t]*$`, 'm');
+    // Bash requires the terminator line to be EXACTLY the delimiter (only
+    // leading tabs are allowed, and only for the `<<-` form) — no trailing
+    // whitespace. Matching it exactly avoids treating `DELIM  ` as a close.
+    const closeRe = new RegExp(`^${dashLess ? '\\t*' : ''}${delim}$`, 'm');
     const rest = command.slice(bodyStart);
     const cm = closeRe.exec(rest);
     const bodyEnd = cm ? bodyStart + cm.index : command.length;

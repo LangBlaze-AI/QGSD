@@ -221,11 +221,28 @@ describe('rewriteCommand heredoc-body guard', () => {
     assert.equal(findHeredocRanges('a\n').length, 0);
   });
 
-  it('findHeredocRanges spans the body of quoted/dash/bare heredocs', () => {
-    const r = findHeredocRanges("x <<'E'\nbody\nE");
+  it('findHeredocRanges spans the body of quoted, bare, and dash heredocs', () => {
+    // quoted delimiter
+    const q = findHeredocRanges("x <<'E'\nbody\nE");
+    assert.equal(q.length, 1);
+    assert.ok(q[0].end > q[0].start);
+    // bare delimiter
+    const bare = findHeredocRanges('x <<E\nbody\nE');
+    assert.equal(bare.length, 1);
+    assert.ok(bare[0].end > bare[0].start);
+    // dash form: only leading TABS are stripped before the terminator
+    const dash = findHeredocRanges('x <<-E\nbody\n\tE');
+    assert.equal(dash.length, 1);
+    assert.ok(dash[0].end > dash[0].start);
+  });
+
+  it('findHeredocRanges does NOT accept a terminator with trailing whitespace', () => {
+    // bash requires the terminator line to be exactly the delimiter — `E  ` is
+    // not a close, so the body runs to end-of-command (a later eval mention here
+    // would be inside the body and correctly skipped).
+    const r = findHeredocRanges('x <<E\nbody\nE  \nmore');
     assert.equal(r.length, 1);
-    // body is "body\n" (between the opening line and the closing delimiter line)
-    assert.ok(r[0].end > r[0].start);
+    assert.equal(r[0].end, 'x <<E\nbody\nE  \nmore'.length, 'no valid terminator → body to EOC');
   });
 
   it('findHeredocRanges ignores a heredoc opener that sits inside quotes', () => {
