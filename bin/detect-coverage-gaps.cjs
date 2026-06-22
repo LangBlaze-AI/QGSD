@@ -183,6 +183,14 @@ function detectCoverageGaps(options = {}) {
 // ── CLI entrypoint ───────────────────────────────────────────────────────────
 if (require.main === module) {
   const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log([
+      'Usage: detect-coverage-gaps.cjs [--spec=NAME] [--log=PATH] [--help]',
+      '  Analyze formal-model requirement coverage.',
+      '  Writes .planning/formal/coverage-gaps.md when gaps exist.',
+    ].join('\n'));
+    process.exit(0);
+  }
   const specArg = args.find(a => a.startsWith('--spec='));
   const logArg  = args.find(a => a.startsWith('--log='));
 
