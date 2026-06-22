@@ -4,17 +4,19 @@ description: Set the default model for a quorum agent — validates against the 
 argument-hint: "<agent> <model>"
 allowed-tools:
   - Bash
+  # Step 3 calls `mcp__<agent>__identity` DIRECTLY, so the target slot must be
+  # allow-listed here or the identity probe is blocked (the skill then falls back
+  # to an unvalidated write). These cover the default install slots. The previous
+  # `ccr-*` entries were phantom (not in any shipped config) and, worse, the real
+  # Daintree slots (claude-z-ai, claude-minimax) were missing — so model
+  # validation was silently skipped for them.
   - mcp__codex-1__identity
   - mcp__gemini-1__identity
   - mcp__opencode-1__identity
   - mcp__copilot-1__identity
   - mcp__claude-1__identity
-  - mcp__ccr-1__identity
-  - mcp__ccr-2__identity
-  - mcp__ccr-3__identity
-  - mcp__ccr-4__identity
-  - mcp__ccr-5__identity
-  - mcp__ccr-6__identity
+  - mcp__claude-z-ai__identity
+  - mcp__claude-minimax__identity
 ---
 
 <objective>
