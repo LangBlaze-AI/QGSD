@@ -6338,6 +6338,29 @@ function formatFPRateTable(fpRates, tuning) {
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 function main() {
+  // --help must short-circuit BEFORE any work. Without this guard, unknown
+  // flags fall through and the full diagnostic sweep runs (and hangs), so
+  // `nf-solve.cjs --help` never returns usage.
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log([
+      'Usage: nf-solve.cjs [options]',
+      '',
+      '  --report-only        run diagnostics only; no remediation',
+      '  --json               emit JSON output',
+      '  --fast               skip the heavy diagnostic phases',
+      '  --plan-only          compute a remediation plan, then stop',
+      '  --execute            resume from a saved (planned) session',
+      '  --resume             resume an in-progress session',
+      '  --max-iterations=N   convergence-loop cap (default 3)',
+      '  --focus="<phrase>"   bias the diagnostic sweep toward a phrase',
+      '  --skip-layers=a,b    skip named remediation layers',
+      '  --project-root=DIR   operate on another repo',
+      '  --no-auto-commit     skip the formal-artifacts auto-commit',
+      '  --help, -h           show this help',
+    ].join('\n'));
+    process.exit(0);
+  }
+
   // Step 0: Bootstrap formal infrastructure
   preflight();
 

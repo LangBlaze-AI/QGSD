@@ -241,8 +241,14 @@ function printQuorumFailures() {
 }
 
 if (Object.keys(providers).length === 0) {
-  console.log('No HTTP-backed MCP slots found (checked ANTHROPIC_BASE_URL and PROVIDER_SLOT with providers.json).');
-  printQuorumFailures();
+  // Under --json the output must stay valid JSON: callers (e.g. quorum.md)
+  // JSON.parse() it. A plain human string here threw on CLI-only setups.
+  if (JSON_OUT) {
+    console.log('[]');
+  } else {
+    console.log('No HTTP-backed MCP slots found (checked ANTHROPIC_BASE_URL and PROVIDER_SLOT with providers.json).');
+    printQuorumFailures();
+  }
   process.exit(0);
 }
 
