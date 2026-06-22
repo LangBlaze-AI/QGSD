@@ -75,7 +75,7 @@ If `new == 0` and `--force` was NOT passed:
 ## Step 2: Run Haiku classification
 
 ```bash
-node -e "
+NF_CLASSIFY_FORCE=$([[ "$FLAGS" == *--force* ]] && echo 1) node << 'NF_EVAL'
 const fs = require('fs');
 const home = require('os').homedir();
 const installed = require('path').join(home, '.claude/nf-bin/solve-tui.cjs');
@@ -84,7 +84,10 @@ const stPath = fs.existsSync(installed) ? installed : local;
 if (!fs.existsSync(stPath)) { console.log(JSON.stringify({error:'solve-tui.cjs not found'})); process.exit(1); }
 const st = require(stPath);
 const data = st.loadSweepData();
-const force = process.argv.includes('--force');
+// --force comes via the NF_CLASSIFY_FORCE env var (set above) — NOT a CLI arg.
+// A heredoc script can't take a trailing `$FLAGS` (it lands after the delimiter
+// and node treats `--force` as a bad CLI option), which was the original bug.
+const force = process.env.NF_CLASSIFY_FORCE === '1';
 const result = st.classifyWithHaiku(data, { force });
 const stats = result._stats || { cached: 0, classified: 0, failed: 0 };
 
@@ -97,7 +100,7 @@ for (const k of ['dtoc','ctor','ttor','dtor']) {
 }
 
 console.log(JSON.stringify({ stats, verdicts }));
-" $FLAGS
+NF_EVAL
 ```
 
 Parse the output. Display the classification summary:
