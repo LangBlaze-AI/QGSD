@@ -224,6 +224,24 @@ describe('rewriteCommand heredoc-body guard', () => {
     // body is "body\n" (between the opening line and the closing delimiter line)
     assert.ok(r[0].end > r[0].start);
   });
+
+  it('findHeredocRanges ignores a heredoc opener that sits inside quotes', () => {
+    // `<<'EOF'` here is just text inside an echo string, not a real heredoc —
+    // it must NOT produce a body range (which could otherwise run to EOF and
+    // swallow a later real eval).
+    assert.equal(findHeredocRanges(`echo "<<'EOF'"`).length, 0);
+    assert.equal(findHeredocRanges("grep '<<EOF' file").length, 0);
+  });
+
+  it('still rewrites a real node -e after a quoted heredoc-opener mention', () => {
+    const cmd = `echo "<<'EOF'" && node -e "console.log(1)"`;
+    const result = rewriteCommand(cmd);
+    assert.ok(result !== null, 'the real eval must still be rewritten');
+    assert.ok(result.includes("node << 'NF_EVAL'"));
+    assert.ok(result.includes('console.log(1)'));
+    // the quoted mention is left untouched
+    assert.ok(result.includes(`echo "<<'EOF'"`));
+  });
 });
 
 // ─── rewriteCommand: edge cases ────────────────────────────

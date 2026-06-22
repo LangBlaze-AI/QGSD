@@ -91,6 +91,10 @@ function findHeredocRanges(command) {
   const re = /<<(-?)\s*(['"]?)([A-Za-z_]\w*)\2/g;
   let m;
   while ((m = re.exec(command)) !== null) {
+    // A `<<DELIM` sequence that appears inside a quoted string (e.g.
+    // `echo "<<'EOF'"`) is not a real heredoc opener — skip it so it cannot
+    // open a bogus body range that would swallow a later real `node -e`.
+    if (isInsideQuotes(command, m.index)) continue;
     const dashLess = m[1] === '-';
     const delim = m[3];
     const nl = command.indexOf('\n', re.lastIndex);
