@@ -4,11 +4,20 @@ description: Set the default model for a quorum agent — validates against the 
 argument-hint: "<agent> <model>"
 allowed-tools:
   - Bash
+  # Step 3 calls `mcp__<agent>__identity` DIRECTLY, so the target slot must be
+  # allow-listed here or the identity probe is blocked and the skill falls back to
+  # an unvalidated write. Slots are user-configurable, so a static list can't be
+  # exhaustive — this covers the common ones (default CLI + Daintree + the
+  # documented ccr-1..6) and the graceful fallback handles any other slot a user
+  # has added. The real gap fixed here was the previously-MISSING Daintree slots
+  # (claude-z-ai, claude-minimax); the ccr-* entries are retained.
   - mcp__codex-1__identity
   - mcp__gemini-1__identity
   - mcp__opencode-1__identity
   - mcp__copilot-1__identity
   - mcp__claude-1__identity
+  - mcp__claude-z-ai__identity
+  - mcp__claude-minimax__identity
   - mcp__ccr-1__identity
   - mcp__ccr-2__identity
   - mcp__ccr-3__identity
@@ -97,7 +106,7 @@ Run /nf:mcp-set-model $AGENT <model> with one of the above models.
 Run this inline node script via Bash:
 
 ```bash
-node -e "
+AGENT="$AGENT" MODEL="$MODEL" node -e "
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -120,7 +129,7 @@ fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
 
 const result = { oldModel, newModel: process.env.MODEL, agent: process.env.AGENT };
 process.stdout.write(JSON.stringify(result) + '\n');
-" AGENT="$AGENT" MODEL="$MODEL"
+"
 ```
 
 Parse the JSON output to get `oldModel` and `newModel`.
