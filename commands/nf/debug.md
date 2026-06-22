@@ -89,7 +89,7 @@ const { refineModel } = require(path.join(nfBin, 'formal-model-loop.cjs'));
 // Build callLlm: spawns a subprocess LLM call
 const claudeBin = path.join(nfBin, 'resolve-cli.cjs');
 let claudePath;
-try { claudePath = require(claudeBin)(); } catch (_) { claudePath = 'claude'; }
+try { claudePath = require(claudeBin).resolveCli('claude') || 'claude'; } catch (_) { claudePath = 'claude'; }
 
 const callLlm = (prompt) => spawnSync(claudePath, [
   '-p', prompt, '--model', 'claude-haiku-4-5-20251001', '--max-turns', '1'
@@ -172,10 +172,10 @@ Worker prompt template (inline $BUNDLE verbatim in each):
   - If FORMAL CONSTRAINTS are present, respect them — they represent verified properties of the system.
 
 Dispatch all 4 workers as parallel Task calls:
-- Task(subagent_type="general-purpose", prompt="Call mcp__gemini-cli__gemini with: [worker prompt with $BUNDLE inlined verbatim]")
-- Task(subagent_type="general-purpose", prompt="Call mcp__opencode__opencode with: [worker prompt with $BUNDLE inlined verbatim]")
-- Task(subagent_type="general-purpose", prompt="Call mcp__copilot-cli__ask with: [worker prompt with $BUNDLE inlined verbatim]")
-- Task(subagent_type="general-purpose", prompt="Call mcp__codex-cli__codex with: [worker prompt with $BUNDLE inlined verbatim]")
+- Task(subagent_type="general-purpose", prompt="Call mcp__gemini-1__gemini with: [worker prompt with $BUNDLE inlined verbatim]")
+- Task(subagent_type="general-purpose", prompt="Call mcp__opencode-1__opencode with: [worker prompt with $BUNDLE inlined verbatim]")
+- Task(subagent_type="general-purpose", prompt="Call mcp__copilot-1__copilot with: [worker prompt with $BUNDLE inlined verbatim]")
+- Task(subagent_type="general-purpose", prompt="Call mcp__codex-1__codex with: [worker prompt with $BUNDLE inlined verbatim]")
 
 ### Step D: Collect and parse responses
 
