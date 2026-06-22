@@ -234,9 +234,17 @@ async function validateRequirements(options = {}) {
     return { status: 'already-frozen', frozen_at: envelope.frozen_at };
   }
 
-  // Check if API key is available (skip check if using mockCall)
+  // Check if API key is available (skip check if using mockCall).
+  // Warn loudly on stderr: subscription users (Claude Code via OAuth, no API key)
+  // would otherwise have this semantic-validation pass silently no-op, leaving
+  // them to believe review-requirements ran every pass.
   if (!apiKey && !mockCall) {
-    return { status: 'skipped', reason: 'ANTHROPIC_API_KEY not set' };
+    process.stderr.write(
+      '[validate-requirements-haiku] WARNING: semantic validation pass SKIPPED — ' +
+      'ANTHROPIC_API_KEY is not set. Findings below come from the structural passes only. ' +
+      'Set ANTHROPIC_API_KEY to enable the Haiku semantic pass.\n'
+    );
+    return { status: 'skipped', reason: 'ANTHROPIC_API_KEY not set', skipped_pass: 'semantic-validation' };
   }
 
   // Extract requirements array

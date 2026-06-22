@@ -9,8 +9,9 @@ const crypto = require('crypto');
  * Internal helper: merge baseline into existing requirements.
  * Handles the core sync logic (steps 2-7 from original implementation).
  */
-function _syncFromBaseline(baseline, projectRoot) {
+function _syncFromBaseline(baseline, projectRoot, opts = {}) {
   const root = projectRoot || process.cwd();
+  const dryRun = !!opts.dryRun;
 
   // 2. Read existing requirements
   const reqPath = path.join(root, '.planning', 'formal', 'requirements.json');
@@ -128,7 +129,10 @@ function _syncFromBaseline(baseline, projectRoot) {
       // Remove undefined keys
       if (envelope.schema_version === undefined) delete envelope.schema_version;
 
-      fs.writeFileSync(reqPath, JSON.stringify(envelope, null, 2) + '\n');
+      // --dry-run: compute the merge + report, but write nothing.
+      if (!dryRun) {
+        fs.writeFileSync(reqPath, JSON.stringify(envelope, null, 2) + '\n');
+      }
     }
   }
 
@@ -138,6 +142,7 @@ function _syncFromBaseline(baseline, projectRoot) {
     updated,
     total_before: totalBefore,
     total_after: requirements.length,
+    dry_run: dryRun,
   };
 }
 
@@ -150,7 +155,7 @@ function _syncFromBaseline(baseline, projectRoot) {
  * @param {string} [projectRoot] - Path to project root, defaults to process.cwd()
  * @returns {{ added: Array, skipped: Array, total_before: number, total_after: number }}
  */
-function syncBaselineRequirements(profile, projectRoot) {
+function syncBaselineRequirements(profile, projectRoot, opts = {}) {
   const root = projectRoot || process.cwd();
 
   // 1. Load baseline requirements
@@ -163,7 +168,7 @@ function syncBaselineRequirements(profile, projectRoot) {
     process.exit(2);
   }
 
-  return _syncFromBaseline(baseline, root);
+  return _syncFromBaseline(baseline, root, opts);
 }
 
 /**
@@ -175,7 +180,7 @@ function syncBaselineRequirements(profile, projectRoot) {
  * @param {string} [projectRoot] - Path to project root, defaults to process.cwd()
  * @returns {{ added: Array, skipped: Array, total_before: number, total_after: number }}
  */
-function syncBaselineRequirementsFromIntent(intent, projectRoot) {
+function syncBaselineRequirementsFromIntent(intent, projectRoot, opts = {}) {
   const root = projectRoot || process.cwd();
 
   // 1. Load baseline requirements from intent
@@ -188,7 +193,7 @@ function syncBaselineRequirementsFromIntent(intent, projectRoot) {
     process.exit(2);
   }
 
-  return _syncFromBaseline(baseline, root);
+  return _syncFromBaseline(baseline, root, opts);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +201,7 @@ function syncBaselineRequirementsFromIntent(intent, projectRoot) {
 // ---------------------------------------------------------------------------
 
 function printReport(result, profile) {
-  console.log(`Baseline sync: ${profile} profile`);
+  console.log(`Baseline sync: ${profile} profile${result.dry_run ? '  [DRY RUN — no changes written]' : ''}`);
   console.log(`  Before: ${result.total_before} requirements`);
   console.log(`  Added:  ${result.added.length} new requirements`);
   console.log(`  Updated: ${result.updated.length} existing requirements retagged`);
@@ -228,8 +233,32 @@ function printReport(result, profile) {
 if (require.main === module) {
   const args = process.argv.slice(2);
 
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log([
+      'Usage: node bin/sync-baseline-requirements.cjs [options]',
+      '',
+      'Merge profile/intent baseline requirements into',
+      '.planning/formal/requirements.json (idempotent — dedupes on `text`).',
+      '',
+      'Options:',
+      '  --profile <web|mobile|desktop|api|cli|library>  Use a named profile.',
+      '  --intent-file <path>  Use an intent JSON file.',
+      '  --json                Machine-readable output.',
+      '  --dry-run             Compute and report the merge but write NOTHING.',
+      '  -h, --help            Show this help and exit (no analysis, no writes).',
+      '',
+      'With no --profile/--intent-file, the profile is read from',
+      '.planning/config.json, else auto-detected.',
+    ].join('\n'));
+    process.exit(0);
+  }
+
   // --json flag
   const jsonOutput = args.includes('--json');
+
+  // --dry-run: compute + report the merge without writing requirements.json
+  const dryRun = args.includes('--dry-run');
+  const runOpts = { dryRun };
 
   // --detect is deprecated (auto-detect is now the default behavior) — silently strip it
   const cleanArgs = args.filter(arg => arg !== '--detect');
@@ -243,7 +272,7 @@ if (require.main === module) {
       const intentFilePath = cleanArgs[intentFileIdx + 1];
       const intentContent = fs.readFileSync(intentFilePath, 'utf8');
       const intent = JSON.parse(intentContent);
-      const result = syncBaselineRequirementsFromIntent(intent);
+      const result = syncBaselineRequirementsFromIntent(intent, undefined, runOpts);
       if (jsonOutput) {
         console.log(JSON.stringify(result, null, 2));
       } else {
@@ -269,7 +298,7 @@ if (require.main === module) {
         path.join(process.cwd(), '.planning/config.json'), 'utf8'
       ));
       if (config.intent) {
-        const result = syncBaselineRequirementsFromIntent(config.intent);
+        const result = syncBaselineRequirementsFromIntent(config.intent, undefined, runOpts);
         if (jsonOutput) {
           console.log(JSON.stringify(result, null, 2));
         } else {
@@ -287,7 +316,7 @@ if (require.main === module) {
       const { detectProjectIntent } = require('./detect-project-intent.cjs');
       const detectionResult = detectProjectIntent(process.cwd());
       const intent = detectionResult.suggested;
-      const result = syncBaselineRequirementsFromIntent(intent);
+      const result = syncBaselineRequirementsFromIntent(intent, undefined, runOpts);
       if (jsonOutput) {
         console.log(JSON.stringify({ ...result, detection: detectionResult }, null, 2));
       } else {
@@ -301,7 +330,7 @@ if (require.main === module) {
     }
   }
 
-  const result = syncBaselineRequirements(profile);
+  const result = syncBaselineRequirements(profile, undefined, runOpts);
   if (jsonOutput) {
     console.log(JSON.stringify(result, null, 2));
   } else {
