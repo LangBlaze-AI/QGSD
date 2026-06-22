@@ -113,13 +113,18 @@ if (CACHE_STATUS) {
   process.exit(0);
 }
 
-// ─── Load provider map from ~/.claude.json ────────────────────────────────────
+// ─── Load provider map from ~/.claude.json (NF_CLAUDE_JSON overrides for tests) ─
 let mcpServers = {};
+const claudeJsonPath = process.env.NF_CLAUDE_JSON || path.join(os.homedir(), '.claude.json');
 try {
-  const raw = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
+  const raw = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8'));
   mcpServers = raw.mcpServers ?? {};
 } catch (e) {
-  console.error('Could not read ~/.claude.json:', e.message);
+  // Missing/unreadable config = no slots to probe. Under --json emit a valid
+  // empty result ([]) and exit 0 rather than exit 1 with a non-JSON error
+  // string — callers JSON.parse the output (and CI has no home config).
+  if (JSON_OUT) { console.log('[]'); process.exit(0); }
+  console.error('Could not read ' + claudeJsonPath + ':', e.message);
   process.exit(1);
 }
 
