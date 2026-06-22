@@ -54,7 +54,11 @@ function runBody(body, env) {
 //   npm-slot        — npx package
 function makeFixture() {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-fakehome-'));
-  // nf-managed: standard install path, no .git anywhere above it
+  // Simulate a user who version-controls their HOME (dotfiles repo): there IS a
+  // .git above the standard install. The ~/.claude guard must still classify the
+  // managed server as nf-managed and NOT git-pull the dotfiles repo.
+  fs.mkdirSync(path.join(home, '.git'), { recursive: true });
+  // nf-managed: standard install path under ~/.claude/nf-bin/
   const nfBin = path.join(home, '.claude', 'nf-bin');
   fs.mkdirSync(nfBin, { recursive: true });
   const managedServer = path.join(nfBin, 'unified-mcp-server.mjs');
@@ -84,11 +88,11 @@ describe('F36 — mcp-update classifies node slots by real git root', () => {
     assert.ok(ALL, 'all-mode NF_EVAL block (with findGitRoot) must exist');
   });
 
-  it('standard-install node slot → nf-managed (NOT a bogus git-pull repoDir)', () => {
+  it('standard-install node slot → nf-managed even when HOME is a git (dotfiles) repo', () => {
     const fx = makeFixture();
     try {
       const r = runBody(SINGLE, { HOME: fx.home, AGENT: 'nf-managed-slot' });
-      assert.equal(r.type, 'nf-managed', 'a server under ~/.claude/nf-bin/ has no .git → nf-managed');
+      assert.equal(r.type, 'nf-managed', 'a server under ~/.claude/ is managed regardless of an ancestor .git');
       assert.ok(!('repoDir' in r), 'must not emit a repoDir that git-pull would cd into');
     } finally {
       fs.rmSync(fx.home, { recursive: true, force: true });

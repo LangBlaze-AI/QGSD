@@ -92,9 +92,17 @@ if(command==='npx'||command==='npm'){
   const packageName=args[args.length-1];
   result={type:'npm',package:packageName};
 } else if(command==='node'&&args.length>0){
-  const gitRoot=findGitRoot(args[0]);
-  if(gitRoot){ result={type:'local',repoDir:gitRoot}; }
-  else { result={type:'nf-managed'}; }
+  // A server under ~/.claude/ is a standard install — NEVER a dev clone, even if
+  // an ancestor (~ or ~/.claude itself) is a git repo (e.g. a dotfiles repo).
+  // Only paths outside ~/.claude/ are eligible for `git pull`.
+  const claudeHome=path.join(os.homedir(),'.claude');
+  const resolved=path.resolve(args[0]);
+  if(resolved===claudeHome||resolved.startsWith(claudeHome+path.sep)){
+    result={type:'nf-managed'};
+  } else {
+    const gitRoot=findGitRoot(resolved);
+    result=gitRoot?{type:'local',repoDir:gitRoot}:{type:'nf-managed'};
+  }
 } else {
   result={type:'unknown',command,args};
 }
@@ -196,7 +204,12 @@ for(const agent of KNOWN_AGENTS){
     if(seenKeys.has(key)){ tasks.push({agent,type:'npm',package:pkg,deduplicated:true}); }
     else { seenKeys.add(key); tasks.push({agent,type:'npm',package:pkg,deduplicated:false}); }
   } else if(cmd==='node'&&args.length>0){
-    const gitRoot=findGitRoot(args[0]);
+    // A server under ~/.claude/ is a standard install — NEVER a dev clone, even
+    // if an ancestor (~ or ~/.claude) is a git repo (dotfiles). Only paths
+    // outside ~/.claude/ are eligible for `git pull`.
+    const claudeHome=path.join(os.homedir(),'.claude');
+    const resolved=path.resolve(args[0]);
+    const gitRoot=(resolved===claudeHome||resolved.startsWith(claudeHome+path.sep))?null:findGitRoot(resolved);
     if(gitRoot){
       const key='local:'+gitRoot;
       if(seenKeys.has(key)){ tasks.push({agent,type:'local',repoDir:gitRoot,deduplicated:true}); }
