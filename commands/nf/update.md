@@ -34,5 +34,5 @@ The workflow handles all logic including:
 6. User confirmation
 7. Update execution
 8. Cache clearing
-9. Post-update .planning/ layout migration: `node bin/migrate-planning.cjs --project-root=$(pwd)` (fail-open — skip if script not found)
+9. Post-update .planning/ layout migration: `node bin/migrate-planning.cjs --root "$(pwd)"` (fail-open — skip if script not found)
 </process>

@@ -46,7 +46,9 @@ if [ -n "$SESSION_ID" ]; then
 else
   FILE="$CLAUDE_DIR/pending-task.txt"
 fi
-printf '%s' '$ARGUMENTS' > "$FILE"
+cat > "$FILE" <<'NF_QUEUE_TASK'
+$ARGUMENTS
+NF_QUEUE_TASK
 echo "file=$FILE"
 ```
 
