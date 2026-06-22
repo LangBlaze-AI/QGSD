@@ -76,7 +76,7 @@ if(!serverConfig){ process.stderr.write('Error: Agent "'+agent+'" is not configu
 // working-tree root). Returns null if none exists — e.g. a standard install
 // running from ~/.claude/nf-bin/, which is NOT a git repo and cannot be pulled.
 function findGitRoot(file){
-  let dir=path.dirname(file);
+  let dir=path.dirname(path.resolve(file));
   for(let i=0;i<20&&dir;i++){
     if(fs.existsSync(path.join(dir,'.git'))) return dir;
     const parent=path.dirname(dir);
@@ -132,7 +132,7 @@ Capture exit code and output. If exit code ≠ 0: print error output and stop.
 This agent is served by your installed nForma package (it runs from `~/.claude/nf-bin/`,
 which is not a git working tree — there is nothing to `git pull`). It updates when nForma
 itself updates. Do NOT run `git pull`. Print:
-```
+```text
 $TARGET is served by your installed nForma package (no git repo to pull).
 Update nForma instead:  /nf:update
 Then restart the agent:  /nf:mcp-restart $TARGET
@@ -175,7 +175,7 @@ const claudeJson=JSON.parse(fs.readFileSync(claudeJsonPath,'utf8'));
 const servers=claudeJson.mcpServers||{};
 const KNOWN_AGENTS=Object.keys(servers).filter(s=>!SKIP.includes(s));
 function findGitRoot(file){
-  let dir=path.dirname(file);
+  let dir=path.dirname(path.resolve(file));
   for(let i=0;i<20&&dir;i++){
     if(fs.existsSync(path.join(dir,'.git'))) return dir;
     const parent=path.dirname(dir);
@@ -202,9 +202,10 @@ for(const agent of KNOWN_AGENTS){
       if(seenKeys.has(key)){ tasks.push({agent,type:'local',repoDir:gitRoot,deduplicated:true}); }
       else { seenKeys.add(key); tasks.push({agent,type:'local',repoDir:gitRoot,deduplicated:false}); }
     } else {
-      const key='nf-managed';
-      if(seenKeys.has(key)){ tasks.push({agent,type:'nf-managed',deduplicated:true}); }
-      else { seenKeys.add(key); tasks.push({agent,type:'nf-managed',deduplicated:false}); }
+      // nf-managed agents run no update command (they refresh via /nf:update), so
+      // there is nothing to dedup — list each so the per-agent table is accurate
+      // (deduping here would mislabel later ones as "SKIPPED (shared repo)").
+      tasks.push({agent,type:'nf-managed',deduplicated:false});
     }
   } else {
     tasks.push({agent,type:'unknown',command:cmd});
@@ -223,7 +224,7 @@ NF_EVAL
 - If `type: "unknown"`: mark as `UNKNOWN (manual update required)`
 
 If any task is `nf-managed`, append a hint after the table:
-```
+```text
 Some agents are served by your installed nForma package (run from ~/.claude/nf-bin/).
 To update those, update nForma itself:  /nf:update
 ```

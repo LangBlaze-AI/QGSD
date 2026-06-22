@@ -23,7 +23,8 @@ const MD = fs.readFileSync(path.join(__dirname, '../commands/nf/mcp-update.md'),
 
 // Pull every `node << 'NF_EVAL' … NF_EVAL` heredoc body out of the markdown.
 function heredocBodies(md) {
-  const re = /node << 'NF_EVAL'\n([\s\S]*?)\nNF_EVAL/g;
+  // CRLF-tolerant: a checkout with autocrlf would otherwise break extraction.
+  const re = /node << 'NF_EVAL'\r?\n([\s\S]*?)\r?\nNF_EVAL/g;
   const out = [];
   let m;
   while ((m = re.exec(md)) !== null) out.push(m[1]);
