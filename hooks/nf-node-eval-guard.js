@@ -89,7 +89,8 @@ function findHeredocRanges(command) {
     // `echo "<<'EOF'"`) is not a real heredoc opener — skip it so it cannot
     // open a bogus body range that would swallow a later real `node -e`.
     if (isInsideQuotes(command, m.index)) continue;
-    const dashLess = m[1] === '-';
+    // The `<<-` (dash) form lets the terminator line be indented with leading TABS.
+    const allowLeadingTabs = m[1] === '-';
     const delim = m[3];
     const nl = command.indexOf('\n', re.lastIndex);
     if (nl === -1) continue; // no body on a single line
@@ -97,7 +98,7 @@ function findHeredocRanges(command) {
     // Bash requires the terminator line to be EXACTLY the delimiter (only
     // leading tabs are allowed, and only for the `<<-` form) — no trailing
     // whitespace. Matching it exactly avoids treating `DELIM  ` as a close.
-    const closeRe = new RegExp(`^${dashLess ? '\\t*' : ''}${delim}$`, 'm');
+    const closeRe = new RegExp(`^${allowLeadingTabs ? '\\t*' : ''}${delim}$`, 'm');
     const rest = command.slice(bodyStart);
     const cm = closeRe.exec(rest);
     const bodyEnd = cm ? bodyStart + cm.index : command.length;
