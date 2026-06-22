@@ -43,6 +43,21 @@ const THRESHOLD_KB = parseInt(getArg('--threshold-kb') ?? '128', 10);
 const TIMEOUT_MS = 15000;
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB
 
+// Scripts whose `--json` is NOT a fixed-size agent-context payload, so the
+// GUARD-01 size check doesn't apply. Reported as `skipped` with the reason
+// rather than run to a misleading error/oversize-warning.
+//   F4a — nf-solve.cjs is a full orchestrator: its `--json` output is captured
+//         (solve.md) but run-dependent and slow, so the 15s probe always timed
+//         out and reported `error`.
+//   F4c — trace-corpus-stats.cjs is consumed for the evidence FILE it writes, not
+//         its stdout. Its one caller (solve-remediate.md) redirects stdout to
+//         /dev/null, so the ~256KB never reaches agent context. (Before that skill
+//         was fixed it only redirected stderr — the 256KB stdout DID leak.)
+const KNOWN_NON_PAYLOAD = {
+  'nf-solve.cjs': 'orchestrator — `--json` output is run-dependent (drive via /nf:solve), not a fixed-size payload',
+  'trace-corpus-stats.cjs': 'fire-and-forget — its only caller (solve-remediate) redirects stdout to /dev/null and uses the evidence file it writes, so its --json never reaches agent context',
+};
+
 // Helper functions
 function log(msg) {
   if (!JSON_OUT) {
@@ -118,6 +133,17 @@ function auditScript(scriptName) {
       size_bytes: 0,
       status: 'missing',
       reason: 'Script not found on disk',
+    };
+  }
+
+  // Scripts whose --json isn't a fixed-size agent payload are not subject to the
+  // GUARD-01 size check — report them accurately instead of running them.
+  if (Object.prototype.hasOwnProperty.call(KNOWN_NON_PAYLOAD, scriptName)) {
+    return {
+      name: scriptName,
+      size_bytes: 0,
+      status: 'skipped',
+      reason: KNOWN_NON_PAYLOAD[scriptName],
     };
   }
 
@@ -267,4 +293,8 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { auditScript, KNOWN_NON_PAYLOAD };

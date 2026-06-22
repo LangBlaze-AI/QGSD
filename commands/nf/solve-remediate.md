@@ -539,10 +539,10 @@ If the script returns non-empty JSON, log each attribution's `recommendation` fi
 **F->C Trace Corpus Context:** Also run `trace-corpus-stats.cjs` to provide session/action/transition context for the divergences:
 
 ```bash
-node ~/.claude/nf-bin/trace-corpus-stats.cjs --json 2>/dev/null || node bin/trace-corpus-stats.cjs --json 2>/dev/null || true
+node ~/.claude/nf-bin/trace-corpus-stats.cjs --json >/dev/null 2>&1 || node bin/trace-corpus-stats.cjs --json >/dev/null 2>&1 || true
 ```
 
-This writes `.planning/formal/evidence/trace-corpus-stats.json` which enriches subsequent analysis. Fail-open: if the script is not found or errors, skip silently.
+This writes `.planning/formal/evidence/trace-corpus-stats.json` which enriches subsequent analysis. Only the evidence file is used here, so the command's stdout (the full ~256KB corpus JSON) is redirected to `/dev/null` — otherwise it would land in the agent's context. Fail-open: if the script is not found or errors, skip silently.
 
 ### 3f. R->D Gaps (residual_vector.r_to_d.residual > 0)
 
