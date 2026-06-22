@@ -3764,6 +3764,25 @@ describe('milestone-scoped phase IDs', () => {
     assert.ok(output.directory.includes('v0.7-01-composition-architecture'), 'directory contains phase ID');
   });
 
+  test('MS-TC-02b: find-phase resolves ARCHIVED phases under milestones/v*-phases (F43)', () => {
+    // Regression: cmdFindPhase used to scan only .planning/phases/, so an
+    // archived parent phase returned found:false even though init plan-phase
+    // resolves it — silently skipping artifact closure in execute-phase etc.
+    const archived = path.join(tmpDir, '.planning', 'milestones', 'v0.9-phases', '01-archived-phase');
+    fs.mkdirSync(archived, { recursive: true });
+    fs.writeFileSync(path.join(archived, '01-01-PLAN.md'), '# Plan');
+    fs.writeFileSync(path.join(archived, '01-01-SUMMARY.md'), '# Summary');
+
+    const result = runNfTools('find-phase 01', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.found, true, 'archived phase must be found');
+    assert.ok(output.directory.includes('milestones/v0.9-phases/01-archived-phase'),
+      `directory should point at the archived dir, got: ${output.directory}`);
+    assert.deepStrictEqual(output.plans, ['01-01-PLAN.md']);
+    assert.deepStrictEqual(output.summaries, ['01-01-SUMMARY.md']);
+  });
+
   test('MS-TC-03: phases list sorts v0.7-01, v0.7-01.1, v0.7-02 in correct order', () => {
     const dirs = ['v0.7-02-multiple-slots', 'v0.7-01-composition', 'v0.7-01.1-gap-fix'];
     for (const d of dirs) {

@@ -1521,43 +1521,29 @@ function cmdFindPhase(cwd, phase, raw) {
     error('phase identifier required');
   }
 
-  const phasesDir = path.join(cwd, '.planning', 'phases');
-  const normalized = normalizePhaseName(phase);
-
   const notFound = { found: false, directory: null, phase_number: null, phase_name: null, plans: [], summaries: [] };
 
-  try {
-    const entries = fs.readdirSync(phasesDir, { withFileTypes: true });
-    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
-
-    const match = dirs.find(d => d.startsWith(normalized));
-    if (!match) {
-      output(notFound, raw, '');
-      return;
-    }
-
-    const dirMatch = match.match(/^(\d+(?:\.\d+)?)-?(.*)/);
-    const phaseNumber = dirMatch ? dirMatch[1] : normalized;
-    const phaseName = dirMatch && dirMatch[2] ? dirMatch[2] : null;
-
-    const phaseDir = path.join(phasesDir, match);
-    const phaseFiles = fs.readdirSync(phaseDir);
-    const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').sort();
-    const summaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md').sort();
-
-    const result = {
-      found: true,
-      directory: path.join('.planning', 'phases', match),
-      phase_number: phaseNumber,
-      phase_name: phaseName,
-      plans,
-      summaries,
-    };
-
-    output(result, raw, result.directory);
-  } catch {
+  // Delegate to findPhaseInternal so this resolves phases the SAME way as
+  // `init plan-phase`/`phase-op`: it searches `.planning/phases/` AND archived
+  // `.planning/milestones/v*-phases/`. The previous standalone scan here only
+  // looked in `.planning/phases/`, so `find-phase` returned found:false for
+  // archived parents that `init plan-phase` resolves — silently skipping
+  // parent UAT/artifact closure in execute-phase / audit-milestone / resume-work.
+  const found = findPhaseInternal(cwd, phase);
+  if (!found) {
     output(notFound, raw, '');
+    return;
   }
+
+  const result = {
+    found: true,
+    directory: found.directory,
+    phase_number: found.phase_number,
+    phase_name: found.phase_name,
+    plans: found.plans || [],
+    summaries: found.summaries || [],
+  };
+  output(result, raw, result.directory);
 }
 
 function cmdCommit(cwd, message, files, raw, amend) {
