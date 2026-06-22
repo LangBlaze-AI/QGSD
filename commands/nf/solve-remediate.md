@@ -745,12 +745,12 @@ Log: `"Gate B: gate_b_score={score}, {orphaned_count} models without requirement
 
 Gate C verifies every L3 failure mode maps to at least one test recipe. Unvalidated failure modes lack test coverage.
 
-**Preflight check:** If `preflight_data.l3_to_tc_unvalidated` is present and is a number >= 0, skip the test-recipe-gen.cjs and gate-c-validation.cjs runs below. Use the preflight value directly as `unvalidated_count`. Log `"Gate C: using preflight data (unvalidated={N}) — skipping gate script re-runs"`. Still dispatch /nf:quick if unvalidated > 0.
+**Preflight check:** If `preflight_data.l3_to_tc_unvalidated` is present and is a number >= 0, skip the test-recipe-gen.cjs run below. Use the preflight value directly as `unvalidated_count`. Log `"Gate C: using preflight data (unvalidated={N}) — skipping gate script re-runs"`. Still dispatch /nf:quick if unvalidated > 0.
 
 **Max dispatches: 100 per solve cycle.** Track a counter for Gate C dispatches. If the counter reaches 100, log `"Gate C: max remediation dispatches (100) reached this cycle — skipping further auto-fixes"`, append `{ "layer": "l3_to_tc", "dispatched": 100, "max": 100 }` to the `capped_layers` array, and skip.
 
 Extract detail from `residual_vector.l3_to_tc.detail`:
-- `unvalidated_count` — failure modes with no test recipe (mapped from gate-c-validation.cjs `unvalidated_entries`)
+- `unvalidated_count` — failure modes with no test recipe (the diagnostic engine's `unvalidated_entries`)
 - `total_failure_modes` — total L3 failure modes
 
 First, regenerate test recipes to ensure freshness (skip if preflight data available):
@@ -760,9 +760,9 @@ node bin/test-recipe-gen.cjs
 
 If unvalidated_count is still > 0 after regeneration, use the original `unvalidated_count` from the diagnostic (and the preflight value when present). The standalone `gate-c-validation.cjs` re-check script was removed (its count now comes from the diagnostic engine / preflight data — see Step 5 and the deletion in `chore(quick-241)`), so there is no separate gate script to re-run here.
 
-**Important:** The gate-c re-run here is a local freshness check only. It does NOT update the `residual_vector` used by the convergence loop in Step 5. The residual_vector is only updated at the top of the next iteration when nf-solve.cjs runs a full re-diagnostic sweep. This is by design — each iteration gets a consistent snapshot from the diagnostic engine rather than piecemeal updates from individual gate scripts.
+**Important:** The Gate C freshness step here (the `test-recipe-gen.cjs` regeneration) is a local check only. It does NOT update the `residual_vector` used by the convergence loop in Step 5. The residual_vector is only updated at the top of the next iteration when nf-solve.cjs runs a full re-diagnostic sweep. This is by design — each iteration gets a consistent snapshot from the diagnostic engine rather than piecemeal updates from individual gate scripts.
 
-If the re-check confirms unvalidated failures remain, dispatch:
+If unvalidated failures still remain (per the diagnostic/preflight count), dispatch:
 ```
 /nf:quick Generate test recipes for {N} uncovered L3 failure modes identified by Gate C — add entries to .planning/formal/test-recipes/test-recipes.json mapping each failure mode to concrete test steps
 ```
