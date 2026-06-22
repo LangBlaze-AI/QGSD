@@ -758,12 +758,7 @@ First, regenerate test recipes to ensure freshness (skip if preflight data avail
 node bin/test-recipe-gen.cjs
 ```
 
-If unvalidated_count is still > 0 after regeneration, re-run gate-c-validation.cjs to get the updated gap list (skip if preflight data available):
-```bash
-node bin/gate-c-validation.cjs --json
-```
-
-If gate-c-validation.cjs is not found or fails, skip the re-check and use the original unvalidated_count from the diagnostic (fail-open — consistent with Step 3j pattern).
+If unvalidated_count is still > 0 after regeneration, use the original `unvalidated_count` from the diagnostic (and the preflight value when present). The standalone `gate-c-validation.cjs` re-check script was removed (its count now comes from the diagnostic engine / preflight data — see Step 5 and the deletion in `chore(quick-241)`), so there is no separate gate script to re-run here.
 
 **Important:** The gate-c re-run here is a local freshness check only. It does NOT update the `residual_vector` used by the convergence loop in Step 5. The residual_vector is only updated at the top of the next iteration when nf-solve.cjs runs a full re-diagnostic sweep. This is by design — each iteration gets a consistent snapshot from the diagnostic engine rather than piecemeal updates from individual gate scripts.
 

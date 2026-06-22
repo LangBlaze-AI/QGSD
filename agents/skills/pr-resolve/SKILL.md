@@ -71,7 +71,7 @@ High-level steps the skill should follow
   - `gh pr view {N} --json title,body,author,headRefName,baseRefName,state,mergeable,reviewDecision,url`
   - `gh pr diff {N}` — full diff for understanding changes
   - `gh pr checks {N}` — CI status for all checks
-  - Use the export-threads script (which uses GraphQL `pullRequest.reviewThreads`) to enumerate unresolved threads with `isResolved` state and thread IDs
+  - Run `bash scripts/pr-merge-autopilot.sh --export-threads <N>` (it queries GraphQL `pullRequest.reviewThreads` and exits without mutating) to enumerate unresolved threads with `isResolved` state and thread IDs
   - Identify bot reviewers: CodeRabbit, Copilot, gitar, or any bot-flagged reviewer
 
 3) Evaluate each unresolved review thread
