@@ -39,7 +39,7 @@ Exit.
 ## Local Patches to Reapply
 
 **Backed up from:** v{from_version}
-**Current version:** {read VERSION file}
+**Current version:** {read `version` from package.json}
 **Files modified:** {count}
 
 | # | File | Status |

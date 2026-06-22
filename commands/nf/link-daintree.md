@@ -153,7 +153,7 @@ Display:
 
 ```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- nForma ► LINK CANOPY — NOT FOUND
+ nForma ► LINK DAINTREE — NOT FOUND
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Daintree (or legacy Canopy) config not found at:
@@ -163,7 +163,7 @@ Also tried legacy path:
   {canopyConfigPath}
 
 Install Daintree IDE and run it once to generate config,
-then re-run /nf:link-canopy. Legacy canopy-app installs are
+then re-run /nf:link-daintree. Legacy canopy-app installs are
 also detected automatically.
 ```
 
@@ -175,7 +175,7 @@ Display discovery banner:
 
 ```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- nForma ► LINK CANOPY — DISCOVERED
+ nForma ► LINK DAINTREE — DISCOVERED
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Product:       {productName}     (Daintree, or canopy-app on legacy installs)
@@ -1209,7 +1209,7 @@ Display:
 
 ```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- nForma ► LINK CANOPY — COMPLETE
+ nForma ► LINK DAINTREE — COMPLETE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Product detected:        {productName} (Daintree, or canopy-app legacy)
@@ -1220,7 +1220,7 @@ Display:
   Custom presets exported: {customPresetsAddedCount > 0 || customPresetsUnchangedCount > 0 ? "✓ " + customPresetsAddedCount + " added, " + customPresetsUnchangedCount + " unchanged" : "○ Skipped"}
 
 {probedCount > 0 || imported ? "⚠ Restart Claude Code now — newly-added MCP slots register their tools only at session start.\n   Quit with CTRL+C (or `/quit`), then run `claude` again.\n" : ""}
-Re-run /nf:link-canopy any time to refresh the link. Idempotency rules:
+Re-run /nf:link-daintree any time to refresh the link. Idempotency rules:
   • Vanilla nForma slots (no daintree_preset_id) are never touched.
   • Preset-linked slots (matched by daintree_preset_id) are updated in place — env is overlaid
     with the latest preset values, name is kept stable.

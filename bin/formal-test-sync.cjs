@@ -37,11 +37,36 @@ const SIDECAR_OUTPUT_PATH = path.join(ROOT, '.planning', 'formal', 'unit-test-co
 // ── CLI flags ────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
+const showHelp = args.includes('--help') || args.includes('-h');
 const reportOnly = args.includes('--report-only');
 const dryRun = args.includes('--dry-run');
 const jsonMode = args.includes('--json');
 const enrichRecipes = args.includes('--enrich-recipes');
 let stubsDir = path.join(ROOT, '.planning', 'formal', 'generated-stubs');
+
+const USAGE = [
+  'Usage: node bin/formal-test-sync.cjs [options]',
+  '',
+  'Cross-reference formal model invariants with unit test coverage, validate',
+  'constants, and (by default) generate test stubs + update sidecar files.',
+  '',
+  'Options:',
+  '  --report-only        Read-only analysis. Writes nothing (no stubs, no',
+  '                       report, no sidecar).',
+  '  --dry-run            Show what stubs WOULD be generated. Writes nothing',
+  '                       (no stub files, no report, no sidecar).',
+  '  --json               Machine-readable JSON output.',
+  '  --stubs-dir=<path>   Override stub output dir (default',
+  '                       .planning/formal/generated-stubs/).',
+  '  --enrich-recipes     Enrich stub recipes with coderlm test patterns.',
+  '  --project-root=<dir> Operate on <dir> instead of the current directory.',
+  '  -h, --help           Show this help and exit (no analysis, no writes).',
+  '',
+  'With no flags, the full sync runs and writes:',
+  '  .planning/formal/formal-test-sync-report.json',
+  '  .planning/formal/unit-test-coverage.json',
+  '  .planning/formal/generated-stubs/*',
+].join('\n');
 
 for (const arg of args) {
   if (arg.startsWith('--stubs-dir=')) {
@@ -890,7 +915,7 @@ function printSummary(coverageReport, constantsValidation, stubs) {
     process.stdout.write(TAG_SUMMARY + '   Recipes: ' + recipeCount + ' generated\n');
   }
 
-  if (!reportOnly) {
+  if (!reportOnly && !dryRun) {
     process.stdout.write(TAG_SUMMARY + '   Report: ' + REPORT_OUTPUT_PATH + '\n');
     process.stdout.write(TAG_SUMMARY + '   Sidecar: ' + SIDECAR_OUTPUT_PATH + '\n');
   }
@@ -909,9 +934,14 @@ function main() {
 
   let stubs = [];
   if (!reportOnly) {
+    // generateStubs computes the would-be stubs for display; it already skips
+    // writing the stub FILES under --dry-run. The report + sidecar are writes
+    // too, so a --dry-run (documented as "no writes") must skip them as well.
     stubs = generateStubs(coverageReport.gaps, formalAnnotations, requirements);
-    writeSidecar(coverageReport);
-    writeReport(coverageReport, constantsValidation);
+    if (!dryRun) {
+      writeSidecar(coverageReport);
+      writeReport(coverageReport, constantsValidation);
+    }
   }
 
   if (jsonMode) {
@@ -934,6 +964,15 @@ module.exports = { parseAlloyDefaults, extractPropertyDefinition, findSourceFile
 
 // Synchronous main — must run (and call process.exit on error) before any async work.
 if (require.main === module) {
+  // --help short-circuits BEFORE any analysis or writes. Without this, an
+  // unrecognized flag (including --help) fell through to the default full sync,
+  // which writes stubs + report + sidecar — surprising and destructive for
+  // someone just asking for usage.
+  if (showHelp) {
+    process.stdout.write(USAGE + '\n');
+    process.exit(0);
+  }
+
   main();
 
   // Async enrichment tail — only runs if --enrich-recipes flag is set.

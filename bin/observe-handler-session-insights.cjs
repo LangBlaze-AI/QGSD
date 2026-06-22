@@ -263,6 +263,7 @@ function analyzeSession(fileInfo) {
       if (data.count >= 3) {
         issues.push({
           id: `session-insights-tool-failure-${sessionHash}`,
+          category: 'Tool Failures',
           title: `Tool '${toolName}' failed ${data.count} times in session ${fileInfo.name}`,
           severity: 'warning',
           url: '',
@@ -279,6 +280,7 @@ function analyzeSession(fileInfo) {
     if (assistantTurns >= 50) {
       issues.push({
         id: `session-insights-long-session-${sessionHash}`,
+        category: 'Long Sessions',
         title: `Long session (${assistantTurns} turns): ${fileInfo.name}`,
         severity: 'info',
         url: '',
@@ -294,6 +296,7 @@ function analyzeSession(fileInfo) {
     if (circuitBreakerTriggered) {
       issues.push({
         id: `session-insights-circuit-breaker-${sessionHash}`,
+        category: 'Circuit Breaker',
         title: `Circuit breaker triggered in session ${fileInfo.name}`,
         severity: 'warning',
         url: '',
@@ -310,6 +313,7 @@ function analyzeSession(fileInfo) {
       if (count >= 5) {
         issues.push({
           id: `session-insights-file-churn-${sessionHash}`,
+          category: 'File Churn',
           title: `File '${filePath}' edited ${count} times in session ${fileInfo.name}`,
           severity: 'warning',
           url: '',
@@ -328,6 +332,7 @@ function analyzeSession(fileInfo) {
       for (const hookName of uniqueHooks) {
         issues.push({
           id: `session-insights-hook-failure-${sessionHash}`,
+          category: 'Hook Failures',
           title: `Hook failure in session ${fileInfo.name}`,
           severity: 'info',
           url: '',
