@@ -2723,7 +2723,7 @@ function cmdRoadmapAnalyze(cwd, raw) {
   const phasesDir = path.join(cwd, '.planning', 'phases');
 
   // Extract all phase headings: ## Phase N: Name or ### Phase N: Name (integer or milestone-scoped)
-  const phasePattern = /#{2,4}\s*Phase\s+(v\d+\.\d+-\d+(?:\.\d+)?|\d+(?:\.\d+)?)\s*:\s*([^\n]+)/gi;
+  const phasePattern = /(?:#{2,4}\s*|[-*]\s+\[[^\]]\]\s+(?:\*{1,2}\s*)?)Phase\s+(v\d+\.\d+-\d+(?:\.\d+)?|\d+(?:\.\d+)?)\s*:\s*([^\n]+)/gi;
   const phases = [];
   let match;
 
@@ -3549,7 +3549,7 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
   // Fallback: check ROADMAP.md for phases not yet on disk
   if (isLastPhase && fs.existsSync(roadmapPath)) {
     const roadmapContent = fs.readFileSync(roadmapPath, 'utf-8');
-    const phasePattern = /#{2,4}\s*Phase\s+(v\d+\.\d+-\d+(?:\.\d+)?|\d+(?:\.\d+)?)\s*:\s*([^\n]+)/gi;
+    const phasePattern = /(?:#{2,4}\s*|[-*]\s+\[[^\]]\]\s+(?:\*{1,2}\s*)?)Phase\s+(v\d+\.\d+-\d+(?:\.\d+)?|\d+(?:\.\d+)?)\s*:\s*([^\n]+)/gi;
     let pm;
     while ((pm = phasePattern.exec(roadmapContent)) !== null) {
       if (comparePhaseVersions(pm[1], phaseNum) > 0) {
@@ -4031,7 +4031,7 @@ function cmdValidateHealth(cwd, options, raw) {
   if (fs.existsSync(roadmapPath)) {
     const roadmapContent = fs.readFileSync(roadmapPath, 'utf-8');
     const roadmapPhases = new Set();
-    const phasePattern = /(?:#{2,4}|[-*]\s+\[[^\]]\]\s+\*{1,2})\s*Phase\s+(v\d+\.\d+-\d{2}(?:\.\d+)?|\d+(?:\.\d+)?)\s*:/gi;
+    const phasePattern = /(?:#{2,4}\s*|[-*]\s+\[[^\]]\]\s+(?:\*{1,2}\s*)?)Phase\s+(v\d+\.\d+-\d{2}(?:\.\d+)?|\d+(?:\.\d+)?)\s*:/gi;
     let m;
     while ((m = phasePattern.exec(roadmapContent)) !== null) {
       roadmapPhases.add(m[1]);
@@ -4087,7 +4087,11 @@ function cmdValidateHealth(cwd, options, raw) {
       }
     }
 
-    // Phases on disk but not in ROADMAP (skip archived phases — they are expected to be absent from ROADMAP)
+    // Phases on disk but not in ROADMAP (skip archived phases — they are expected to be absent from ROADMAP).
+    // Collapse into ONE warning: emitting one W007 per orphan flooded /nf:health with dozens of
+    // duplicates and pinned the report at DEGRADED (especially when the ROADMAP parser missed the
+    // checklist phase format and matched nothing — see the phasePattern fix).
+    const orphanPhases = [];
     for (const p of diskPhases) {
       if (archivedPhaseIds.has(p)) continue;
       const normalized = normalizePhaseName(p);
@@ -4096,8 +4100,16 @@ function cmdValidateHealth(cwd, options, raw) {
         ? `${parseInt(dParts[0], 10)}.${dParts[1]}`
         : String(parseInt(dParts[0], 10));
       if (!roadmapPhases.has(p) && !roadmapPhases.has(normalized) && !roadmapPhases.has(unpadded)) {
-        addIssue('warning', 'W007', `Phase ${p} exists on disk but not in ROADMAP.md`, 'Add to roadmap or remove directory');
+        orphanPhases.push(p);
       }
+    }
+    if (orphanPhases.length > 0) {
+      addIssue(
+        'warning',
+        'W007',
+        `${orphanPhases.length} phase(s) exist on disk but not in ROADMAP.md: ${orphanPhases.join(', ')}`,
+        'Add them to the roadmap, remove the directories, or run /nf:cleanup'
+      );
     }
   }
 
