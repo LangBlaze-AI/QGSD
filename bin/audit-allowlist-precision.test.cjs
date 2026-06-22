@@ -44,17 +44,15 @@ describe('F4a/F4c — payload audit skips non-payload scripts accurately', () =>
 
 describe('F38 — mcp-set-model allow-lists the real default slots', () => {
   const md = fs.readFileSync(path.join(__dirname, '../commands/nf/mcp-set-model.md'), 'utf8');
-  it('includes the Daintree slots that Step 3 calls directly', () => {
+  it('adds the previously-missing Daintree slots that Step 3 calls directly', () => {
     assert.ok(/mcp__claude-z-ai__identity/.test(md));
     assert.ok(/mcp__claude-minimax__identity/.test(md));
   });
-  it('no longer lists phantom ccr-* slots', () => {
-    assert.ok(!/mcp__ccr-\d+__identity/.test(md));
-  });
-  it('still lists the standard slots', () => {
+  it('keeps the standard CLI + the user-addable ccr-* slots (a static list cannot be exhaustive)', () => {
     for (const s of ['codex-1', 'gemini-1', 'opencode-1', 'copilot-1', 'claude-1']) {
       assert.ok(md.includes(`mcp__${s}__identity`), `${s} must stay allow-listed`);
     }
+    assert.ok(/mcp__ccr-1__identity/.test(md), 'ccr-* are documented user slots — must not be dropped');
   });
 
   it('its Step 5 eval passes env BEFORE node (process.env.AGENT/MODEL not undefined)', () => {
