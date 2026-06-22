@@ -199,6 +199,71 @@ describe('rewriteCommand quoted-substring guard', () => {
   });
 });
 
+// ─── rewriteCommand: heredoc-body guard (F2b) ──────────────
+
+describe('rewriteCommand heredoc-body guard', () => {
+  const { findHeredocRanges } = require('./nf-node-eval-guard');
+
+  it('does NOT rewrite an inline-eval mention inside a heredoc body (e.g. a commit message)', () => {
+    const cmd = "git commit -F - <<'COMMIT_MSG'\nfix: the step ran node -e \"<js>\" and broke\nbody line\nCOMMIT_MSG";
+    assert.equal(rewriteCommand(cmd), null);
+  });
+
+  it('still rewrites a real node -e that follows a CLOSED heredoc', () => {
+    const cmd = "cat <<'EOF'\nsome text\nEOF\nnode -e \"console.log(1)\"";
+    const result = rewriteCommand(cmd);
+    assert.ok(result !== null);
+    assert.ok(result.includes("node << 'NF_EVAL'"));
+    assert.ok(result.includes('console.log(1)'));
+  });
+
+  it('findHeredocRanges returns no ranges when there is no heredoc', () => {
+    assert.equal(findHeredocRanges('a\n').length, 0);
+  });
+
+  it('findHeredocRanges spans the body of quoted, bare, and dash heredocs', () => {
+    // quoted delimiter
+    const q = findHeredocRanges("x <<'E'\nbody\nE");
+    assert.equal(q.length, 1);
+    assert.ok(q[0].end > q[0].start);
+    // bare delimiter
+    const bare = findHeredocRanges('x <<E\nbody\nE');
+    assert.equal(bare.length, 1);
+    assert.ok(bare[0].end > bare[0].start);
+    // dash form: only leading TABS are stripped before the terminator
+    const dash = findHeredocRanges('x <<-E\nbody\n\tE');
+    assert.equal(dash.length, 1);
+    assert.ok(dash[0].end > dash[0].start);
+  });
+
+  it('findHeredocRanges does NOT accept a terminator with trailing whitespace', () => {
+    // bash requires the terminator line to be exactly the delimiter — `E  ` is
+    // not a close, so the body runs to end-of-command (a later eval mention here
+    // would be inside the body and correctly skipped).
+    const r = findHeredocRanges('x <<E\nbody\nE  \nmore');
+    assert.equal(r.length, 1);
+    assert.equal(r[0].end, 'x <<E\nbody\nE  \nmore'.length, 'no valid terminator → body to EOC');
+  });
+
+  it('findHeredocRanges ignores a heredoc opener that sits inside quotes', () => {
+    // `<<'EOF'` here is just text inside an echo string, not a real heredoc —
+    // it must NOT produce a body range (which could otherwise run to EOF and
+    // swallow a later real eval).
+    assert.equal(findHeredocRanges(`echo "<<'EOF'"`).length, 0);
+    assert.equal(findHeredocRanges("grep '<<EOF' file").length, 0);
+  });
+
+  it('still rewrites a real node -e after a quoted heredoc-opener mention', () => {
+    const cmd = `echo "<<'EOF'" && node -e "console.log(1)"`;
+    const result = rewriteCommand(cmd);
+    assert.ok(result !== null, 'the real eval must still be rewritten');
+    assert.ok(result.includes("node << 'NF_EVAL'"));
+    assert.ok(result.includes('console.log(1)'));
+    // the quoted mention is left untouched
+    assert.ok(result.includes(`echo "<<'EOF'"`));
+  });
+});
+
 // ─── rewriteCommand: edge cases ────────────────────────────
 
 describe('rewriteCommand edge cases', () => {
