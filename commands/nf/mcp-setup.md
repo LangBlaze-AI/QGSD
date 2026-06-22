@@ -898,7 +898,7 @@ try {
 } catch(e) {}
 try {
   const nfCfg = JSON.parse(fs.readFileSync(os.homedir() + '/.claude/nf.json', 'utf8'));
-  active = Array.isArray(nf.quorum_active) ? nf.quorum_active : [];
+  active = Array.isArray(nfCfg.quorum_active) ? nfCfg.quorum_active : [];
 } catch(e) {}
 process.stdout.write(JSON.stringify({ slots, active }) + '\n');
 ")
