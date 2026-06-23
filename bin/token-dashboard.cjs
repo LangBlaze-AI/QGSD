@@ -149,6 +149,12 @@ function formatDashboard(records, options) {
   options = options || {};
 
   if (!records || records.length === 0) {
+    // Honor the --json contract even with no data: emit a valid empty-shape
+    // object (same structure as the populated result) so callers that
+    // JSON.parse the output don't choke on a human string.
+    if (options.json) {
+      return JSON.stringify({ slots: {}, sessions: {}, total: { input: 0, output: 0, estimatedCost: 0 } }, null, 2);
+    }
     return 'No token usage data found.';
   }
 
