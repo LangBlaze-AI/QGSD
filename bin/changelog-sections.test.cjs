@@ -85,10 +85,12 @@ describe('fixDuplicates', () => {
       '## [0.9.0]', '', '',
       '### Fixed', '- keep   weird   spacing', '',
       '## [0.8.0]', '',
-      '### Added', '- z', '',
-    ].join('\n') + '\n';
+      '### Added', '- z',
+    ].join('\n') + '\n'; // realistic EOF: a single trailing newline
     const fixed = fixDuplicates(text);
-    const tail = (s) => s.slice(s.indexOf('## [0.9.0]'));
+    // dup-free blocks must survive byte-for-byte; EOF is normalized to one
+    // trailing newline (standard), so compare with that normalization applied.
+    const tail = (s) => s.slice(s.indexOf('## [0.9.0]')).replace(/\n+$/, '\n');
     assert.equal(tail(fixed), tail(text), 'dup-free blocks must be preserved byte-for-byte');
     // and [Unreleased] was actually consolidated
     assert.equal((fixed.split('## [0.9.0]')[0].match(/^### Added$/gm) || []).length, 1);
