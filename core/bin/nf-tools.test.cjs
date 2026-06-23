@@ -4613,3 +4613,38 @@ describe('edge-path robustness (dogfooding F49)', () => {
     assert.ok(!/newkey/.test(after), 'the phantom key must not be written');
   });
 });
+
+// Edge-path gaps (dogfooding follow-up F50): conflict-marker detection in
+// validate, and a top-level catch backstop so a stray throw in any of the ~100
+// subcommands surfaces as a clean Error: rather than a raw stack trace.
+describe('edge-path gaps: conflict markers + main() backstop (F50)', () => {
+  let tmpDir;
+  beforeEach(() => { tmpDir = createTempProject(); });
+  afterEach(() => { cleanup(tmpDir); });
+
+  const writeRoadmap = (c) => fs.writeFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'), c);
+
+  test('validate consistency flags unresolved git conflict markers in ROADMAP.md', () => {
+    writeRoadmap('# Roadmap\n<<<<<<< HEAD\n## Phase 1: A\n=======\n## Phase 1: B\n>>>>>>> branch\n');
+    const r = runNfTools('validate consistency', tmpDir);
+    assert.ok(/conflict markers/i.test(r.output || ''), `expected conflict-marker error, got: ${r.output}`);
+    assert.ok(/"passed":\s*false/.test(r.output || ''), 'a conflicted roadmap must not read as passed:true');
+  });
+
+  test('validate consistency does NOT false-positive on a bare ======= (setext header)', () => {
+    writeRoadmap('# Roadmap\nTitle\n=======\n## Phase 1: A\n');
+    const r = runNfTools('validate consistency', tmpDir);
+    assert.ok(!/conflict markers/i.test(r.output || ''), 'bare ======= must not be flagged as a conflict');
+  });
+
+  test('validate health reports E006 for conflict markers', () => {
+    writeRoadmap('# Roadmap\n<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> b\n');
+    const r = runNfTools('validate health --json', tmpDir);
+    assert.ok(/E006/.test(r.output || ''), `expected E006 in health output, got: ${r.output}`);
+  });
+
+  test('main() is invoked with a top-level catch backstop', () => {
+    const src = fs.readFileSync(TOOLS_PATH, 'utf8');
+    assert.ok(/main\(\)\.catch\(/.test(src), 'main() should have a top-level .catch backstop for uncaught throws');
+  });
+});

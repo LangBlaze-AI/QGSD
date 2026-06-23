@@ -3785,6 +3785,22 @@ function cmdValidateConsistency(cwd, raw) {
 
   const roadmapContent = fs.readFileSync(roadmapPath, 'utf-8');
 
+  // Detect unresolved git conflict markers in planning docs. Without this a
+  // conflicted ROADMAP/STATE reads as "consistent" (the phase regex simply
+  // matches nothing). Key on the `<<<<<<<` open marker — it never appears in
+  // legitimate markdown, whereas a bare `=======` collides with setext headers.
+  const conflictRe = /^<{7}( |$)/m;
+  for (const doc of ['ROADMAP.md', 'STATE.md']) {
+    try {
+      const content = doc === 'ROADMAP.md'
+        ? roadmapContent
+        : fs.readFileSync(path.join(cwd, '.planning', doc), 'utf-8');
+      if (conflictRe.test(content)) {
+        errors.push(`Unresolved git conflict markers in ${doc}`);
+      }
+    } catch { /* missing/unreadable STATE.md → nothing to check */ }
+  }
+
   // Extract phases from ROADMAP
   const roadmapPhases = new Set();
   const phasePattern = /(?:#{2,4}\s*|[-*]\s+\[[^\]]\]\s+(?:\*{1,2}\s*)?)Phase\s+(v\d+\.\d+-\d{2}(?:\.\d+)?|\d+(?:\.\d+)?)\s*:/gi;
@@ -3946,6 +3962,22 @@ function cmdValidateHealth(cwd, options, raw) {
   // ─── Check 3: ROADMAP.md exists ───────────────────────────────────────────
   if (!fs.existsSync(roadmapPath)) {
     addIssue('error', 'E003', 'ROADMAP.md not found', 'Run /nf:new-milestone to create roadmap');
+  }
+
+  // ─── Check 3b: unresolved git conflict markers in planning docs ───────────
+  // A conflicted ROADMAP/STATE otherwise reads as healthy (regexes match
+  // nothing). Key on the `<<<<<<<` open marker — unambiguous in markdown,
+  // unlike a bare `=======` (setext header underline).
+  {
+    const conflictRe = /^<{7}( |$)/m;
+    for (const [doc, p] of [['ROADMAP.md', roadmapPath], ['STATE.md', statePath]]) {
+      try {
+        if (fs.existsSync(p) && conflictRe.test(fs.readFileSync(p, 'utf-8'))) {
+          addIssue('error', 'E006', `Unresolved git conflict markers in ${doc}`,
+            `Resolve the merge conflict in ${doc} (remove <<<<<<< / ======= / >>>>>>> markers)`);
+        }
+      } catch { /* unreadable → skip */ }
+    }
   }
 
   // ─── Check 4: STATE.md exists and references valid phases ─────────────────
@@ -7131,4 +7163,11 @@ function cmdActivityGet(cwd, raw) {
   }
 }
 
-main();
+// Top-level backstop: main() is async, so any throw not caught at a call site
+// (e.g. an unguarded parse in a rarely-hit subcommand) would otherwise surface
+// as a raw unhandled-rejection stack trace. Convert it to a clean Error: + exit 1.
+// Per-call-site guards still run first and give better messages — this is the net.
+main().catch((e) => {
+  process.stderr.write('Error: ' + (e && e.message ? e.message : String(e)) + '\n');
+  process.exit(1);
+});
