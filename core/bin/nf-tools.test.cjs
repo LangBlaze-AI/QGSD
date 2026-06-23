@@ -4573,3 +4573,43 @@ describe('progress bar render (regression: percent > 100 must not crash)', () =>
     assert.ok(result.success, `progress table crashed instead of clamping: ${result.error}`);
   });
 });
+
+// Edge-path robustness — bugs found by an error-path dogfooding probe (F49).
+// Each was an unguarded arg read in the router that produced a raw stack trace
+// (or, for config-set, a silent success that wrote nothing). The fixes turn
+// them into clean `Error:` exits matching the codebase's wrapped-parse style.
+describe('edge-path robustness (dogfooding F49)', () => {
+  let tmpDir;
+  beforeEach(() => { tmpDir = createTempProject(); });
+  afterEach(() => { cleanup(tmpDir); });
+
+  const hasStack = (s) => /\n\s+at .+:\d+:\d+/.test(s || '');
+
+  test('template fill --fields rejects malformed JSON cleanly (no SyntaxError stack)', () => {
+    const r = runNfTools(`template fill execute --fields '{bad'`, tmpDir);
+    assert.ok(!r.success, 'expected non-zero exit');
+    assert.match(r.error, /Invalid --fields JSON/, `expected clean Error, got: ${r.error}`);
+    assert.ok(!hasStack(r.error), `should not leak a stack trace: ${r.error}`);
+  });
+
+  test('summary-extract --fields with no value errors cleanly (no .split TypeError)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'x.md'), '# x\n');
+    const r = runNfTools(`summary-extract x.md --fields`, tmpDir);
+    assert.ok(!r.success, 'expected non-zero exit');
+    assert.match(r.error, /--fields requires/, `expected clean Error, got: ${r.error}`);
+    assert.ok(!/TypeError/.test(r.error) && !hasStack(r.error), `should not leak a TypeError stack: ${r.error}`);
+  });
+
+  test('config-set with no value fails instead of reporting a phantom success', () => {
+    const cfgPath = path.join(tmpDir, '.planning', 'config.json');
+    fs.writeFileSync(cfgPath, JSON.stringify({ existing: 1 }, null, 2));
+    const before = fs.readFileSync(cfgPath, 'utf8');
+    const r = runNfTools(`config-set newkey`, tmpDir);
+    assert.ok(!r.success, `config-set with no value must fail, but succeeded with: ${r.output}`);
+    assert.match(r.error, /a value is required/);
+    // and it must NOT have written the phantom key (the old silent-no-op bug)
+    const after = fs.readFileSync(cfgPath, 'utf8');
+    assert.strictEqual(after, before, 'config.json must be byte-for-byte unchanged');
+    assert.ok(!/newkey/.test(after), 'the phantom key must not be written');
+  });
+});
