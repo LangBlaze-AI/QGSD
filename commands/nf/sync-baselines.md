@@ -81,15 +81,15 @@ If added > 0, list each: `+ [ID] text`
 If intent was auto-detected (no --profile flag), persist to config:
 
 ```bash
-node -e "
+NF_INTENT='<detected_intent_json>' node -e "
 const fs = require('fs');
-const path = require('path');
 const configPath = '.planning/config.json';
-const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
-const intent = JSON.parse(process.argv[1]);
+let config = {};
+try { if (fs.existsSync(configPath)) config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch (e) { /* malformed config → start fresh rather than crash */ }
+const intent = JSON.parse(process.env.NF_INTENT);
 config.intent = intent;
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
-" '<detected_intent_json>'
+"
 ```
 
 ## Step 5: Commit if Needed

@@ -176,9 +176,9 @@ Read risk_level from task envelope if available. Falls back gracefully if absent
 ENVELOPE_PATH=$(echo "${CONTEXT_YAML:-}" | grep '^envelope_path:' | sed 's/envelope_path:[[:space:]]*//')
 
 if [ -n "$ENVELOPE_PATH" ] && [ -f "$ENVELOPE_PATH" ]; then
-  RISK_LEVEL=$(node -e "
+  RISK_LEVEL=$(ENVELOPE_PATH="$ENVELOPE_PATH" node -e "
     try {
-      const e = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+      const e = JSON.parse(require('fs').readFileSync(process.env.ENVELOPE_PATH, 'utf8'));
       const valid = ['low','medium','high'];
       const r = e.risk_level;
       if (valid.includes(r)) { console.log(r); } else { process.stderr.write('[quorum] envelope risk_level=' + r + ' (invalid) → using medium\n'); console.log('medium'); }
@@ -186,7 +186,7 @@ if [ -n "$ENVELOPE_PATH" ] && [ -f "$ENVELOPE_PATH" ]; then
       process.stderr.write('[quorum] envelope parse error → using medium\n');
       console.log('medium');
     }
-  " "$ENVELOPE_PATH" 2>&1)
+  " 2>&1)
   echo "Envelope risk_level: ${RISK_LEVEL}"
 else
   RISK_LEVEL="medium"
