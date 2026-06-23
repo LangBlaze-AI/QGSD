@@ -51,9 +51,11 @@ const fs=require('fs'), path=require('path'), os=require('os');
 const sbPath=path.join(process.cwd(),'.planning','quorum','scoreboard.json');
 let totalRounds=0, lastUpdate=null;
 if(fs.existsSync(sbPath)){
-  const d=JSON.parse(fs.readFileSync(sbPath,'utf8'));
-  totalRounds=(d.rounds||[]).length;
-  lastUpdate=d.team?.captured_at||null;
+  try {
+    const d=JSON.parse(fs.readFileSync(sbPath,'utf8'));
+    totalRounds=(d.rounds||[]).length;
+    lastUpdate=d.team?.captured_at||null;
+  } catch(_){}  // malformed scoreboard → keep defaults, don't crash the status command
 }
 
 // Provider URLs from ~/.claude.json
@@ -65,11 +67,13 @@ const URL_MAP={
 const cfgPath=path.join(os.homedir(),'.claude.json');
 const providers={};
 if(fs.existsSync(cfgPath)){
-  const cfg=JSON.parse(fs.readFileSync(cfgPath,'utf8'));
-  for(const [key,val] of Object.entries(cfg.mcpServers||{})){
-    const url=(val.env||{}).ANTHROPIC_BASE_URL||null;
-    providers[key]=url?URL_MAP[url]||url:null;
-  }
+  try {
+    const cfg=JSON.parse(fs.readFileSync(cfgPath,'utf8'));
+    for(const [key,val] of Object.entries(cfg.mcpServers||{})){
+      const url=(val.env||{}).ANTHROPIC_BASE_URL||null;
+      providers[key]=url?URL_MAP[url]||url:null;
+    }
+  } catch(_){}  // malformed ~/.claude.json → no providers, don't crash
 }
 
 // Claude orchestrator model from ~/.claude/settings.json
