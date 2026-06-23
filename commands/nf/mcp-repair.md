@@ -106,7 +106,7 @@ var providers = null;
  path.join(process.cwd(),"bin","providers.json")].some(function(pp){
   try { providers = JSON.parse(fs.readFileSync(pp,"utf8")); return true; } catch(e) { return false; }
 });
-if (!providers) { console.log(JSON.stringify({})); process.exit(0); }
+if (!providers || !Array.isArray(providers.providers)) { console.log(JSON.stringify({})); process.exit(0); }
 var result = {};
 providers.providers.forEach(function(p) {
   if (p.service && p.service.status) {
@@ -137,7 +137,7 @@ var providers = null;
  path.join(process.cwd(),"bin","providers.json")].some(function(pp){
   try { providers = JSON.parse(fs.readFileSync(pp,"utf8")); return true; } catch(e) { return false; }
 });
-if (!providers) { console.log("Cannot read providers.json — skipping service restart."); process.exit(0); }
+if (!providers || !Array.isArray(providers.providers)) { console.log("Cannot read providers.json — skipping service restart."); process.exit(0); }
 var downSlots = providers.providers.filter(function(p) {
   if (!p.service || !p.service.status) return false;
   try {
@@ -193,7 +193,7 @@ var providers = null;
  path.join(process.cwd(),"bin","providers.json")].some(function(pp){
   try { providers = JSON.parse(fs.readFileSync(pp,"utf8")); return true; } catch(e) { return false; }
 });
-if (!providers) { console.log(JSON.stringify({})); process.exit(0); }
+if (!providers || !Array.isArray(providers.providers)) { console.log(JSON.stringify({})); process.exit(0); }
 var result = {};
 providers.providers.forEach(function(p) {
   if (p.mainTool) {

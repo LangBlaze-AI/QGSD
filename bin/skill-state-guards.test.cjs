@@ -102,6 +102,22 @@ describe('mcp-repair.md providers.json blocks tolerate missing/malformed (F48)',
       assert.equal(r.status, 0, `block crashed on malformed providers.json (exit ${r.status}); stderr=${r.stderr}`);
     }
   });
+
+  // Copilot follow-up: a file that PARSES but has the wrong shape (no
+  // `providers` array) must also not crash `providers.providers.forEach/filter`.
+  it('every providers block exits 0 with a WRONG-SHAPE providers.json ({} and {"providers":{}})', () => {
+    for (const shape of ['{}', '{"providers":{}}', '{"providers":null}']) {
+      for (const b of blocks) {
+        const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'f48ws-'));
+        fs.mkdirSync(path.join(proj, 'bin'), { recursive: true });
+        fs.writeFileSync(path.join(proj, 'bin', 'providers.json'), shape);
+        const r = runBlock(b, { cwd: proj, home: proj });
+        fs.rmSync(proj, { recursive: true, force: true });
+        assert.equal(r.status, 0, `block crashed on wrong-shape providers.json ${shape} (exit ${r.status}); stderr=${r.stderr}`);
+        assert.ok(!leaksCrash(r.stdout), `crash leaked to stdout for shape ${shape}: ${r.stdout}`);
+      }
+    }
+  });
 });
 
 describe('resolve.md Step 1 guards its state-file parses (F48)', () => {
@@ -122,5 +138,12 @@ describe('resolve.md Step 1 guards its state-file parses (F48)', () => {
       !/if \(fs\.existsSync\(CANDIDATES_PATH\)\) \{\s*\n\s*const cd = JSON\.parse/.test(md),
       'unguarded `JSON.parse(CANDIDATES_PATH)` directly under existsSync is still present'
     );
+  });
+
+  it('keeps numeric confirmed/rejected defaults when metadata is missing (no undefined in output)', () => {
+    // meta.confirmed/rejected are undefined on a partial file; JSON.stringify
+    // drops undefined keys, changing the output shape — default them to 0.
+    assert.ok(/confirmed: meta\.confirmed \|\| 0/.test(md), 'expected `confirmed: meta.confirmed || 0`');
+    assert.ok(/rejected: meta\.rejected \|\| 0/.test(md), 'expected `rejected: meta.rejected || 0`');
   });
 });

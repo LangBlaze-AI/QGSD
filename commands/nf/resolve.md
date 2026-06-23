@@ -81,7 +81,7 @@ if (fs.existsSync(PAIRINGS_PATH)) {
     const byVerdict = { yes: 0, no: 0, maybe: 0 };
     for (const p of pending) byVerdict[p.verdict || 'maybe']++;
     pairingSummary = { total: pairings.length, pending: pending.length,
-      confirmed: meta.confirmed, rejected: meta.rejected, byVerdict };
+      confirmed: meta.confirmed || 0, rejected: meta.rejected || 0, byVerdict };
   } catch(_){}  // keep the zeroed pairingSummary on any parse/shape error
 }
 
