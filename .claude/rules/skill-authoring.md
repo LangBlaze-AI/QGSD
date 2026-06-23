@@ -14,8 +14,11 @@ redirect/operator/closer (`2>`, `>`, `<`, `|`, `&&`, `||`, `;`, `)`, …).
 RESULT=$(node -e "const a = process.env.AGENT; …" AGENT="$AGENT")
 
 # WRONG — args after the eval break when the eval-guard rewrites `node -e` to a
-# quoted heredoc; the terminator line is no longer alone (the F21 bug):
+# quoted heredoc; the terminator line is no longer alone (the F21 bug). This
+# applies to ANY trailing token — bare flags, `-- "$X"`, AND whitespace-separated
+# quoted args (`… " "$ENVELOPE_PATH"` / `… " '<intent_json>'`):
 node -e "const x = process.argv[1]; …" -- "$REQ_ID"
+node -e "const x = process.argv[1]; …" "$ENVELOPE_PATH"
 
 # RIGHT — assign env BEFORE node and read it with process.env:
 RESULT=$(AGENT="$AGENT" node -e "const a = process.env.AGENT; …")

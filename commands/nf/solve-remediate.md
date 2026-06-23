@@ -505,7 +505,7 @@ Then parse `.planning/formal/check-results.ndjson` and for each entry with `resu
 ```bash
 CLASSIFIER="$HOME/.claude/nf-bin/classify-tlc-failure.cjs"
 [ -f "$CLASSIFIER" ] || CLASSIFIER="bin/classify-tlc-failure.cjs"
-FAILURE_CLASS=$(node -e "const {classifyTlcFailure}=require(process.argv[1]); const e=JSON.parse(process.argv[2]); console.log(classifyTlcFailure(e))" "$CLASSIFIER" "$ENTRY_JSON")
+FAILURE_CLASS=$(NF_CLASSIFIER="$CLASSIFIER" NF_ENTRY="$ENTRY_JSON" node -e "const {classifyTlcFailure}=require(process.env.NF_CLASSIFIER); const e=JSON.parse(process.env.NF_ENTRY); console.log(classifyTlcFailure(e))")
 ```
 
 Then dispatch based on the classification result:

@@ -32,6 +32,25 @@ describe('skill-eval-lint detector', () => {
     assert.equal(v[0].rule, 'eval-arg-after');
   });
 
+  it('flags a whitespace-separated DOUBLE-quoted arg after the eval (F21)', () => {
+    const v = findEvalTrailingViolations(`R=$(${E}process.argv[1]" "$ENVELOPE_PATH" 2>&1)`, 'f.md');
+    assert.equal(v.length, 1);
+    assert.equal(v[0].rule, 'eval-arg-after');
+  });
+
+  it('flags a whitespace-separated SINGLE-quoted arg after the eval (F21)', () => {
+    const v = findEvalTrailingViolations(`${E}process.argv[1]" '<intent_json>'`, 'f.md');
+    assert.equal(v.length, 1);
+    assert.equal(v[0].rule, 'eval-arg-after');
+  });
+
+  it('does NOT flag an immediately-adjacent quote (shell string concatenation, no space)', () => {
+    // `node -e "a""b"` → the eval string is `ab`; the second quote is not a
+    // separate positional arg, so it must not be treated as arg-after.
+    assert.equal(findEvalTrailingViolations(`${E}a""b"`, 'f.md').length, 0);
+    assert.equal(findEvalTrailingViolations(`${E}a"'b'`, 'f.md').length, 0);
+  });
+
   it('accepts env BEFORE the eval', () => {
     assert.equal(findEvalTrailingViolations(`A="1" ${E}process.env.A"`, 'f.md').length, 0);
   });

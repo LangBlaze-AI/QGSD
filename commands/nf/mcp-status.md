@@ -140,8 +140,8 @@ Display as `sub` or `api` in the Auth column.
 From INIT_INFO.slots, compute a count description and print the banner:
 
 ```bash
-node -e "
-const s=JSON.parse(process.argv[1]);
+NF_SLOTS='${JSON.stringify(INIT_INFO.slots)}' node -e "
+const s=JSON.parse(process.env.NF_SLOTS);
 const cli=s.cli.length, http=s.http.length, mcp=s.mcp.length;
 const parts=[];
 if(cli>0) parts.push(cli+' CLI agent'+(cli>1?'s':''));
@@ -153,7 +153,7 @@ console.log(' nForma ► MCP STATUS');
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 console.log('');
 console.log('Querying '+countStr+'...');
-" '${JSON.stringify(INIT_INFO.slots)}'
+"
 ```
 
 ## Step 3: Collect identity + health_check results via sub-agent (run after Step 2 output is stored)

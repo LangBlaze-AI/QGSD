@@ -35,14 +35,21 @@ function findEvalTrailingViolations(text, file) {
     if (j >= text.length) break; // unterminated — skip
     const lineEnd = text.indexOf('\n', j);
     const rest = text.slice(j + 1, lineEnd === -1 ? text.length : lineEnd);
+    const leadWs = /^[ \t]/.test(rest); // is the next token whitespace-separated?
     const t = rest.replace(/^[ \t]+/, '');
     let rule = null;
-    if (t === '' || /^(\)|2>|1>|>|<|\||&|;|\}|`|"|'|\\)/.test(t)) {
+    if (t === '' || /^(\)|2>|1>|>|<|\||&|;|\}|`|\\)/.test(t)) {
       rule = null; // legal: nothing, or a redirect/operator/closer follows
+    } else if (!leadWs && /^["']/.test(t)) {
+      // A quote *immediately* after the close (no space) is shell string
+      // concatenation — the eval string continues (e.g. `"a""b"`), not a
+      // trailing arg. A *whitespace-separated* quoted token, however, is a
+      // positional arg (the F21 bug) and falls through to be flagged below.
+      rule = null;
     } else if (/^[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)/.test(t)) {
       rule = 'eval-env-after'; // F1
     } else {
-      rule = 'eval-arg-after'; // F21
+      rule = 'eval-arg-after'; // F21 — incl. a whitespace-separated quoted arg
     }
     if (rule) {
       out.push({ file, line: text.slice(0, i).split('\n').length, rule, text: t.slice(0, 60) });
