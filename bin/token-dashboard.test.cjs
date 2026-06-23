@@ -132,6 +132,19 @@ describe('token-dashboard', () => {
       assert.strictEqual(formatDashboard(null), 'No token usage data found.');
     });
 
+    it('honors --json on empty records: valid empty-shape JSON, not a human string', () => {
+      for (const empty of [[], null]) {
+        const out = formatDashboard(empty, { json: true });
+        // must be parseable — a caller doing JSON.parse(out) must not throw
+        const parsed = JSON.parse(out);
+        assert.deepStrictEqual(parsed, {
+          slots: {},
+          sessions: {},
+          total: { input: 0, output: 0, estimatedCost: 0 },
+        });
+      }
+    });
+
     it('contains expected column headers', () => {
       const records = [
         { slot: 'codex-1', input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 10, session_id: 's1', ts: '2026-01-01T00:00:00Z' },
