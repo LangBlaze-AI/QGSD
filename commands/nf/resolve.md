@@ -71,25 +71,33 @@ for (const catKey of ["dtoc", "ctor", "ttor", "dtor"]) {
 const PAIRINGS_PATH = path.join(process.cwd(), '.planning', 'formal', 'candidate-pairings.json');
 let pairingSummary = { total: 0, pending: 0, confirmed: 0, rejected: 0, byVerdict: {} };
 if (fs.existsSync(PAIRINGS_PATH)) {
-  const pd = JSON.parse(fs.readFileSync(PAIRINGS_PATH, 'utf8'));
-  const pending = pd.pairings.filter(p => p.status === 'pending');
-  const byVerdict = { yes: 0, no: 0, maybe: 0 };
-  for (const p of pending) byVerdict[p.verdict || 'maybe']++;
-  pairingSummary = { total: pd.pairings.length, pending: pending.length,
-    confirmed: pd.metadata.confirmed, rejected: pd.metadata.rejected, byVerdict };
+  try {
+    const pd = JSON.parse(fs.readFileSync(PAIRINGS_PATH, 'utf8'));
+    // Tolerate a malformed file or a missing pairings/metadata shape — a
+    // partially-written file must not crash the whole resolve summary.
+    const pairings = Array.isArray(pd.pairings) ? pd.pairings : [];
+    const meta = pd.metadata || {};
+    const pending = pairings.filter(p => p.status === 'pending');
+    const byVerdict = { yes: 0, no: 0, maybe: 0 };
+    for (const p of pending) byVerdict[p.verdict || 'maybe']++;
+    pairingSummary = { total: pairings.length, pending: pending.length,
+      confirmed: meta.confirmed, rejected: meta.rejected, byVerdict };
+  } catch(_){}  // keep the zeroed pairingSummary on any parse/shape error
 }
 
 // Load orphans from candidates.json if file exists
 const CANDIDATES_PATH = path.join(process.cwd(), '.planning', 'formal', 'candidates.json');
 let orphanSummary = { models: 0, requirements: 0 };
 if (fs.existsSync(CANDIDATES_PATH)) {
-  const cd = JSON.parse(fs.readFileSync(CANDIDATES_PATH, 'utf8'));
-  if (cd.orphans) {
-    orphanSummary = {
-      models: (cd.orphans.models || []).length,
-      requirements: (cd.orphans.requirements || []).length,
-    };
-  }
+  try {
+    const cd = JSON.parse(fs.readFileSync(CANDIDATES_PATH, 'utf8'));
+    if (cd.orphans) {
+      orphanSummary = {
+        models: (cd.orphans.models || []).length,
+        requirements: (cd.orphans.requirements || []).length,
+      };
+    }
+  } catch(_){}  // malformed candidates → keep the zeroed orphanSummary
 }
 
 console.log(JSON.stringify({ summary, archived: archive.entries.length, pairings: pairingSummary, orphans: orphanSummary }));

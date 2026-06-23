@@ -97,7 +97,16 @@ For slots that have `service` config in providers.json (claude-1..6), check serv
 node << 'NF_EVAL'
 var fs = require("fs");
 var cp = require("child_process");
-var providers = JSON.parse(fs.readFileSync("bin/providers.json", "utf8"));
+var os = require("os"), path = require("path");
+// Portable + guarded providers.json load (installed at ~/.claude/nf-bin, or
+// ./bin from the repo). A missing/malformed file must not crash with ENOENT.
+var providers = null;
+[path.join(os.homedir(),".claude","nf","bin","providers.json"),
+ path.join(os.homedir(),".claude","nf-bin","providers.json"),
+ path.join(process.cwd(),"bin","providers.json")].some(function(pp){
+  try { providers = JSON.parse(fs.readFileSync(pp,"utf8")); return true; } catch(e) { return false; }
+});
+if (!providers) { console.log(JSON.stringify({})); process.exit(0); }
 var result = {};
 providers.providers.forEach(function(p) {
   if (p.service && p.service.status) {
@@ -120,7 +129,15 @@ If any service reports not-running/stopped, classify as SERVICE_DOWN and attempt
 node << 'NF_EVAL'
 var fs = require("fs");
 var cp = require("child_process");
-var providers = JSON.parse(fs.readFileSync("bin/providers.json", "utf8"));
+var os = require("os"), path = require("path");
+// Portable + guarded providers.json load (see Step 2b above).
+var providers = null;
+[path.join(os.homedir(),".claude","nf","bin","providers.json"),
+ path.join(os.homedir(),".claude","nf-bin","providers.json"),
+ path.join(process.cwd(),"bin","providers.json")].some(function(pp){
+  try { providers = JSON.parse(fs.readFileSync(pp,"utf8")); return true; } catch(e) { return false; }
+});
+if (!providers) { console.log("Cannot read providers.json — skipping service restart."); process.exit(0); }
 var downSlots = providers.providers.filter(function(p) {
   if (!p.service || !p.service.status) return false;
   try {
@@ -168,7 +185,15 @@ Check CLI binary existence using three-tier resolution:
 node << 'NF_EVAL'
 var fs = require("fs");
 var cp = require("child_process");
-var providers = JSON.parse(fs.readFileSync("bin/providers.json", "utf8"));
+var os = require("os"), path = require("path");
+// Portable + guarded providers.json load (see Step 2b above).
+var providers = null;
+[path.join(os.homedir(),".claude","nf","bin","providers.json"),
+ path.join(os.homedir(),".claude","nf-bin","providers.json"),
+ path.join(process.cwd(),"bin","providers.json")].some(function(pp){
+  try { providers = JSON.parse(fs.readFileSync(pp,"utf8")); return true; } catch(e) { return false; }
+});
+if (!providers) { console.log(JSON.stringify({})); process.exit(0); }
 var result = {};
 providers.providers.forEach(function(p) {
   if (p.mainTool) {
@@ -253,7 +278,9 @@ For each slot classified as `mcp-down` (claude-1..6 only, when service auto-star
 ```bash
 AGENT="<slot-name>" node << 'NF_EVAL'
 var fs = require("fs"), path = require("path"), os = require("os");
-var cj = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude.json"), "utf8"));
+var cj;
+try { cj = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".claude.json"), "utf8")); }
+catch(e) { process.stderr.write("could not read ~/.claude.json: " + (e && e.message || e) + "\n"); process.exit(2); }
 var sc = (cj.mcpServers || {})[process.env.AGENT];
 if (sc === undefined) { process.stderr.write("not configured\n"); process.exit(2); }
 var cmd = sc.command, args = sc.args || [];
