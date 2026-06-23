@@ -2308,3 +2308,18 @@ test('TC-FB-11: failed checkpoint Bash call does not clear the gate', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// TC-FORMAL: the Stop hook must carry NO formal-artifact auto-commit path.
+// Auto-committing dirty .planning/formal/ on every turn-end polluted feature
+// branches with stray `chore: [auto]` commits (the self-pollution bug). The fix
+// removes the commit entirely — regeneration stays on disk; only /nf:solve
+// commits formal artifacts intentionally (and branch-safely). This is a static
+// guard: the deep quorum-pass path where the commit used to run can't be
+// reached without full project config/state, so we assert the code is gone.
+test('TC-FORMAL: nf-stop.js carries no formal auto-commit (no commit of .planning/formal)', () => {
+  const src = fs.readFileSync(HOOK_PATH, 'utf8');
+  assert.ok(!/autoCommitFormalArtifacts/.test(src), 'autoCommitFormalArtifacts must be removed');
+  assert.ok(!/\[auto\] sync regenerated formal/.test(src), 'the auto-commit message must be gone');
+  // belt-and-suspenders: no git-commit invocation targeting .planning/formal/ in the Stop hook
+  assert.ok(!/commit[^\n]*\.planning\/formal/.test(src), 'the Stop hook must not git-commit .planning/formal/');
+});
