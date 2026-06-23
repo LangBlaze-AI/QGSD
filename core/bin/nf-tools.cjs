@@ -715,6 +715,12 @@ function cmdConfigSet(cwd, keyPath, value, raw) {
   if (!keyPath) {
     error('Usage: config-set <key.path> <value>');
   }
+  // A missing value would set the key to `undefined`, which JSON.stringify
+  // silently DROPS — yet the old code still reported `{updated: true}`, a
+  // silent no-op that lies about having written. Require an explicit value.
+  if (value === undefined) {
+    error('Usage: config-set <key.path> <value> — a value is required');
+  }
 
   // Parse value (handle booleans and numbers)
   let parsedValue = value;
@@ -5582,13 +5588,24 @@ async function main() {
         const typeIdx = args.indexOf('--type');
         const waveIdx = args.indexOf('--wave');
         const fieldsIdx = args.indexOf('--fields');
+        // Guard the --fields JSON parse: a malformed or missing value must
+        // produce a clean Error:, not a raw SyntaxError stack trace (matches
+        // the wrapped-parse convention used elsewhere, e.g. frontmatter merge).
+        let templateFields = {};
+        if (fieldsIdx !== -1) {
+          try {
+            templateFields = JSON.parse(args[fieldsIdx + 1]);
+          } catch (e) {
+            error('Invalid --fields JSON: ' + e.message);
+          }
+        }
         cmdTemplateFill(cwd, templateType, {
           phase: phaseIdx !== -1 ? args[phaseIdx + 1] : null,
           plan: planIdx !== -1 ? args[planIdx + 1] : null,
           name: nameIdx !== -1 ? args[nameIdx + 1] : null,
           type: typeIdx !== -1 ? args[typeIdx + 1] : 'execute',
           wave: waveIdx !== -1 ? args[waveIdx + 1] : '1',
-          fields: fieldsIdx !== -1 ? JSON.parse(args[fieldsIdx + 1]) : {},
+          fields: templateFields,
         }, raw);
       } else {
         error('Unknown template subcommand. Available: select, fill');
@@ -5860,6 +5877,10 @@ async function main() {
     case 'summary-extract': {
       const summaryPath = args[1];
       const fieldsIndex = args.indexOf('--fields');
+      // `--fields` with no value would call .split on undefined → TypeError.
+      if (fieldsIndex !== -1 && args[fieldsIndex + 1] === undefined) {
+        error('--fields requires a comma-separated value (e.g. --fields goal,status)');
+      }
       const fields = fieldsIndex !== -1 ? args[fieldsIndex + 1].split(',') : null;
       cmdSummaryExtract(cwd, summaryPath, fields, raw);
       break;
