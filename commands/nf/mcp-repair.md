@@ -104,7 +104,7 @@ var providers = null;
 [path.join(os.homedir(),".claude","nf","bin","providers.json"),
  path.join(os.homedir(),".claude","nf-bin","providers.json"),
  path.join(process.cwd(),"bin","providers.json")].some(function(pp){
-  try { providers = JSON.parse(fs.readFileSync(pp,"utf8")); return true; } catch(e) { return false; }
+  try { var parsed = JSON.parse(fs.readFileSync(pp,"utf8")); if (parsed && Array.isArray(parsed.providers)) { providers = parsed; return true; } return false; } catch(e) { return false; }
 });
 if (!providers || !Array.isArray(providers.providers)) { console.log(JSON.stringify({})); process.exit(0); }
 var result = {};
@@ -135,7 +135,7 @@ var providers = null;
 [path.join(os.homedir(),".claude","nf","bin","providers.json"),
  path.join(os.homedir(),".claude","nf-bin","providers.json"),
  path.join(process.cwd(),"bin","providers.json")].some(function(pp){
-  try { providers = JSON.parse(fs.readFileSync(pp,"utf8")); return true; } catch(e) { return false; }
+  try { var parsed = JSON.parse(fs.readFileSync(pp,"utf8")); if (parsed && Array.isArray(parsed.providers)) { providers = parsed; return true; } return false; } catch(e) { return false; }
 });
 if (!providers || !Array.isArray(providers.providers)) { console.log("Cannot read providers.json — skipping service restart."); process.exit(0); }
 var downSlots = providers.providers.filter(function(p) {
@@ -191,7 +191,7 @@ var providers = null;
 [path.join(os.homedir(),".claude","nf","bin","providers.json"),
  path.join(os.homedir(),".claude","nf-bin","providers.json"),
  path.join(process.cwd(),"bin","providers.json")].some(function(pp){
-  try { providers = JSON.parse(fs.readFileSync(pp,"utf8")); return true; } catch(e) { return false; }
+  try { var parsed = JSON.parse(fs.readFileSync(pp,"utf8")); if (parsed && Array.isArray(parsed.providers)) { providers = parsed; return true; } return false; } catch(e) { return false; }
 });
 if (!providers || !Array.isArray(providers.providers)) { console.log(JSON.stringify({})); process.exit(0); }
 var result = {};

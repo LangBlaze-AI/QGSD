@@ -103,6 +103,15 @@ describe('mcp-repair.md providers.json blocks tolerate missing/malformed (F48)',
     }
   });
 
+  it('the resolver only accepts a candidate whose parsed object has a providers array', () => {
+    // A wrong-shape file at an earlier candidate path must not stop the
+    // resolver from falling through to a valid providers.json later in the list.
+    assert.ok(
+      /Array\.isArray\(parsed\.providers\)/.test(read('mcp-repair.md')),
+      'resolver should validate Array.isArray(parsed.providers) before accepting a candidate'
+    );
+  });
+
   // Copilot follow-up: a file that PARSES but has the wrong shape (no
   // `providers` array) must also not crash `providers.providers.forEach/filter`.
   it('every providers block exits 0 with a WRONG-SHAPE providers.json ({} and {"providers":{}})', () => {
