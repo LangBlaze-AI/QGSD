@@ -76,7 +76,11 @@ function fixDuplicates(text) {
   for (const block of splitVersionBlocks(text)) {
     if (!block.heading) { out.push(...block.lines); continue; }
     const { head, sections } = parseSections(block.lines);
-    if (sections.length === 0) { out.push(...block.lines); continue; }
+    const names = sections.map((s) => s.name);
+    const hasDup = names.length !== new Set(names).size;
+    // Only the offending block is rewritten — blocks without duplicate sections
+    // are emitted byte-for-byte unchanged (no whitespace normalization).
+    if (!hasDup) { out.push(...block.lines); continue; }
     // Group bodies by section name, preserving first-seen order.
     const order = [];
     const merged = new Map();
@@ -86,23 +90,21 @@ function fixDuplicates(text) {
       while (body.length && body[0].trim() === '') body.shift();
       while (body.length && body[body.length - 1].trim() === '') body.pop();
       if (!merged.has(s.name)) { merged.set(s.name, []); order.push(s.name); }
-      const acc = merged.get(s.name);
-      if (acc.length) acc.push(''); // (no-op separator removed below; keep bullets contiguous)
-      acc.push(...body);
+      merged.get(s.name).push(...body);
     }
     // trim trailing blank lines of the head
     const headTrim = head.slice();
     while (headTrim.length && headTrim[headTrim.length - 1].trim() === '') headTrim.pop();
     out.push(...headTrim, '');
-    order.forEach((name, idx) => {
+    order.forEach((name) => {
       out.push(`### ${name}`);
-      out.push(...merged.get(name).filter((l, i, a) => !(l === '' && (i === 0 || a[i - 1] === ''))));
+      out.push(...merged.get(name));
       out.push('');
     });
   }
-  // collapse 3+ consecutive blank lines to 1, ensure single trailing newline
-  const text2 = out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\s*$/, '\n');
-  return text2;
+  // Single trailing newline; do NOT globally collapse blank runs (untouched
+  // blocks must stay byte-for-byte identical).
+  return out.join('\n').replace(/\n+$/, '\n');
 }
 
 function main() {

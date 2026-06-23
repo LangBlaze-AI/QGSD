@@ -73,6 +73,26 @@ describe('fixDuplicates', () => {
     const once = fixDuplicates(sample);
     assert.deepEqual(findDuplicateSections(once), []);
   });
+
+  it('leaves blocks WITHOUT duplicates byte-for-byte unchanged (surgical)', () => {
+    // [0.9.0] (double-blank + odd spacing) and [0.8.0] have no dup sections;
+    // only [Unreleased] does. The fix must touch ONLY [Unreleased].
+    const text = [
+      '# C', '',
+      '## [Unreleased]', '',
+      '### Added', '- a1', '',
+      '### Added', '- a2', '',
+      '## [0.9.0]', '', '',
+      '### Fixed', '- keep   weird   spacing', '',
+      '## [0.8.0]', '',
+      '### Added', '- z', '',
+    ].join('\n') + '\n';
+    const fixed = fixDuplicates(text);
+    const tail = (s) => s.slice(s.indexOf('## [0.9.0]'));
+    assert.equal(tail(fixed), tail(text), 'dup-free blocks must be preserved byte-for-byte');
+    // and [Unreleased] was actually consolidated
+    assert.equal((fixed.split('## [0.9.0]')[0].match(/^### Added$/gm) || []).length, 1);
+  });
 });
 
 describe('the live CHANGELOG has no duplicate sections (gate)', () => {
