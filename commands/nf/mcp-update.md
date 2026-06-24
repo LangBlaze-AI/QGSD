@@ -179,7 +179,8 @@ node << 'NF_EVAL'
 const fs=require('fs'),path=require('path'),os=require('os');
 const SKIP=['canopy','sentry'];
 const claudeJsonPath=path.join(os.homedir(),'.claude.json');
-const claudeJson=JSON.parse(fs.readFileSync(claudeJsonPath,'utf8'));
+let claudeJson={};
+try { claudeJson=JSON.parse(fs.readFileSync(claudeJsonPath,'utf8')); } catch(e) { /* malformed ~/.claude.json → no known agents */ }
 const servers=claudeJson.mcpServers||{};
 const KNOWN_AGENTS=Object.keys(servers).filter(s=>!SKIP.includes(s));
 function findGitRoot(file){

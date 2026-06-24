@@ -345,8 +345,10 @@ const fs = require('fs');
 const dir = '.planning/formal/generated-stubs';
 const recipes = fs.readdirSync(dir).filter(f => f.endsWith('.stub.recipe.json'));
 const incomplete = recipes.filter(f => {
-  const r = JSON.parse(fs.readFileSync(dir + '/' + f, 'utf8'));
-  return !r.source_files.length || !r.formal_property.definition;
+  try {
+    const r = JSON.parse(fs.readFileSync(dir + '/' + f, 'utf8'));
+    return !(r.source_files || []).length || !(r.formal_property || {}).definition;
+  } catch (e) { return true; } // unparseable/incomplete recipe → count as incomplete
 });
 console.log('[solve] Recipes: ' + recipes.length + ' total, ' + incomplete.length + ' incomplete');
 "

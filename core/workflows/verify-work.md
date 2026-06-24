@@ -235,10 +235,10 @@ Read Current Test section from UAT file.
     # Prefer playwright runner if present and has files
     if grep -q '"playwright"' "$DISCOVER_JSON" && grep -q '\.spec\.' "$DISCOVER_JSON"; then
       # Build a small batch manifest containing discovered Playwright spec files
-      NF_DISCOVER="$DISCOVER_JSON" NF_BATCH="$BATCH_FILE" node -e "const fs=require('fs'); const d=JSON.parse(fs.readFileSync(process.env.NF_DISCOVER)); const files=(d.by_runner&&d.by_runner.playwright)||d.test_files||[]; const m={batch_id:Date.now(), runner:'playwright', files:files}; fs.writeFileSync(process.env.NF_BATCH, JSON.stringify(m));"
+      NF_DISCOVER="$DISCOVER_JSON" NF_BATCH="$BATCH_FILE" node -e "const fs=require('fs'); let d={}; try{ d=JSON.parse(fs.readFileSync(process.env.NF_DISCOVER)); }catch(e){} const files=(d.by_runner&&d.by_runner.playwright)||d.test_files||[]; const m={batch_id:Date.now(), runner:'playwright', files:files}; fs.writeFileSync(process.env.NF_BATCH, JSON.stringify(m));"
     else
       # Try jest files as fallback
-      NF_DISCOVER="$DISCOVER_JSON" NF_BATCH="$BATCH_FILE" node -e "const fs=require('fs'); const d=JSON.parse(fs.readFileSync(process.env.NF_DISCOVER)); const files=(d.by_runner&&d.by_runner.jest)||d.test_files||[]; const m={batch_id:Date.now(), runner:'jest', files:files}; fs.writeFileSync(process.env.NF_BATCH, JSON.stringify(m));"
+      NF_DISCOVER="$DISCOVER_JSON" NF_BATCH="$BATCH_FILE" node -e "const fs=require('fs'); let d={}; try{ d=JSON.parse(fs.readFileSync(process.env.NF_DISCOVER)); }catch(e){} const files=(d.by_runner&&d.by_runner.jest)||d.test_files||[]; const m={batch_id:Date.now(), runner:'jest', files:files}; fs.writeFileSync(process.env.NF_BATCH, JSON.stringify(m));"
     fi
 
     # If manifest has files, run a short batch (timeout short to keep verify-work responsive)
