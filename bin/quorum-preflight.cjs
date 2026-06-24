@@ -69,6 +69,9 @@ const ALLOW_ENSURE_SERVICES =
 const CACHE_FILE  = path.join(os.homedir(), '.claude', 'nf-provider-cache.json');
 const TTL_UP_MS   = 180000; // 3 minutes
 const TTL_DOWN_MS = 300000; // 5 minutes
+const TTL_BIN_MS  = 60000;  // 1 minute — Layer-1 CLI-binary presence rarely changes
+                            // within a prompt burst; caching it avoids re-spawning
+                            // every slot's binary on every UserPromptSubmit.
 
 // ─── Read merged nf.json config ─────────────────────────────────────────────
 function readConfig() {
@@ -176,6 +179,17 @@ function getCachedResult(cache, baseUrl) {
   const age = Date.now() - entry.cachedAt;
   if (age < ttl) return { ...entry, remainingMs: ttl - age };
   return null; // stale
+}
+
+// Layer-1 binary-probe cache. Keyed `bin:<spawnTarget>` and tagged kind:'binary'
+// so it never collides with the URL-keyed HTTP entries. A short TTL keeps a
+// newly-installed/removed CLI detectable within a minute while collapsing the
+// repeated per-prompt binary spawns into a single probe.
+function getCachedBinary(cache, key) {
+  const entry = cache.entries[key];
+  if (!entry || entry.kind !== 'binary') return null;
+  const age = Date.now() - entry.cachedAt;
+  return age < TTL_BIN_MS ? entry : null;
 }
 
 // ─── Layer 1: Binary probe ──────────────────────────────────────────────────
@@ -327,11 +341,24 @@ async function probeHealth(providers) {
     // raw p.cli is null when only mainTool is set, which previously reported the
     // entire fleet false-dead. resolveSpawnTarget falls back to mainTool.
     const spawnTarget = resolveSpawnTarget(p);
-    const layer1Promise = isHttp
-      ? Promise.resolve({ ok: true, skipped: true, reason: 'HTTP slot — no CLI binary' })
-      : spawnTarget
-        ? probeBinary(spawnTarget, p.health_check_args || [])
-        : Promise.resolve({ ok: false, reason: 'no CLI configured (cli, resolvedCli, mainTool all empty)' });
+    let layer1Promise;
+    if (isHttp) {
+      layer1Promise = Promise.resolve({ ok: true, skipped: true, reason: 'HTTP slot — no CLI binary' });
+    } else if (!spawnTarget) {
+      layer1Promise = Promise.resolve({ ok: false, reason: 'no CLI configured (cli, resolvedCli, mainTool all empty)' });
+    } else {
+      const binKey = 'bin:' + spawnTarget;
+      const cachedBin = getCachedBinary(cache, binKey);
+      if (cachedBin) {
+        layer1Promise = Promise.resolve({ ok: cachedBin.healthy, reason: cachedBin.reason, cacheAge: 'cached' });
+      } else {
+        layer1Promise = probeBinary(spawnTarget, p.health_check_args || []).then((result) => {
+          cache.entries[binKey] = { kind: 'binary', healthy: result.ok, reason: result.reason, cachedAt: Date.now() };
+          saveCache(cache);
+          return { ...result, cacheAge: 'fresh' };
+        });
+      }
+    }
 
     // Layer 2: upstream API probe (HTTP slots only)
     let layer2Promise;

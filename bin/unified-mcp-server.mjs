@@ -19,7 +19,7 @@ import os from 'os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const { resolveCli } = require('./resolve-cli.cjs');
+const { resolveCli, resolveSpawnTarget: sharedResolveSpawnTarget } = require('./resolve-cli.cjs');
 const { resolveProvidersConfig } = require('./resolve-providers.cjs');
 const { _pure: { detectInstalledProviders } } = require('./manage-agents-core.cjs');
 const { resolveEnvPlaceholders, findUnresolvedPlaceholders } = require('./resolve-env.cjs');
@@ -308,7 +308,14 @@ function truncateResponse(text) {
  * @returns {string} a non-empty executable name or path
  */
 function resolveSpawnTarget(provider) {
-  const target = provider.resolvedCli || provider.cli || provider.mainTool;
+  // Delegate to the shared resolver (resolve-cli.cjs) — the last divergent copy
+  // of this logic (issue #197 family). The local version returned a BARE name
+  // (resolvedCli || cli || mainTool); the shared one runs cli/mainTool through
+  // resolveCli (absolute path / which / Homebrew / npm), so a slot whose
+  // resolvedCli wasn't pre-populated at startup still resolves to a real
+  // executable instead of a bare name that can fail under a GUI-launched PATH.
+  // Keep the throw-on-empty contract this server's spawn sites rely on.
+  const target = sharedResolveSpawnTarget(provider);
   if (!target) {
     throw new Error(`provider ${provider.name} has no resolvable CLI (cli, resolvedCli, and mainTool all empty)`);
   }
