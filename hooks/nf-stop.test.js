@@ -2320,6 +2320,11 @@ test('TC-FORMAL: nf-stop.js carries no formal auto-commit (no commit of .plannin
   const src = fs.readFileSync(HOOK_PATH, 'utf8');
   assert.ok(!/autoCommitFormalArtifacts/.test(src), 'autoCommitFormalArtifacts must be removed');
   assert.ok(!/\[auto\] sync regenerated formal/.test(src), 'the auto-commit message must be gone');
-  // belt-and-suspenders: no git-commit invocation targeting .planning/formal/ in the Stop hook
-  assert.ok(!/commit[^\n]*\.planning\/formal/.test(src), 'the Stop hook must not git-commit .planning/formal/');
+  // belt-and-suspenders: no nf-tools 'commit' invocation referencing .planning/formal.
+  // Match the QUOTED subcommand ('commit' / "commit") so the word "committed" can't
+  // false-positive, and span lines/array-form with a bounded [\s\S] (both orders) so a
+  // multiline `commit … --files … .planning/formal` can't slip through.
+  const formalCommit = /['"]commit['"][\s\S]{0,300}\.planning\/formal/.test(src)
+                    || /\.planning\/formal[\s\S]{0,300}['"]commit['"]/.test(src);
+  assert.ok(!formalCommit, 'the Stop hook must not git-commit .planning/formal/');
 });
