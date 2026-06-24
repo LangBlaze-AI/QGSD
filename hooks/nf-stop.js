@@ -59,51 +59,14 @@ function appendConformanceEvent(event) {
   }
 }
 
-// Auto-commits dirty .planning/formal/ files before session ends.
-// Called post-decision — does NOT affect PASS/BLOCK quorum logic.
-// Fail-open: never blocks session exit on commit failure.
-function autoCommitFormalArtifacts() {
-  try {
-    const { spawnSync } = require('child_process');
-    const SPAWN_OPTS = { cwd: process.cwd(), timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] };
-
-    // 1. Check branch safety — skip on protected branches
-    const branchResult = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], SPAWN_OPTS);
-    const branch = (branchResult.stdout || '').toString().trim();
-    const protectedBranches = ['main', 'master'];
-    if (protectedBranches.includes(branch)) {
-      process.stderr.write('[nf] formal auto-commit skipped: protected branch ' + branch + '\n');
-      return;
-    }
-
-    // 2. Detect unstaged modified formal files
-    const diffResult = spawnSync('git', ['diff', '--name-only', '--', '.planning/formal/'], SPAWN_OPTS);
-    const unstagedFiles = (diffResult.stdout || '').toString().trim().split('\n').filter(Boolean);
-
-    // 3. Detect staged-only formal files
-    const stagedResult = spawnSync('git', ['diff', '--cached', '--name-only', '--', '.planning/formal/'], SPAWN_OPTS);
-    const stagedFiles = (stagedResult.stdout || '').toString().trim().split('\n').filter(Boolean);
-
-    // 4. Detect untracked formal files
-    const untrackedResult = spawnSync('git', ['ls-files', '--others', '--exclude-standard', '.planning/formal/'], SPAWN_OPTS);
-    const untrackedFiles = (untrackedResult.stdout || '').toString().trim().split('\n').filter(Boolean);
-
-    // Combine and deduplicate (unstaged + staged + untracked)
-    const allFiles = [...new Set([...unstagedFiles, ...stagedFiles, ...untrackedFiles])];
-    if (allFiles.length === 0) return; // Nothing to commit — exit silently
-
-    // 4. Stage and commit via nf-tools.cjs
-    const nfToolsPath = resolveBin('nf-tools.cjs');
-    const commitArgs = [nfToolsPath, 'commit', 'chore: [auto] sync regenerated formal artifacts', '--files', ...allFiles];
-    const commitResult = spawnSync(process.execPath, commitArgs, SPAWN_OPTS);
-    if (commitResult.status !== 0) {
-      const errMsg = (commitResult.stderr || '').toString().trim();
-      process.stderr.write('[nf] formal auto-commit warning: exit ' + commitResult.status + (errMsg ? ' — ' + errMsg : '') + '\n');
-    }
-  } catch (acErr) {
-    process.stderr.write('[nf] formal auto-commit failed (fail-open): ' + (acErr.message || acErr) + '\n');
-  }
-}
+// NOTE: formal artifacts are regenerated on disk by the nf-spec-regen hook but
+// are intentionally NOT auto-committed from here. Committing on every turn-end
+// polluted feature branches with stray `chore: [auto]` commits during unrelated
+// work — nf-spec-regen fires on any *.machine.ts edit, dirtying .planning/formal/,
+// and this Stop hook then swept + committed that churn onto whatever branch was
+// checked out (it only guarded main/master). Intentional commits of formal
+// artifacts happen only via the /nf:solve flow (bin/solve-commit-artifacts.cjs),
+// which is branch-safe (refuses the default branch, excludes machine-local snapshots).
 
 // Builds the regex that matches /nf:<cmd> or /qnf:<cmd> in any text.
 function buildCommandPattern(quorumCommands) {
@@ -1168,14 +1131,6 @@ function main() {
         }
       } catch (evErr) {
         process.stderr.write('[nf] evidence refresh failed (fail-open): ' + (evErr.message || evErr) + '\n');
-      }
-
-      // Auto-commit dirty formal artifacts before session ends.
-      // Fail-open: never block session exit on commit failure.
-      try {
-        autoCommitFormalArtifacts();
-      } catch (acErr) {
-        process.stderr.write('[nf] formal auto-commit failed (fail-open): ' + (acErr.message || acErr) + '\n');
       }
 
       process.exit(0);
