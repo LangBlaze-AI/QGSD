@@ -35,7 +35,9 @@ silently weaken ROADMAP criteria.
 # Read ROADMAP success criteria for this phase
 PHASE_DATA=$(node ~/.claude/nf/bin/nf-tools.cjs roadmap get-phase "${PHASE_ARG}" --raw 2>/dev/null)
 ROADMAP_CRITERIA=$(echo "$PHASE_DATA" | node -e "
-  const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+  let d;
+  try { d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); }
+  catch (e) { console.log('(no success_criteria in ROADMAP — will use PLAN must_haves as primary source)'); process.exit(0); }
   const sc = d.success_criteria || [];
   sc.forEach((c,i) => console.log('SC-' + (i+1) + ': ' + c));
   if (sc.length === 0) console.log('(no success_criteria in ROADMAP — will use PLAN must_haves as primary source)');

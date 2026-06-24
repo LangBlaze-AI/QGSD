@@ -20,6 +20,23 @@ describe('skill-state-parse-lint detector', () => {
     assert.equal(findUnguardedParses("const x = JSON.parse(readFileSync(p));", 'f.md').length, 1);
   });
 
+  it('flags the inline-require call-receiver form JSON.parse(require("fs").readFileSync(...))', () => {
+    // The recurring skill idiom — a plain identifier-dot chain misses it because
+    // `require('fs')` is a call, not `ident.`. (Copilot caught this gap on #258.)
+    const v = findUnguardedParses("const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));", 'f.md');
+    assert.equal(v.length, 1, 'inline require().readFileSync inside JSON.parse must be flagged');
+  });
+
+  it('flags the inline-require form even under node -p (chained .skip_layers.join)', () => {
+    const code = "node -p \"JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).skip_layers.join(',')\"";
+    assert.equal(findUnguardedParses(code, 'f.md').length, 1);
+  });
+
+  it('accepts the inline-require form when wrapped in a try/catch IIFE', () => {
+    const code = "node -p \"(()=>{try{return JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).skip_layers.join(',')}catch(e){return ''}})()\"";
+    assert.equal(findUnguardedParses(code, 'f.md').length, 0, 'a try/catch IIFE guards the inline-require parse');
+  });
+
   it('accepts a parse inside a try/catch', () => {
     const code = "try { const x = JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) {}";
     assert.equal(findUnguardedParses(code, 'f.md').length, 0);

@@ -16,8 +16,11 @@
 // Pure, dependency-free; exported for the linter and its test.
 
 // Matches `JSON.parse(fs.readFileSync(` / `JSON.parse(readFileSync(` /
-// `JSON.parse(await fs.promises.readFile(` etc. — the read-then-parse shape.
-const PARSE_RE = /JSON\.parse\(\s*(?:await\s+)?(?:[A-Za-z_$][\w$]*\.)*read[A-Za-z]*\(/g;
+// `JSON.parse(await fs.promises.readFile(` / `JSON.parse(require('fs').readFileSync(`
+// — the read-then-parse shape. The `(?:ident(args).)*` segment covers a call
+// receiver such as `require('fs').` (or `getFs().`), which a plain identifier-dot
+// chain misses, so the inline-`require` idiom common in skills is now caught too.
+const PARSE_RE = /JSON\.parse\(\s*(?:await\s+)?(?:[A-Za-z_$][\w$]*\([^()]*\)\.)*(?:[A-Za-z_$][\w$]*\.)*read[A-Za-z]*\(/g;
 
 // Brace-matched ranges of every `try { … }` that is followed by catch/finally.
 // Operating on the whole markdown is fine: embedded JS blocks are brace-balanced,
