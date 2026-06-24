@@ -570,6 +570,60 @@ This phase covers:
 // phase next-decimal command
 // ─────────────────────────────────────────────────────────────────────────────
 
+describe('phase remove command — ROADMAP renumber safety', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  // Regression (dogfood): removing a low phase used to (1) rewrite the YY-MM of
+  // any ISO date via an unanchored `NN-NN` plan-ref regex, cascading 2026→2001,
+  // and (2) collapse phase numbers/plan refs because the renumber loop ran
+  // high→low and re-matched its own output (3→2 then 2→1 caught the new 2).
+  test('renumbers phases/plan-refs without corrupting ISO dates', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      [
+        '# ROADMAP',
+        '',
+        '| Phase | Plan | Created |',
+        '|-------|------|---------|',
+        '| 1. Setup | 01-01 | 2026-01-15 |',
+        '| 2. Core | 02-01 | 2026-03-20 |',
+        '| 3. Polish | 03-01 | 2026-05-10 |',
+        '',
+        '## Phase 1: Setup',
+        '## Phase 2: Core',
+        '## Phase 3: Polish',
+        '',
+      ].join('\n')
+    );
+
+    const result = runNfTools('phase remove 1 --force', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const after = fs.readFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
+
+    // ISO dates must survive untouched (the data-corruption bug)
+    assert.ok(after.includes('2026-03-20'), 'ISO date 2026-03-20 must be preserved');
+    assert.ok(after.includes('2026-05-10'), 'ISO date 2026-05-10 must be preserved');
+    assert.ok(!/20\d\d-\d\d-\d\d/.test(after) || (after.includes('2026-03-20') && after.includes('2026-05-10')),
+      'no ISO year should be rewritten');
+
+    // Renumber must be correct and non-cascading: 2→1, 3→2 (not both→1)
+    assert.ok(after.includes('## Phase 1: Core'), 'old Phase 2 should become Phase 1');
+    assert.ok(after.includes('## Phase 2: Polish'), 'old Phase 3 should become Phase 2 (not collapse to 1)');
+    assert.ok(!after.includes('## Phase 3:'), 'Phase 3 heading should be gone after renumber');
+    // Plan refs shift down without collapsing
+    assert.ok(after.includes('01-01') && after.includes('02-01'), 'plan refs 02-01→01-01 and 03-01→02-01');
+  });
+});
+
 describe('phase next-decimal command', () => {
   let tmpDir;
 
