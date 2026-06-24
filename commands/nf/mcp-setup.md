@@ -316,7 +316,8 @@ const os = require('os');
 // Resolve nForma install dir from this script's installed location
 const nfBinDir = path.join(os.homedir(), '.claude', 'nf-bin');
 const providersPath = path.join(path.dirname(nfBinDir), 'nf', 'bin', 'providers.json');
-const providersData = JSON.parse(fs.readFileSync(providersPath, 'utf8'));
+let providersData = { providers: [] };
+try { providersData = JSON.parse(fs.readFileSync(providersPath, 'utf8')); } catch (e) { /* missing/malformed providers.json → empty provider map */ }
 const providerMap = {};
 for (const p of (providersData.providers || [])) {
   providerMap[p.name] = p;
@@ -404,7 +405,8 @@ const os = require('os');
 
 // Read providers.json for auth_type lookup
 const providersPath = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
-const providersData = JSON.parse(fs.readFileSync(providersPath, 'utf8'));
+let providersData = { providers: [] };
+try { providersData = JSON.parse(fs.readFileSync(providersPath, 'utf8')); } catch (e) { /* missing/malformed providers.json → empty provider map */ }
 const providerMap = {};
 for (const p of (providersData.providers || [])) {
   providerMap[p.name] = p;

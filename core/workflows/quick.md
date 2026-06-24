@@ -989,12 +989,14 @@ node --input-type=module << 'NF_EVAL'
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 const scPath = '${task_dir}/scope-contract.json';
 if (existsSync(scPath)) {
-  const sc = JSON.parse(readFileSync(scPath, 'utf8'));
-  const key = Object.keys(sc)[0];
-  if (key && sc[key].classification) {
-    sc[key].classification.routed_through_debug = true;
-    writeFileSync(scPath, JSON.stringify(sc, null, 2) + '\n');
-  }
+  try {
+    const sc = JSON.parse(readFileSync(scPath, 'utf8'));
+    const key = Object.keys(sc)[0];
+    if (key && sc[key].classification) {
+      sc[key].classification.routed_through_debug = true;
+      writeFileSync(scPath, JSON.stringify(sc, null, 2) + '\n');
+    }
+  } catch (e) { /* malformed scope-contract.json → skip the routed_through_debug flag */ }
 }
 NF_EVAL
 ```

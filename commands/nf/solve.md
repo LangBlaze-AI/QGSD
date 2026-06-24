@@ -333,7 +333,7 @@ SKIP_LAYERS=""
 if [ -n "$FILES_TOUCHED_JSON" ]; then
   FILTER=$(echo "$FILES_TOUCHED_JSON" | node $HOME/.claude/nf-bin/solve-incremental-filter.cjs 2>/dev/null)
   if [ $? -eq 0 ]; then
-    SKIP_LAYERS=$(echo "$FILTER" | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).skip_layers.join(',')" 2>/dev/null)
+    SKIP_LAYERS=$(echo "$FILTER" | node -p "(()=>{try{return JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).skip_layers.join(',')}catch(e){return ''}})()" 2>/dev/null)
   fi
 fi
 

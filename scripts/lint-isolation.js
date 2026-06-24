@@ -15,6 +15,9 @@
  *    except a redirect/operator (see bin/skill-eval-lint.cjs for the standard).
  * 6. MCP tool names: CLI-slot tool refs must use the real `<family>-<N>` slot and a
  *    tool the server exposes (see bin/skill-mcp-lint.cjs).
+ * 7. Unguarded state-file parses: every `JSON.parse(readFileSync(...))` must be inside a
+ *    try/catch — a missing/malformed file otherwise crashes the skill (see
+ *    bin/skill-state-parse-lint.cjs). existsSync guards missing, not malformed.
  *
  * These patterns break when nForma is used in repos other than the NF source repo,
  * because ./bin/ and commands/nf/ only exist locally in the source checkout, and a
@@ -25,6 +28,7 @@ const fs = require('fs');
 const path = require('path');
 const { findEvalTrailingViolations } = require('../bin/skill-eval-lint.cjs');
 const { findMcpToolViolations } = require('../bin/skill-mcp-lint.cjs');
+const { findUnguardedParses } = require('../bin/skill-state-parse-lint.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const SCAN_DIRS = ['commands/nf', 'core/workflows'];
@@ -182,6 +186,16 @@ function scan(dir) {
           file: v.file,
           line: v.line,
           text: `${v.ref}  (${v.hint})`,
+        });
+      }
+      // Rule 7 — unguarded state-file parses (see skill-state-parse-lint.cjs)
+      for (const v of findUnguardedParses(content, rel)) {
+        violations.push({
+          rule: 'unguarded-state-parse',
+          message: 'JSON.parse(readFileSync(...)) must be inside a try/catch — a missing/malformed file otherwise crashes the skill (existsSync guards missing, not malformed)',
+          file: v.file,
+          line: v.line,
+          text: v.snippet,
         });
       }
     }
