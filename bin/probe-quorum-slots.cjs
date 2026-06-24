@@ -23,6 +23,7 @@ const fs         = require('fs');
 const path       = require('path');
 const os         = require('os');
 const { resolveSpawnTarget } = require('./resolve-cli.cjs');
+const { resolveEnvPlaceholders } = require('./resolve-env.cjs');
 const { loadProviders } = require('./resolve-providers.cjs');
 
 // ─── Find providers.json ─────────────────────────────────────────────────────
@@ -52,7 +53,10 @@ function probeSlot(provider, timeoutMs, spawnCwd) {
 
     // Replace {prompt} with the minimal probe string
     const args = provider.args_template.map(a => (a === '{prompt}' ? 'OK' : a));
-    const env  = { ...process.env, ...(provider.env ?? {}) };
+    // Resolve ${VAR} placeholders in provider.env (issue parity with
+    // call-quorum-slot.cjs:462 / unified-mcp-server.mjs) — a secret-placeholder
+    // slot was previously probed with an UNRESOLVED env and false-failed.
+    const env  = { ...process.env, ...resolveEnvPlaceholders(provider.env ?? {}) };
 
     // Shared spawn-target resolver (issue #197): resolvedCli → resolveCli(cli || mainTool).
     // `cli` is optional in providers.json; this never hands null to spawn().
