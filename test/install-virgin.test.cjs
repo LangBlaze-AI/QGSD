@@ -110,6 +110,7 @@ describe('virgin install: claude', () => {
     const content = readIfExists(path.join(tmpDir, 'nf', 'VERSION'));
     assert.ok(content, 'VERSION file must exist');
     assert.equal(content.trim(), PKG.version);
+    assert.ok(content.endsWith('\n'), 'VERSION must end with a trailing newline (else reads concatenate to e.g. 0.41.10LOCAL)');
   });
 
   test('nf-bin/ directory contains .cjs scripts', () => {
@@ -213,6 +214,7 @@ describe('virgin install: opencode', () => {
     const content = readIfExists(path.join(tmpDir, 'nf', 'VERSION'));
     assert.ok(content, 'VERSION file must exist');
     assert.equal(content.trim(), PKG.version);
+    assert.ok(content.endsWith('\n'), 'VERSION must end with a trailing newline (else reads concatenate to e.g. 0.41.10LOCAL)');
   });
 
   test('nf-bin/ directory contains .cjs scripts', () => {
@@ -335,6 +337,7 @@ describe('virgin install: gemini', () => {
     const content = readIfExists(path.join(tmpDir, 'nf', 'VERSION'));
     assert.ok(content, 'VERSION file must exist');
     assert.equal(content.trim(), PKG.version);
+    assert.ok(content.endsWith('\n'), 'VERSION must end with a trailing newline (else reads concatenate to e.g. 0.41.10LOCAL)');
   });
 
   test('nf-bin/ directory contains .cjs scripts', () => {
