@@ -67,7 +67,7 @@ function loadScoreDeltas() {
   return { deltas: DEFAULT_SCORE_DELTAS, source: 'default' };
 }
 
-const VALID_MODELS   = ['claude', 'gemini', 'opencode', 'copilot', 'codex', 'deepseek', 'minimax', 'qwen-coder', 'kimi', 'llama4'];
+const VALID_MODELS   = ['claude', 'gemini', 'opencode', 'copilot', 'codex', 'antigravity', 'deepseek', 'minimax', 'qwen-coder', 'kimi', 'llama4'];
 const VALID_RESULTS  = ['TP', 'TN', 'FP', 'FN', 'TP+', 'TN+', 'UNAVAIL', ''];
 const VALID_VERDICTS = ['APPROVE', 'BLOCK', 'DELIBERATE', 'CONSENSUS', 'GAPS_FOUND', '—'];
 

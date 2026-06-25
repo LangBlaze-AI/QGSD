@@ -2556,6 +2556,7 @@ async function updateAgentsFlow() {
     opencode: { installType: 'npm-global',   pkg: 'opencode'           },
     copilot:  { installType: 'gh-extension', ext: 'github/gh-copilot'  },
     ccr:      { installType: 'npm-global',   pkg: 'claude-code-router'  },
+    antigravity: { installType: 'curl-script', bin: 'agy', installCommand: 'curl -fsSL https://antigravity.google/cli/install.sh | bash' },
   };
 
   const lines = ['{bold}Update Status{/bold}', '─'.repeat(50)];

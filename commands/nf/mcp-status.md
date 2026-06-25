@@ -100,7 +100,7 @@ if(fs.existsSync(cfgPath)){
 
 // Classify slots dynamically
 const SKIP_SLOTS = ['canopy', 'sentry'];
-const CLI_COMMANDS = ['codex', 'gemini', 'opencode', 'gh', 'copilot'];
+const CLI_COMMANDS = ['codex', 'gemini', 'opencode', 'gh', 'copilot', 'agy'];
 let slots = { cli: [], http: [], mcp: [], skip: [] };
 try {
   if(fs.existsSync(cfgPath)){

@@ -38,12 +38,23 @@ try {
   if (providersData.providers.length === 0) {
     log('providers.json is empty — scanning PATH for known CLIs...');
     const { resolveCli } = require('./resolve-cli.cjs');
-    const KNOWN_CLIS = ['claude', 'codex', 'gemini', 'opencode', 'copilot'];
+    // Most families' binary name == family name; antigravity is the exception
+    // (family "antigravity" ships the `agy` binary), so each entry carries an
+    // explicit binary. `cli` is recorded so resolveSpawnTarget spawns the real
+    // binary while the slot/model keeps the family name.
+    const KNOWN_CLIS = [
+      { family: 'claude',      bin: 'claude' },
+      { family: 'codex',       bin: 'codex' },
+      { family: 'gemini',      bin: 'gemini' },
+      { family: 'opencode',    bin: 'opencode' },
+      { family: 'copilot',     bin: 'copilot' },
+      { family: 'antigravity', bin: 'agy' },
+    ];
     const found = [];
-    for (const name of KNOWN_CLIS) {
-      const resolved = resolveCli(name);
-      if (resolved !== name) {
-        found.push({ name, resolvedPath: resolved, found: true });
+    for (const { family, bin } of KNOWN_CLIS) {
+      const resolved = resolveCli(bin);
+      if (resolved !== bin) {
+        found.push({ name: family, cli: bin, resolvedPath: resolved, found: true });
       }
     }
     if (found.length > 0) {
@@ -76,6 +87,7 @@ function getInstallHint(mainTool) {
     gemini:   'npm i -g @google/gemini-cli',
     opencode: 'npm i -g opencode',
     copilot:  'npm i -g @githubnext/github-copilot-cli',
+    antigravity: 'curl -fsSL https://antigravity.google/cli/install.sh | bash',
   };
   return hints[mainTool] || '';
 }
