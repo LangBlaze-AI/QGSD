@@ -704,10 +704,14 @@ Run R3 quorum inline — follow the canonical protocol in @core/references/quoru
 - Synthesize results inline, deliberate up to 10 rounds per R3.3
 
 After quorum vote completes, update the scoreboard BEFORE spawning any Task:
+Use the correct identity flags — `update-scoreboard` rejects a slot passed via `--model`:
+- **native CLI model** (codex/gemini/opencode/copilot/claude): `--model <family>`
+- **MCP slot instance** (e.g. `gemini-1`, `claude-2`): `--slot <slot> --model-id <id from health_check>` (NOT `--model`)
+`--result` is the prediction-accuracy code (TP/TN/FP/FN); this gating vote has no ground truth, so pass `--result ""` (not scored) — the decision lives in `--verdict`.
 ```bash
 node "$HOME/.claude/nf-bin/update-scoreboard.cjs" \
-  --model <model_name_or_slot> \
-  --result <vote_code> \
+  --model <family> \
+  --result "" \
   --task "execute-phase-{PHASE_NUMBER}" \
   --round <round_number> \
   --verdict <APPROVE|BLOCK> \

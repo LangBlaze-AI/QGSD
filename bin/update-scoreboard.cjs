@@ -140,6 +140,12 @@ function validate(args) {
     errors.push(`--model must be one of: ${VALID_MODELS.join(', ')}`);
   }
 
+  // VALID_VERDICTS was declared but never enforced — an invalid verdict was silently
+  // accepted (dogfood), so a typo'd/wrong-cased verdict polluted the scoreboard.
+  if (args.verdict && !VALID_VERDICTS.includes(args.verdict)) {
+    errors.push(`--verdict must be one of: ${VALID_VERDICTS.join(', ')}`);
+  }
+
   const result = args.result || '';
   if (!VALID_RESULTS.includes(result)) {
     errors.push(`--result must be one of: TP, TN, FP, FN, TP+, TN+, (empty)`);

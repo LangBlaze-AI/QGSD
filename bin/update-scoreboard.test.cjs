@@ -567,3 +567,44 @@ test('SC-TC-MERGE-2: merge-wave applies multiple slot vote files in one transact
     } catch (_) {}
   }
 });
+
+// Dogfood Batch 8: VALID_VERDICTS was declared but never enforced; the discuss/
+// execute-phase call-sites passed a slot via --model (rejected) and a verdict via
+// --result. These guard the validation contract.
+test('SC-Batch8: an invalid --verdict is rejected (VALID_VERDICTS now enforced)', () => {
+  const sb = tmpScoreboard();
+  const { exitCode, stderr } = runCLI([
+    '--model', 'gemini', '--result', '', '--task', 't', '--round', '1',
+    '--verdict', 'TOTALLY_BOGUS', '--scoreboard', sb,
+  ]);
+  cleanup(sb);
+  assert.strictEqual(exitCode, 1, 'a bogus verdict must be rejected, not silently accepted');
+  assert.match(stderr, /--verdict must be one of/);
+});
+
+test('SC-Batch8: an MCP slot is recorded via --slot/--model-id (not --model)', () => {
+  const sb = tmpScoreboard();
+  const ok = runCLI([
+    '--slot', 'gemini-1', '--model-id', 'google/gemini-3', '--result', '', '--task', 't',
+    '--round', '1', '--verdict', 'APPROVE', '--scoreboard', sb,
+  ]);
+  // a slot passed via --model must be rejected (it is not a native family)
+  const bad = runCLI([
+    '--model', 'gemini-1', '--result', '', '--task', 't', '--round', '1',
+    '--verdict', 'APPROVE', '--scoreboard', sb,
+  ]);
+  cleanup(sb);
+  assert.strictEqual(ok.exitCode, 0, '--slot gemini-1 --model-id … must be accepted');
+  assert.strictEqual(bad.exitCode, 1, 'a slot passed via --model must be rejected');
+});
+
+// Scan-guard: the discuss/execute-phase scoreboard snippets must not tell the agent
+// to pass a slot via --model or a verdict via --result.
+test('SC-Batch8: discuss/execute-phase snippets use --result "" and document --slot', () => {
+  for (const rel of ['../core/workflows/discuss-phase.md', '../core/workflows/execute-phase.md']) {
+    const md = fs.readFileSync(path.join(__dirname, rel), 'utf8');
+    assert.ok(!/--result <vote_code>/.test(md), `${rel}: must not pass a verdict as --result`);
+    assert.ok(/--result ""/.test(md), `${rel}: gray-area vote should pass --result ""`);
+    assert.ok(/--slot <slot> --model-id/.test(md), `${rel}: must document the --slot/--model-id form for MCP slots`);
+  }
+});
