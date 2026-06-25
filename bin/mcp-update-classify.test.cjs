@@ -76,6 +76,9 @@ function makeFixture() {
       'nf-managed-slot': { command: 'node', args: [managedServer] },
       'dev-slot': { command: 'node', args: [devServer] },
       'npm-slot': { command: 'npx', args: ['-y', 'some-mcp-package'] },
+      // dogfood: the REAL playwright config — the package is followed by a flag, so
+      // `args[args.length-1]` grabbed `--headless` and ran `npm install -g --headless`.
+      'playwright-slot': { command: 'npx', args: ['@playwright/mcp@latest', '--headless'] },
     },
   };
   fs.writeFileSync(path.join(home, '.claude.json'), JSON.stringify(cfg));
@@ -118,6 +121,18 @@ describe('F36 — mcp-update classifies node slots by real git root', () => {
       const r = runBody(SINGLE, { HOME: fx.home, AGENT: 'npm-slot' });
       assert.equal(r.type, 'npm');
       assert.equal(r.package, 'some-mcp-package');
+    } finally {
+      fs.rmSync(fx.home, { recursive: true, force: true });
+      fs.rmSync(fx.repo, { recursive: true, force: true });
+    }
+  });
+
+  it('npx slot with a TRAILING flag → package is the non-flag arg (not --headless)', () => {
+    const fx = makeFixture();
+    try {
+      const r = runBody(SINGLE, { HOME: fx.home, AGENT: 'playwright-slot' });
+      assert.equal(r.type, 'npm');
+      assert.equal(r.package, '@playwright/mcp@latest', 'must skip the trailing --headless flag, not update `--headless`');
     } finally {
       fs.rmSync(fx.home, { recursive: true, force: true });
       fs.rmSync(fx.repo, { recursive: true, force: true });

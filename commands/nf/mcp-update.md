@@ -89,7 +89,10 @@ const command=serverConfig.command;
 const args=serverConfig.args||[];
 let result;
 if(command==='npx'||command==='npm'){
-  const packageName=args[args.length-1];
+  // Last NON-FLAG arg is the package — `args[args.length-1]` grabbed a trailing
+  // flag (e.g. `["@playwright/mcp@latest","--headless"]` → `--headless`), so the
+  // updater ran `npm install -g --headless` (dogfood). Skip leading/trailing flags.
+  const packageName=[...args].reverse().find(a=>!a.startsWith('-'));
   result={type:'npm',package:packageName};
 } else if(command==='node'&&args.length>0){
   // A server under ~/.claude/ is a standard install — NEVER a dev clone, even if
@@ -200,7 +203,7 @@ for(const agent of KNOWN_AGENTS){
   const cmd=cfg.command;
   const args=cfg.args||[];
   if(cmd==='npx'||cmd==='npm'){
-    const pkg=args[args.length-1];
+    const pkg=[...args].reverse().find(a=>!a.startsWith('-')); // last non-flag arg (skip trailing flags like --headless)
     const key='npm:'+pkg;
     if(seenKeys.has(key)){ tasks.push({agent,type:'npm',package:pkg,deduplicated:true}); }
     else { seenKeys.add(key); tasks.push({agent,type:'npm',package:pkg,deduplicated:false}); }
