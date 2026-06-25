@@ -266,3 +266,20 @@ module.exports = {
   VALID_TRANSITIONS,
   LAYER_KEYWORDS
 };
+
+// CLI entry — `/nf:solve` invokes this as `node solve-debt-bridge.cjs --read-open
+// --project-root=<dir>` and parses stdout JSON. Without this block the module only
+// exported and emitted nothing, so DEBT_JSON always fell back to {"entries":[]} and
+// the debt-convergence feature never ran (dogfood: library-module-invoked-as-CLI).
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  const rootArg = args.find((a) => a.startsWith('--project-root='));
+  const projectRoot = rootArg ? rootArg.slice('--project-root='.length) : process.cwd();
+  if (args.includes('--read-open')) {
+    const ledgerPath = path.join(projectRoot, '.planning', 'formal', 'debt.json');
+    process.stdout.write(JSON.stringify(readOpenDebt(ledgerPath)));
+  } else {
+    process.stderr.write('Usage: solve-debt-bridge.cjs --read-open [--project-root=DIR]\n');
+    process.exit(1);
+  }
+}

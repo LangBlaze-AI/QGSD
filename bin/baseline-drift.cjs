@@ -121,3 +121,25 @@ function detectBaselineDrift(sessionStartBaseline, currentSnapshot, options) {
 }
 
 module.exports = { detectBaselineDrift };
+
+// CLI entry — `/nf:solve-report` invokes this as `node baseline-drift.cjs
+// --project-root=<dir>` with BASELINE_JSON / SNAPSHOT_JSON in the environment, and
+// parses stdout JSON (`result.detected` / `result.layers` / `result.warning`).
+// Without this block the module emitted nothing, so CONV-04 baseline-drift detection
+// was permanently dead (dogfood: library-module-invoked-as-CLI).
+if (require.main === module) {
+  const path = require('path');
+  const safeParse = (s) => {
+    try { return JSON.parse(s); } catch { return null; }
+  };
+  const baseline = safeParse(process.env.BASELINE_JSON || 'null');
+  const snapshot = safeParse(process.env.SNAPSHOT_JSON || 'null');
+  if (!baseline || typeof baseline !== 'object' || !snapshot || typeof snapshot !== 'object') {
+    process.stdout.write(JSON.stringify({ detected: false, layers: [], warning: null, error: 'BASELINE_JSON/SNAPSHOT_JSON missing or invalid' }));
+    process.exit(0);
+  }
+  const rootArg = process.argv.slice(2).find((a) => a.startsWith('--project-root='));
+  const projectRoot = rootArg ? rootArg.slice('--project-root='.length) : process.cwd();
+  const requirementsPath = path.join(projectRoot, '.planning', 'formal', 'requirements.json');
+  process.stdout.write(JSON.stringify(detectBaselineDrift(baseline, snapshot, { requirementsPath })));
+}
