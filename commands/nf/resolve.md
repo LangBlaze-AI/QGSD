@@ -93,8 +93,8 @@ if (fs.existsSync(CANDIDATES_PATH)) {
     const cd = JSON.parse(fs.readFileSync(CANDIDATES_PATH, 'utf8'));
     if (cd.orphans) {
       orphanSummary = {
-        models: (cd.orphans.models || []).length,
-        requirements: (cd.orphans.requirements || []).length,
+        models: Array.isArray(cd.orphans.models) ? cd.orphans.models.length : 0,
+        requirements: Array.isArray(cd.orphans.requirements) ? cd.orphans.requirements.length : 0,
       };
     }
   } catch(_){}  // malformed candidates → keep the zeroed orphanSummary

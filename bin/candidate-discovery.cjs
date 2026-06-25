@@ -446,6 +446,7 @@ function parseArgs(argv) {
     else if (argv[i].startsWith('--min-score')) {
       const val = argv[i].includes('=') ? argv[i].split('=')[1] : argv[++i];
       args.minScore = parseFloat(val);
+      if (Number.isNaN(args.minScore)) args.minScore = 0.7; // non-numeric → default, not a NaN threshold
     } else if (argv[i].startsWith('--max-hops')) {
       const val = argv[i].includes('=') ? argv[i].split('=')[1] : argv[++i];
       args.maxHops = parseInt(val, 10);
@@ -479,6 +480,24 @@ Writes .planning/formal/candidates.json.
 `);
 }
 
+// Read + parse a required JSON input, exiting with a clean message (not a raw
+// SyntaxError stack trace) on a missing or corrupt file (dogfood F47).
+function readJsonOrExit(p, label) {
+  let raw;
+  try {
+    raw = fs.readFileSync(p, 'utf8');
+  } catch (e) {
+    process.stderr.write(`[candidate-discovery] ERROR: cannot read ${label} (${p}): ${e.message}\n`);
+    process.exit(1);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    process.stderr.write(`[candidate-discovery] ERROR: ${label} is not valid JSON (${p}): ${e.message}\n`);
+    process.exit(1);
+  }
+}
+
 function main() {
   const args = parseArgs(process.argv);
 
@@ -502,9 +521,9 @@ function main() {
   }
 
   // Load inputs
-  const proximityIndex = JSON.parse(fs.readFileSync(PROXIMITY_INDEX_PATH, 'utf8'));
-  const modelRegistry = JSON.parse(fs.readFileSync(MODEL_REGISTRY_PATH, 'utf8'));
-  const requirementsData = JSON.parse(fs.readFileSync(REQUIREMENTS_PATH, 'utf8'));
+  const proximityIndex = readJsonOrExit(PROXIMITY_INDEX_PATH, 'proximity-index.json');
+  const modelRegistry = readJsonOrExit(MODEL_REGISTRY_PATH, 'model-registry.json');
+  const requirementsData = readJsonOrExit(REQUIREMENTS_PATH, 'requirements.json');
   const requirements = requirementsData.requirements || [];
 
   const modelCount = Object.keys(modelRegistry.models || {}).length;

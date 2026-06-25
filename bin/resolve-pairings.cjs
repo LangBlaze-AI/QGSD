@@ -109,6 +109,24 @@ function parseArgs(argv) {
   return args;
 }
 
+// Read + parse a required JSON input, exiting cleanly (not a raw SyntaxError) on a
+// missing or corrupt file (dogfood F47).
+function readJsonOrExit(p, label) {
+  let raw;
+  try {
+    raw = fs.readFileSync(p, 'utf8');
+  } catch (e) {
+    process.stderr.write(`[resolve-pairings] ERROR: cannot read ${label} (${p}): ${e.message}\n`);
+    process.exit(1);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    process.stderr.write(`[resolve-pairings] ERROR: ${label} is not valid JSON (${p}): ${e.message}\n`);
+    process.exit(1);
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv);
 
@@ -134,10 +152,13 @@ Options:
     process.exit(1);
   }
 
-  const data = JSON.parse(fs.readFileSync(PAIRINGS_PATH, 'utf8'));
-  const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
+  const data = readJsonOrExit(PAIRINGS_PATH, 'candidate-pairings.json');
+  const registry = readJsonOrExit(REGISTRY_PATH, 'model-registry.json');
 
-  const pending = data.pairings.filter(p => p.status === 'pending');
+  // A partially-written / wrong-shape pairings file has no (or a non-array)
+  // `pairings` — treat it as "nothing pending" instead of crashing on `.filter`.
+  const pairings = Array.isArray(data.pairings) ? data.pairings : [];
+  const pending = pairings.filter(p => p && p.status === 'pending');
 
   if (pending.length === 0) {
     console.log('No pending pairings to resolve.');
