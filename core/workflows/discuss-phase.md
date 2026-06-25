@@ -279,10 +279,14 @@ For each question still in `for_user[]` (process sequentially):
    - Deliberate up to 3 rounds per R4 (secondary pre-filter, not full R3 10 rounds)
 
 3. After quorum vote for this question, update scoreboard BEFORE moving to next question:
+   Use the correct identity flags — `update-scoreboard` rejects a slot passed via `--model`:
+   - **native CLI model** (codex/gemini/opencode/copilot/claude): `--model <family>`
+   - **MCP slot instance** (e.g. `gemini-1`, `claude-2`): `--slot <slot> --model-id <id from health_check>` (NOT `--model`)
+   `--result` is the prediction-accuracy code (TP/TN/FP/FN); a gray-area vote has no ground truth, so pass `--result ""` (not scored) — the decision lives in `--verdict`.
    ```bash
    node "$HOME/.claude/nf-bin/update-scoreboard.cjs" \
-     --model <model_name_or_slot> \
-     --result <vote_code> \
+     --model <family> \   # native model; OR replace this line with: --slot <slot> --model-id <model_id>
+     --result "" \
      --task "discuss-phase-{PHASE_NUMBER}" \
      --round <round_number> \
      --verdict <APPROVE|BLOCK> \
