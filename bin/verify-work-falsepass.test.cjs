@@ -50,8 +50,11 @@ describe('verify-work auto-verify gate requires real passing tests', () => {
 // --- (a) the run-batch status, guarded at the source ---------------------------
 describe('maintain-tests run-batch records no_tests (not passed) for empty results', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'core', 'bin', 'nf-tools.cjs'), 'utf8');
-  it("empty jest testResults → status 'no_tests', and the batch reports no_tests_count", () => {
-    assert.match(src, /status: 'no_tests', duration_ms: durationMs, error_summary: 'no tests found/, 'a zero-test jest file must be recorded as no_tests');
+  it("empty jest AND playwright results → status 'no_tests', and the batch reports no_tests_count", () => {
+    // Both the jest (testResults.length===0) and playwright (perTestResults.length===0)
+    // empty branches must record no_tests, not passed (CodeRabbit on #270).
+    const noTestsHits = (src.match(/status: 'no_tests', duration_ms: durationMs, error_summary: 'no tests found/g) || []).length;
+    assert.ok(noTestsHits >= 2, `both empty-result branches must use no_tests (found ${noTestsHits})`);
     assert.match(src, /no_tests_count: noTestsCount/, 'the batch output must surface no_tests_count');
     assert.match(src, /else if \(r\.status === 'no_tests'\) noTestsCount\+\+/, 'aggregation must count no_tests separately');
   });

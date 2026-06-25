@@ -6673,7 +6673,9 @@ async function runTestFile(testFile, runner, opts, batchTmpPrefix) {
             }
           }
           if (perTestResults.length === 0) {
-            perTestResults.push({ file: testFile, runner, status: 'passed', duration_ms: durationMs, error_summary: null, flaky: false, flaky_pass_count: 0 });
+            // No specs ran (empty/nonexistent playwright file) — "no tests" is not a
+            // pass (same false-pass class as the jest branch; CodeRabbit on #270).
+            perTestResults.push({ file: testFile, runner, status: 'no_tests', duration_ms: durationMs, error_summary: 'no tests found in file', flaky: false, flaky_pass_count: 0 });
           }
         } catch (e) {
           const rawOutput = safeReadFile(tmpOutput) || '';
