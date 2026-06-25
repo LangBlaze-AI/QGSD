@@ -229,6 +229,25 @@ test('SC-TC11: invalid --model value exits 1', () => {
   );
 });
 
+// SC-TC11b: 'antigravity' is a recognized family — a vote with --model antigravity
+// is accepted (exit 0) and recorded. Regression guard for the antigravity quorum
+// CLI family (VALID_MODELS membership); before adding it, this exits 1.
+test('SC-TC11b: --model antigravity is accepted and recorded', () => {
+  const sb = tmpScoreboard();
+  try {
+    const { exitCode } = runCLI([
+      '--model', 'antigravity', '--result', 'TP', '--task', 'quick-99',
+      '--round', '1', '--verdict', 'APPROVE', '--scoreboard', sb,
+    ]);
+    assert.strictEqual(exitCode, 0, 'antigravity must be a valid --model');
+    const data = JSON.parse(fs.readFileSync(sb, 'utf8'));
+    assert.ok(data.models.antigravity, 'antigravity must appear in the scoreboard models map');
+    assert.strictEqual(data.models.antigravity.score, 1, 'one TP vote → score 1');
+  } finally {
+    cleanup(sb);
+  }
+});
+
 // SC-TC12: invalid --result value → exits 1
 test('SC-TC12: invalid --result value exits 1', () => {
   const { stderr, exitCode } = runCLI([

@@ -19,6 +19,7 @@ const COST_PER_M = {
   'gemini':    { input: 1.25,  output: 5.00 },
   'opencode':  { input: 2.00,  output: 8.00 },
   'copilot':   { input: 0.00,  output: 0.00, subscription: true },
+  'antigravity': { input: 0.00, output: 0.00, subscription: true },
   'default':   { input: 3.00,  output: 15.00 },
 };
 

@@ -34,6 +34,18 @@ describe('skill-mcp-lint detector', () => {
     assert.deepEqual(v('mcp__codex-1__identity'), []); // shared tools too
   });
 
+  it('recognizes the antigravity family (slot + real/shared tools)', () => {
+    assert.deepEqual(v('mcp__antigravity-1__antigravity'), []);
+    assert.deepEqual(v('mcp__antigravity-1__identity'), []);
+    assert.deepEqual(v('mcp__antigravity-1__health_check'), []);
+  });
+
+  it('flags a tool antigravity does not expose (the `ask` class)', () => {
+    const r = v('mcp__antigravity-1__ask');
+    assert.equal(r.length, 1);
+    assert.equal(r[0].rule, 'mcp-bad-tool');
+  });
+
   it('does NOT validate install-specific / external slots', () => {
     assert.deepEqual(v('mcp__claude-1__claude'), []);
     assert.deepEqual(v('mcp__claude-z-ai__identity'), []);

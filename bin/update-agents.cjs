@@ -23,6 +23,10 @@ const CLI_META = {
   opencode: { installType: 'npm-global',   pkg: 'opencode' },
   copilot:  { installType: 'gh-extension', ext: 'github/gh-copilot' },
   ccr:      { installType: 'npm-global',   pkg: 'claude-code-router' },
+  // Antigravity ships a self-installing binary `agy` (curl script), not an
+  // npm/gh package — detectCurrent/detectLatest fall through to null for this
+  // installType, so it shows as "unknown" rather than crashing the updater.
+  antigravity: { installType: 'curl-script', bin: 'agy', installCommand: 'curl -fsSL https://antigravity.google/cli/install.sh | bash' },
 };
 
 // ---------------------------------------------------------------------------
