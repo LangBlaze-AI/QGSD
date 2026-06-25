@@ -150,9 +150,35 @@ test('readPendingTasks: does NOT delete files (non-consuming)', () => {
   assert.ok(fs.existsSync(filePath), 'File should still exist after read (non-consuming)');
 });
 
-// ─── Full subprocess (stdin→stdout) integration tests ───────────────────────
+// ─── Full subprocess (stdin→sidecar) integration tests ──────────────────────
+//
+// Contract change: PreCompact may NOT emit hookSpecificOutput.additionalContext
+// (the harness validates output against a union that excludes PreCompact and
+// rejects it as "Invalid input" on every compaction). The hook now persists the
+// continuation context to .claude/precompact-continuation.txt and emits nothing
+// on stdout; nf-session-start injects it on the post-compaction SessionStart.
 
-test('subprocess: exits 0 and emits additionalContext when STATE.md has Current Position', () => {
+const SIDECAR = '.claude/precompact-continuation.txt';
+function readSidecar(dir) {
+  const p = path.join(dir, SIDECAR);
+  return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
+}
+
+test('subprocess: emits NO hookSpecificOutput on stdout (harness rejects PreCompact additionalContext)', () => {
+  // Red-prover for the "Invalid input" compaction bug: any hookSpecificOutput
+  // PreCompact output is rejected by the harness, so stdout must be empty.
+  const tmpDir = makeTmpDir();
+  writeStateFile(tmpDir, '## Current Position\n\nPhase: v0.19-05\n\n## Next\nmore');
+
+  const { exitCode, stdout, parsed } = runHook({ cwd: tmpDir });
+
+  assert.equal(exitCode, 0);
+  assert.equal(stdout.trim(), '', 'stdout must be empty (no JSON output)');
+  assert.equal(parsed, null, 'must not emit any JSON output');
+  assert.ok(!stdout.includes('hookSpecificOutput'), 'must not emit hookSpecificOutput');
+});
+
+test('subprocess: persists continuation sidecar when STATE.md has Current Position', () => {
   const tmpDir = makeTmpDir();
   writeStateFile(tmpDir, [
     '# Project State',
@@ -166,38 +192,63 @@ test('subprocess: exits 0 and emits additionalContext when STATE.md has Current 
     'other stuff',
   ].join('\n'));
 
-  const { exitCode, parsed } = runHook({ cwd: tmpDir });
+  const { exitCode } = runHook({ cwd: tmpDir });
 
   assert.equal(exitCode, 0);
-  assert.ok(parsed, 'stdout should be valid JSON');
-  assert.ok(parsed.hookSpecificOutput, 'should have hookSpecificOutput');
-  assert.equal(parsed.hookSpecificOutput.hookEventName, 'PreCompact');
-  const ctx = parsed.hookSpecificOutput.additionalContext;
+  const ctx = readSidecar(tmpDir);
+  assert.ok(ctx, 'sidecar file should be written');
   assert.ok(ctx.includes('nForma CONTINUATION CONTEXT'), 'should include header');
   assert.ok(ctx.includes('v0.19-05'), 'should include current position content');
   assert.ok(ctx.includes('Resume Instructions'), 'should include resume instructions');
 });
 
-test('subprocess: includes pending task when pending-task.txt exists', () => {
+test('subprocess: sidecar includes pending task when pending-task.txt exists', () => {
   const tmpDir = makeTmpDir();
   writeStateFile(tmpDir, '## Current Position\n\nPhase: v0.19-05\n\n## Other\nstuff');
   writeClaudeFile(tmpDir, 'pending-task.txt', '/qnf:execute-phase v0.19-05');
 
-  const { exitCode, parsed } = runHook({ cwd: tmpDir });
+  const { exitCode } = runHook({ cwd: tmpDir });
 
   assert.equal(exitCode, 0);
-  const ctx = parsed.hookSpecificOutput.additionalContext;
+  const ctx = readSidecar(tmpDir);
+  assert.ok(ctx, 'sidecar file should be written');
   assert.ok(ctx.includes('Pending Task'), 'should include Pending Task section');
   assert.ok(ctx.includes('/qnf:execute-phase v0.19-05'), 'should include task content');
 });
 
-test('subprocess: emits minimal fallback when STATE.md is absent', () => {
+test('subprocess: persists minimal fallback when STATE.md is absent', () => {
   const tmpDir = makeTmpDir(); // no STATE.md written
 
-  const { exitCode, parsed } = runHook({ cwd: tmpDir });
+  const { exitCode, stdout } = runHook({ cwd: tmpDir });
 
   assert.equal(exitCode, 0);
-  assert.ok(parsed.hookSpecificOutput.additionalContext.includes('resumed after compaction'));
+  assert.equal(stdout.trim(), '', 'stdout must be empty');
+  const ctx = readSidecar(tmpDir);
+  assert.ok(ctx && ctx.includes('resumed after compaction'), 'minimal fallback persisted to sidecar');
+});
+
+test('subprocess: SYMLINK pre-planted at sidecar path → not followed, target untouched (security)', () => {
+  // A pre-planted symlink must NOT cause the write to clobber an arbitrary file.
+  const tmpDir = makeTmpDir();
+  writeStateFile(tmpDir, '## Current Position\n\nPhase: v0.44-01\n\n## Next\nx');
+  const victim = path.join(tmpDir, 'victim.txt');
+  fs.writeFileSync(victim, 'ORIGINAL victim contents', 'utf8');
+  const claudeDir = path.join(tmpDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.symlinkSync(victim, path.join(claudeDir, 'precompact-continuation.txt'));
+
+  const { exitCode } = runHook({ cwd: tmpDir });
+
+  assert.equal(exitCode, 0);
+  assert.equal(
+    fs.readFileSync(victim, 'utf8'),
+    'ORIGINAL victim contents',
+    'symlink target must NOT be overwritten by the sidecar write'
+  );
+  // The sidecar path is now a regular file holding the continuation (not a symlink).
+  const sc = path.join(claudeDir, 'precompact-continuation.txt');
+  assert.ok(!fs.lstatSync(sc).isSymbolicLink(), 'sidecar must be a regular file, not a symlink');
+  assert.ok(fs.readFileSync(sc, 'utf8').includes('CONTINUATION CONTEXT'), 'sidecar holds the continuation');
 });
 
 test('subprocess: fails open on invalid JSON stdin (exit 0)', () => {
@@ -210,17 +261,13 @@ test('subprocess: fails open on invalid JSON stdin (exit 0)', () => {
 });
 
 test('subprocess: falls back to process.cwd() when cwd field is absent', () => {
-  // Pass empty object — no cwd field. Hook should default to process.cwd() and not crash.
-  const { exitCode, parsed } = runHook({});
-
-  assert.equal(exitCode, 0);
-  assert.ok(parsed || true, 'Should produce valid output or minimal fallback');
-});
-
-test('subprocess: hookEventName is PreCompact', () => {
+  // Pass empty object — no cwd field. Hook should default to process.cwd().
+  // Set the child's cwd to a tmpdir so the sidecar is NOT written into the repo.
   const tmpDir = makeTmpDir();
   writeStateFile(tmpDir, '## Current Position\n\nsome state\n\n## Next\nmore');
 
-  const { parsed } = runHook({ cwd: tmpDir });
-  assert.equal(parsed.hookSpecificOutput.hookEventName, 'PreCompact');
+  const { exitCode } = runHook({}, { cwd: tmpDir });
+
+  assert.equal(exitCode, 0);
+  assert.ok(readSidecar(tmpDir), 'sidecar written into process.cwd() fallback dir');
 });
