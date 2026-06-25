@@ -6628,7 +6628,11 @@ async function runTestFile(testFile, runner, opts, batchTmpPrefix) {
           const jestJson = JSON.parse(fs.readFileSync(jestJsonOutput, 'utf-8'));
           const testResults = (jestJson.testResults && jestJson.testResults[0] && jestJson.testResults[0].testResults) || [];
           if (testResults.length === 0) {
-            perTestResults.push({ file: testFile, runner, status: 'passed', duration_ms: durationMs, error_summary: null, flaky: false, flaky_pass_count: 0 });
+            // `--passWithNoTests` makes jest exit 0 for a nonexistent file or a file
+            // with no test cases — but "no tests ran" is NOT a pass. Record it as
+            // `no_tests` so it can't satisfy a `failed_count:0` UAT gate (dogfood:
+            // verify-work auto-verified with zero real tests run).
+            perTestResults.push({ file: testFile, runner, status: 'no_tests', duration_ms: durationMs, error_summary: 'no tests found in file', flaky: false, flaky_pass_count: 0 });
           } else {
             for (const t of testResults) {
               const tStatus = t.status === 'passed' ? 'passed' : t.status === 'pending' ? 'skipped' : 'failed';
@@ -6669,7 +6673,9 @@ async function runTestFile(testFile, runner, opts, batchTmpPrefix) {
             }
           }
           if (perTestResults.length === 0) {
-            perTestResults.push({ file: testFile, runner, status: 'passed', duration_ms: durationMs, error_summary: null, flaky: false, flaky_pass_count: 0 });
+            // No specs ran (empty/nonexistent playwright file) — "no tests" is not a
+            // pass (same false-pass class as the jest branch; CodeRabbit on #270).
+            perTestResults.push({ file: testFile, runner, status: 'no_tests', duration_ms: durationMs, error_summary: 'no tests found in file', flaky: false, flaky_pass_count: 0 });
           }
         } catch (e) {
           const rawOutput = safeReadFile(tmpOutput) || '';
@@ -6878,6 +6884,7 @@ async function cmdMaintainTestsRunBatch(cwd, options, raw) {
   let skippedCount = 0;
   let flakyCount = 0;
   let timeoutCount = 0;
+  let noTestsCount = 0;
 
   for (const r of results) {
     if (r.status === 'passed') passedCount++;
@@ -6885,6 +6892,7 @@ async function cmdMaintainTestsRunBatch(cwd, options, raw) {
     else if (r.status === 'skipped') skippedCount++;
     else if (r.status === 'flaky') flakyCount++;
     else if (r.status === 'timeout') timeoutCount++;
+    else if (r.status === 'no_tests') noTestsCount++;
   }
 
   const batchOutput = {
@@ -6896,6 +6904,7 @@ async function cmdMaintainTestsRunBatch(cwd, options, raw) {
     skipped_count: skippedCount,
     flaky_count: flakyCount,
     timeout_count: timeoutCount,
+    no_tests_count: noTestsCount,
     batch_timed_out: batchTimedOut,
     results,
   };

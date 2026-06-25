@@ -245,8 +245,12 @@ Read Current Test section from UAT file.
     if [ -s "$BATCH_FILE" ] && grep -q '"files"' "$BATCH_FILE"; then
       node ~/.claude/nf/bin/nf-tools.cjs maintain-tests run-batch --batch-file "$BATCH_FILE" --output-file "$OUTPUT_JSON" --timeout 300 || true
 
-      # Inspect results: if no failures, mark automated verification passed
-      if grep -q '"failed_count": 0' "$OUTPUT_JSON" >/dev/null 2>&1; then
+      # Inspect results: mark automated pass ONLY if there were no failures AND at
+      # least one real test actually passed. `failed_count: 0` alone is satisfied by a
+      # batch where zero tests ran (nonexistent/empty files under jest
+      # --passWithNoTests → no_tests, not passed), which used to auto-verify with no
+      # real coverage (dogfood). Require passed_count to be non-zero.
+      if grep -q '"failed_count": 0' "$OUTPUT_JSON" 2>/dev/null && ! grep -q '"passed_count": 0' "$OUTPUT_JSON" 2>/dev/null; then
         # Record automated pass for this test (auto:browser for playwright, auto:jest for jest)
         echo "Automated verification succeeded via discovered tests. Results: $OUTPUT_JSON"
         # The workflow engine should update the UAT file: set Tests.{N}.result = pass and method = auto:{type}
