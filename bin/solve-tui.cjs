@@ -282,6 +282,10 @@ function archiveItem(item) {
     : item.type === 'dtor' ? itemKey('dtor', item)
     : item.file || item.summary;
 
+  // Refuse to archive an item with no identifying key (empty/garbage item) — an
+  // empty `{}` used to push an all-undefined entry into the archive (dogfood).
+  if (!key || key === 'undefined:undefined') return false;
+
   // Don't duplicate
   if (archiveData.entries.some(e => e.key === key)) return true;
 
@@ -1177,6 +1181,12 @@ function createRequirementFromItem(item, catKey, textOverride) {
  * @returns {{ ok: boolean, id?: string }}
  */
 function createTodoFromItem(item) {
+  // Refuse to write a garbage todo from an empty/invalid item — an empty `{}` used
+  // to push a TODO with all-undefined fields into the real .planning/todos.json
+  // (dogfood: createTodoFromItem({}) polluted live state).
+  if (!item || (item.value == null && item.doc_file == null && item.file == null)) {
+    return { ok: false, reason: 'invalid item: no value/doc_file/file' };
+  }
   const todoPath = path.join(ROOT, '.planning', 'todos.json');
   let todoData;
   try {

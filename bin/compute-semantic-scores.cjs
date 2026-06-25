@@ -133,6 +133,24 @@ function parseArgs(argv) {
   return args;
 }
 
+// Read + parse a required JSON input, exiting cleanly (not a raw SyntaxError) on a
+// missing or corrupt file (dogfood F47).
+function readJsonOrExit(p, label) {
+  let raw;
+  try {
+    raw = fs.readFileSync(p, 'utf8');
+  } catch (e) {
+    process.stderr.write(`[compute-semantic-scores] ERROR: cannot read ${label} (${p}): ${e.message}\n`);
+    process.exit(1);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    process.stderr.write(`[compute-semantic-scores] ERROR: ${label} is not valid JSON (${p}): ${e.message}\n`);
+    process.exit(1);
+  }
+}
+
 function main() {
   const args = parseArgs(process.argv);
 
@@ -154,7 +172,7 @@ Options:
     process.exit(1);
   }
 
-  const candidatesData = JSON.parse(fs.readFileSync(CANDIDATES_PATH, 'utf8'));
+  const candidatesData = readJsonOrExit(CANDIDATES_PATH, 'candidates.json');
   const candidates = candidatesData.candidates || [];
 
   // Validate that candidates have verdicts
@@ -169,7 +187,7 @@ Options:
     process.stderr.write('[semantic-scores] ERROR: per-model-gates.json not found\n');
     process.exit(1);
   }
-  const perModelGatesData = JSON.parse(fs.readFileSync(PER_MODEL_GATES_PATH, 'utf8'));
+  const perModelGatesData = readJsonOrExit(PER_MODEL_GATES_PATH, 'per-model-gates.json');
   const perModelGates = perModelGatesData.models || {};
 
   const results = {};
