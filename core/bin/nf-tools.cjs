@@ -3195,7 +3195,14 @@ function cmdPhaseRemove(cwd, targetPhase, options, raw) {
     // each rename writes new = old-1, so a high→low pass re-matches its own output
     // (3→2, then 2→1 also catches the just-created 2 → both collapse to 1). Going
     // low→high, every value we create is below the remaining iterations' targets.
-    const maxPhase = 99; // reasonable upper bound
+    // Derive the upper bound from the document itself (no hard 99 cap) so projects
+    // with ≥100 phases renumber every reference and ROADMAP stays in sync with the
+    // on-disk phase tree (which the directory pass above renumbers at any width).
+    let maxPhase = removedInt;
+    for (const m of roadmapContent.matchAll(/Phase\s+(\d+)/gi)) {
+      const n = parseInt(m[1], 10);
+      if (n > maxPhase) maxPhase = n;
+    }
     for (let oldNum = removedInt + 1; oldNum <= maxPhase; oldNum++) {
       const newNum = oldNum - 1;
       const oldStr = String(oldNum);

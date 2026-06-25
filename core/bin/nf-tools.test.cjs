@@ -622,6 +622,35 @@ describe('phase remove command — ROADMAP renumber safety', () => {
     // Plan refs shift down without collapsing
     assert.ok(after.includes('01-01') && after.includes('02-01'), 'plan refs 02-01→01-01 and 03-01→02-01');
   });
+
+  // Regression (CodeRabbit on #259): the renumber loop was hard-capped at phase 99,
+  // so a project with ≥100 phases renamed the on-disk dirs but left `Phase 100`
+  // references stale in ROADMAP. The bound is now derived from the document.
+  test('renumbers phases ≥100 (no hard 99 cap)', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      [
+        '# ROADMAP',
+        '',
+        '- [x] Phase 98: Old | 98-01 | 2026-01-15',
+        '- [x] Phase 99: Mid | 99-01 | 2026-03-20',
+        '- [x] Phase 100: New | 100-01 | 2026-05-10',
+        '',
+        '## Phase 98: Old',
+        '## Phase 99: Mid',
+        '## Phase 100: New',
+        '',
+      ].join('\n')
+    );
+
+    const result = runNfTools('phase remove 98 --force', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+    const after = fs.readFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
+
+    assert.ok(after.includes('## Phase 99: New'), 'old Phase 100 must renumber to 99 (not be left stale)');
+    assert.ok(!after.includes('Phase 100'), 'no Phase 100 reference should remain');
+    assert.ok(after.includes('2026-03-20') && after.includes('2026-05-10'), 'ISO dates preserved');
+  });
 });
 
 describe('phase next-decimal command', () => {
