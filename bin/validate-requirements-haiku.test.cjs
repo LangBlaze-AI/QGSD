@@ -418,7 +418,9 @@ test('0-requirement envelope returns agreement_threshold (not undefined)', async
   // requirements-length branch — but with 0 requirements the function returns
   // BEFORE building/sending any prompt, so no network call is made by this dummy.
   const hadKey = process.env.ANTHROPIC_API_KEY;
-  process.env.ANTHROPIC_API_KEY = 'sk-ant-test-dummy';
+  // Any truthy value passes the env-presence check; deliberately NOT a key-shaped
+  // string so detect-secrets doesn't flag it. With 0 reqs no network call happens.
+  process.env.ANTHROPIC_API_KEY = 'present-for-test';
   try {
     const envPath = pathH.join(dir, 'requirements.json');
     fsH.writeFileSync(envPath, JSON.stringify({ requirements: [] }));
