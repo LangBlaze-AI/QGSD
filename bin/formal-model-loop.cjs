@@ -159,7 +159,10 @@ async function refineModel(input) {
     onLog('[formal-model-loop] iteration ' + i + '/' + maxIterations);
 
     let prompt;
-    if (i === 1) {
+    // Regenerate (not refine) when there's no prior result to refine — if iteration 1
+    // failed before `modelResult` was set, the refine branch used to deref
+    // `null.spec` and crash (dogfood: close-formal-gaps iter-2 after iter-1 fail).
+    if (i === 1 || !modelResult) {
       prompt = buildGeneratePrompt(codeSource, testSource, formalism);
     } else {
       prompt = buildRefinePrompt(

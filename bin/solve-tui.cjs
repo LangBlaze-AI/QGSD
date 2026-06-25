@@ -1451,7 +1451,12 @@ No explanation, no markdown, just the JSON object.`;
 /** Generate a stable content-hash key for an item to use in classification cache */
 function itemKey(catKey, item) {
   if (catKey === 'dtoc') {
-    const content = item.reason || item.value || '';
+    // Discriminate on value + doc_file too. `reason` is generic for whole classes of
+    // dtoc items (e.g. "not in any dependency manifest"), so hashing reason alone
+    // collapsed dozens of distinct items to ONE cache key — a single Haiku verdict
+    // was then silently applied to all of them (dogfood: 44 items → 1 key → wrong
+    // classifications).
+    const content = [item.reason || '', item.value || '', item.doc_file || ''].join('\x00');
     return crypto.createHash('sha256').update(content).digest('hex').slice(0, 16);
   }
   if (catKey === 'ctor') return item.file;
