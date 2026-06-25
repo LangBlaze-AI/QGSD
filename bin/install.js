@@ -2703,9 +2703,11 @@ function install(isGlobal, runtime = 'claude') {
     }
   }
 
-  // Write VERSION file
+  // Write VERSION file (trailing newline — without it, a downstream read that
+  // concatenates VERSION with another token produced e.g. `0.41.10LOCAL`, making
+  // the install type undetectable; dogfood).
   const versionDest = path.join(targetDir, 'nf', 'VERSION');
-  fs.writeFileSync(versionDest, pkg.version);
+  fs.writeFileSync(versionDest, pkg.version + '\n');
   if (verifyFileInstalled(versionDest, 'VERSION')) {
     log(`  ${green}✓${reset} Wrote VERSION (${pkg.version})`);
   } else {
