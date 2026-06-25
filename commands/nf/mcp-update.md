@@ -89,8 +89,13 @@ const command=serverConfig.command;
 const args=serverConfig.args||[];
 let result;
 if(command==='npx'||command==='npm'){
-  const packageName=args[args.length-1];
-  result={type:'npm',package:packageName};
+  // Last NON-FLAG arg is the package — `args[args.length-1]` grabbed a trailing
+  // flag (e.g. `["@playwright/mcp@latest","--headless"]` → `--headless`), so the
+  // updater ran `npm install -g --headless` (dogfood). Skip leading/trailing flags.
+  const packageName=[...args].reverse().find(a=>!a.startsWith('-'));
+  // No real package (args are all flags / empty) → fail fast as unknown rather than
+  // emitting type:'npm' with no package, which the caller would `npm install -g` blank.
+  result=packageName?{type:'npm',package:packageName}:{type:'unknown',reason:'npx/npm slot has no non-flag package argument'};
 } else if(command==='node'&&args.length>0){
   // A server under ~/.claude/ is a standard install — NEVER a dev clone, even if
   // an ancestor (~ or ~/.claude itself) is a git repo (e.g. a dotfiles repo).
@@ -200,7 +205,8 @@ for(const agent of KNOWN_AGENTS){
   const cmd=cfg.command;
   const args=cfg.args||[];
   if(cmd==='npx'||cmd==='npm'){
-    const pkg=args[args.length-1];
+    const pkg=[...args].reverse().find(a=>!a.startsWith('-')); // last non-flag arg (skip trailing flags like --headless)
+    if(!pkg){ tasks.push({agent,type:'unknown',reason:'npx/npm slot has no non-flag package argument'}); continue; }
     const key='npm:'+pkg;
     if(seenKeys.has(key)){ tasks.push({agent,type:'npm',package:pkg,deduplicated:true}); }
     else { seenKeys.add(key); tasks.push({agent,type:'npm',package:pkg,deduplicated:false}); }
