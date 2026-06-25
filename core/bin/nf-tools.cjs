@@ -3191,9 +3191,19 @@ function cmdPhaseRemove(cwd, targetPhase, options, raw) {
   if (!isDecimal) {
     const removedInt = parseInt(normalized, 10);
 
-    // Collect all integer phases > removedInt
-    const maxPhase = 99; // reasonable upper bound
-    for (let oldNum = maxPhase; oldNum > removedInt; oldNum--) {
+    // Renumber every phase > removedInt down by one. MUST iterate low→high:
+    // each rename writes new = old-1, so a high→low pass re-matches its own output
+    // (3→2, then 2→1 also catches the just-created 2 → both collapse to 1). Going
+    // low→high, every value we create is below the remaining iterations' targets.
+    // Derive the upper bound from the document itself (no hard 99 cap) so projects
+    // with ≥100 phases renumber every reference and ROADMAP stays in sync with the
+    // on-disk phase tree (which the directory pass above renumbers at any width).
+    let maxPhase = removedInt;
+    for (const m of roadmapContent.matchAll(/Phase\s+(\d+)/gi)) {
+      const n = parseInt(m[1], 10);
+      if (n > maxPhase) maxPhase = n;
+    }
+    for (let oldNum = removedInt + 1; oldNum <= maxPhase; oldNum++) {
       const newNum = oldNum - 1;
       const oldStr = String(oldNum);
       const newStr = String(newNum);
@@ -3212,9 +3222,13 @@ function cmdPhaseRemove(cwd, targetPhase, options, raw) {
         `$1${newStr}$2`
       );
 
-      // Plan references: 18-01 → 17-01
+      // Plan references: 18-01 → 17-01. Anchored with (?<![\d-]) / (?!\d|-\d) so the
+      // NN-NN of an ISO date (e.g. 2026-01-15 → the 26-01 and 01-15 substrings) is
+      // never rewritten — only a standalone NN-NN plan ref, which is flanked by
+      // non-digit/non-dash boundaries. Without the anchors, removing a low phase
+      // cascaded every YY-MM down the whole document (2026 → 2001), corrupting dates.
       roadmapContent = roadmapContent.replace(
-        new RegExp(`${oldPad}-(\\d{2})`, 'g'),
+        new RegExp(`(?<![\\d-])${oldPad}-(\\d{2})(?![\\d-])`, 'g'),
         `${newPad}-$1`
       );
 
