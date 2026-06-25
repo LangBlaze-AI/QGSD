@@ -335,11 +335,21 @@ function emitOutput(cwd, additionalContext) {
   try {
     const claudeDir = path.join(cwd, '.claude');
     fs.mkdirSync(claudeDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(claudeDir, 'precompact-continuation.txt'),
-      additionalContext,
-      'utf8'
-    );
+    const target = path.join(claudeDir, 'precompact-continuation.txt');
+    // Symlink hardening: a pre-planted symlink at the target would make
+    // writeFileSync follow it and clobber an arbitrary file. Remove any existing
+    // non-regular file first, then write with O_NOFOLLOW so we never traverse a
+    // symlink that races in between (TOCTOU-safe). Falls back cleanly on error.
+    try {
+      const st = fs.lstatSync(target);
+      if (!st.isFile()) fs.rmSync(target, { force: true });
+    } catch (_) { /* target absent — nothing to clean up */ }
+    const fd = fs.openSync(target, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW, 0o600);
+    try {
+      fs.writeFileSync(fd, additionalContext, 'utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
   } catch (e) {
     process.stderr.write('[nf-precompact] Could not persist continuation context: ' + e.message + '\n');
   }

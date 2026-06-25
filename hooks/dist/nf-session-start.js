@@ -130,16 +130,24 @@ if (require.main === module) (async () => {
   // source "compact"/"resume" or omits source entirely.
   try {
     const contPath = path.join(_hookCwd, '.claude', 'precompact-continuation.txt');
-    if (fs.existsSync(contPath)) {
-      const _ageMs = Date.now() - fs.statSync(contPath).mtimeMs;
+    // Symlink hardening: lstat (not stat) so a planted symlink is NOT followed —
+    // a repo-controlled symlink here could otherwise leak an arbitrary file's
+    // contents into additionalContext. Only inject from a regular file, and cap
+    // the size so a huge file can't blow up the context budget. Always remove the
+    // path afterwards (one-shot), including the rejected-symlink case.
+    let _st = null;
+    try { _st = fs.lstatSync(contPath); } catch (_) { _st = null; }
+    if (_st) {
+      const MAX = 64 * 1024; // 64KB cap
+      const _ageMs = Date.now() - _st.mtimeMs;
       const _fresh = _ageMs >= 0 && _ageMs < 6 * 60 * 60 * 1000;
       const _src = _parsedInput && _parsedInput.source;
       const _wantInject = _src === 'compact' || _src === 'resume' || _src == null;
-      if (_fresh && _wantInject) {
+      if (_st.isFile() && _st.size <= MAX && _fresh && _wantInject) {
         const cont = fs.readFileSync(contPath, 'utf8').trim();
         if (cont) _contextPieces.push(cont);
       }
-      // One-shot: delete regardless of whether we injected (stale/wrong-source cleanup).
+      // One-shot: delete regardless (stale / wrong-source / oversized / symlink).
       try { fs.unlinkSync(contPath); } catch (_) {}
     }
   } catch (_) {}

@@ -227,6 +227,30 @@ test('subprocess: persists minimal fallback when STATE.md is absent', () => {
   assert.ok(ctx && ctx.includes('resumed after compaction'), 'minimal fallback persisted to sidecar');
 });
 
+test('subprocess: SYMLINK pre-planted at sidecar path → not followed, target untouched (security)', () => {
+  // A pre-planted symlink must NOT cause the write to clobber an arbitrary file.
+  const tmpDir = makeTmpDir();
+  writeStateFile(tmpDir, '## Current Position\n\nPhase: v0.44-01\n\n## Next\nx');
+  const victim = path.join(tmpDir, 'victim.txt');
+  fs.writeFileSync(victim, 'ORIGINAL victim contents', 'utf8');
+  const claudeDir = path.join(tmpDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.symlinkSync(victim, path.join(claudeDir, 'precompact-continuation.txt'));
+
+  const { exitCode } = runHook({ cwd: tmpDir });
+
+  assert.equal(exitCode, 0);
+  assert.equal(
+    fs.readFileSync(victim, 'utf8'),
+    'ORIGINAL victim contents',
+    'symlink target must NOT be overwritten by the sidecar write'
+  );
+  // The sidecar path is now a regular file holding the continuation (not a symlink).
+  const sc = path.join(claudeDir, 'precompact-continuation.txt');
+  assert.ok(!fs.lstatSync(sc).isSymbolicLink(), 'sidecar must be a regular file, not a symlink');
+  assert.ok(fs.readFileSync(sc, 'utf8').includes('CONTINUATION CONTEXT'), 'sidecar holds the continuation');
+});
+
 test('subprocess: fails open on invalid JSON stdin (exit 0)', () => {
   const result = spawnSync('node', [HOOK_PATH], {
     input: 'not valid json {{',

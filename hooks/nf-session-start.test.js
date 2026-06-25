@@ -139,6 +139,35 @@ test('continuation: stale sidecar (mtime > 6h) → NOT injected, deleted', () =>
   assert.ok(!continuationExists(tmpDir), 'stale sidecar deleted');
 });
 
+test('continuation: SYMLINK at sidecar path → NOT followed/injected, removed (security)', () => {
+  // A repo-planted symlink must not leak the target file's contents into context.
+  const tmpDir = makeTmpDir();
+  const secret = path.join(tmpDir, 'secret.txt');
+  fs.writeFileSync(secret, 'TOP-SECRET private key material', 'utf8');
+  const claudeDir = path.join(tmpDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  const link = path.join(claudeDir, 'precompact-continuation.txt');
+  fs.symlinkSync(secret, link);
+
+  const { exitCode, stdout } = runHook({ cwd: tmpDir, source: 'compact' });
+
+  assert.equal(exitCode, 0);
+  assert.ok(!stdout.includes('TOP-SECRET'), 'symlink target contents must never be injected');
+  assert.ok(!fs.existsSync(link) || !fs.lstatSync(link).isSymbolicLink(), 'planted symlink must be removed');
+  assert.ok(fs.existsSync(secret), 'the symlink target file itself must be left untouched');
+});
+
+test('continuation: oversized sidecar (> 64KB) → NOT injected, deleted', () => {
+  const tmpDir = makeTmpDir();
+  writeContinuation(tmpDir, 'nForma CONTINUATION CONTEXT\n' + 'x'.repeat(70 * 1024));
+
+  const { exitCode, stdout } = runHook({ cwd: tmpDir, source: 'compact' });
+
+  assert.equal(exitCode, 0);
+  assert.equal(stdout.trim(), '', 'oversized continuation must not be injected');
+  assert.ok(!continuationExists(tmpDir), 'oversized sidecar deleted');
+});
+
 // ─── Subprocess integration tests ───────────────────────────────────────────
 
 test('valid empty JSON stdin → exits 0 (secrets not found, silently skips)', () => {
