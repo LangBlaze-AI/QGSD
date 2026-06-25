@@ -143,3 +143,34 @@ describe('detectBaselineDrift', () => {
     assert.equal(result.layers.length, 0);
   });
 });
+
+// Dogfood regression: the module exported detectBaselineDrift but had no
+// `require.main` CLI block, so `/nf:solve-report`'s `node baseline-drift.cjs
+// --project-root=…` (with BASELINE_JSON/SNAPSHOT_JSON in env) emitted NOTHING →
+// CONV-04 baseline-drift detection was permanently dead. The CLI must print JSON.
+describe('baseline-drift CLI (live invocation)', () => {
+  const { execFileSync } = require('node:child_process');
+  const path = require('node:path');
+  const SCRIPT = path.join(__dirname, '..', 'bin', 'baseline-drift.cjs');
+
+  function runCli(env) {
+    return execFileSync(process.execPath, [SCRIPT, '--project-root=/tmp'], {
+      encoding: 'utf8',
+      env: { ...process.env, ...env },
+    });
+  }
+
+  it('emits parseable {detected:true} JSON when residual drifts 10→50', () => {
+    const out = runCli({ BASELINE_JSON: '{"r_to_f":{"residual":10}}', SNAPSHOT_JSON: '{"r_to_f":{"residual":50}}' });
+    assert.ok(out.trim().length > 0, 'CLI must emit output (not the dead-path empty string)');
+    const parsed = JSON.parse(out);
+    assert.equal(parsed.detected, true);
+    assert.equal(parsed.layers[0].layer, 'r_to_f');
+  });
+
+  it('degrades gracefully (valid JSON, detected:false) on missing/invalid env', () => {
+    const out = runCli({ BASELINE_JSON: 'not json', SNAPSHOT_JSON: '' });
+    const parsed = JSON.parse(out);
+    assert.equal(parsed.detected, false);
+  });
+});

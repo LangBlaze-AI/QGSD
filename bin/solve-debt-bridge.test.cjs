@@ -315,4 +315,36 @@ describe('solve-debt-bridge', () => {
       assert.equal(VALID_TRANSITIONS.resolved.length, 0);
     });
   });
+
+  // Dogfood regression: the module exported readOpenDebt but had no
+  // `require.main` CLI block, so `/nf:solve`'s `node solve-debt-bridge.cjs
+  // --read-open --project-root=…` emitted NOTHING → DEBT_JSON always fell back to
+  // {"entries":[]} and debt-convergence never ran. The CLI must print JSON.
+  describe('CLI --read-open (live invocation)', () => {
+    const { execFileSync } = require('node:child_process');
+    const fs = require('node:fs');
+    const os = require('node:os');
+    const SCRIPT = path.join(__dirname, 'solve-debt-bridge.cjs');
+
+    it('emits parseable {entries} JSON filtering open+acknowledged', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-debt-'));
+      try {
+        fs.mkdirSync(path.join(dir, '.planning', 'formal'), { recursive: true });
+        fs.writeFileSync(
+          path.join(dir, '.planning', 'formal', 'debt.json'),
+          JSON.stringify({ debt_entries: [
+            { id: 'D1', status: 'open' },
+            { id: 'D2', status: 'resolved' },
+            { id: 'D3', status: 'acknowledged' },
+          ] })
+        );
+        const out = execFileSync(process.execPath, [SCRIPT, '--read-open', `--project-root=${dir}`], { encoding: 'utf8' });
+        assert.ok(out.trim().length > 0, 'CLI must emit output (not the dead-path empty string)');
+        const parsed = JSON.parse(out);
+        assert.equal(parsed.entries.length, 2, 'open + acknowledged retained, resolved dropped');
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
 });
