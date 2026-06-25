@@ -560,6 +560,12 @@ function cmdGenerateSlug(text, raw) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
+  // Whitespace/punctuation-only input (e.g. '   ' or '!!!') slugs to '' — fail
+  // loudly instead of returning an empty slug that callers turn into bad dir names.
+  if (!slug) {
+    error('text produced an empty slug (whitespace/punctuation only)');
+  }
+
   const result = { slug };
   output(result, raw, slug);
 }
@@ -1537,7 +1543,10 @@ function cmdFindPhase(cwd, phase, raw) {
   // parent UAT/artifact closure in execute-phase / audit-milestone / resume-work.
   const found = findPhaseInternal(cwd, phase);
   if (!found) {
-    output(notFound, raw, '');
+    // Emit a distinguishable sentinel under --raw — the previous empty string was
+    // indistinguishable from an error/no-output, so callers couldn't tell "phase
+    // not found" from a crash (dogfood: find-phase <missing> --raw → "" exit 0).
+    output(notFound, raw, 'not-found');
     return;
   }
 
@@ -1588,8 +1597,11 @@ function cmdCommit(cwd, message, files, raw, amend) {
       output(result, raw, 'nothing');
       return;
     }
-    const result = { committed: false, hash: null, reason: 'nothing_to_commit', error: commitResult.stderr };
-    output(result, raw, 'nothing');
+    // A real git failure (not-a-repo, hook rejection, …) is NOT "nothing to commit" —
+    // mislabeling it let callers that gate on `reason` treat a failed commit as a
+    // benign no-op (dogfood). Report it distinctly (still exit 0 to stay fail-open).
+    const result = { committed: false, hash: null, reason: 'git_error', error: commitResult.stderr };
+    output(result, raw, 'error');
     return;
   }
 
@@ -1605,7 +1617,7 @@ function cmdVerifySummary(cwd, summaryPath, checkFileCount, raw) {
     error('summary-path required');
   }
 
-  const fullPath = path.join(cwd, summaryPath);
+  const fullPath = path.isAbsolute(summaryPath) ? summaryPath : path.join(cwd, summaryPath);
   const checkCount = checkFileCount || 2;
 
   // Check 1: Summary exists
@@ -1702,7 +1714,7 @@ function cmdTemplateSelect(cwd, planPath, raw) {
   }
 
   try {
-    const fullPath = path.join(cwd, planPath);
+    const fullPath = path.isAbsolute(planPath) ? planPath : path.join(cwd, planPath);
     const content = fs.readFileSync(fullPath, 'utf-8');
     
     // Simple heuristics
@@ -2140,7 +2152,7 @@ function cmdSummaryExtract(cwd, summaryPath, fields, raw) {
     error('summary-path required for summary-extract');
   }
 
-  const fullPath = path.join(cwd, summaryPath);
+  const fullPath = path.isAbsolute(summaryPath) ? summaryPath : path.join(cwd, summaryPath);
 
   if (!fs.existsSync(fullPath)) {
     output({ error: 'File not found', path: summaryPath }, raw);
@@ -4646,7 +4658,10 @@ function pathExistsInternal(cwd, targetPath) {
 
 function generateSlugInternal(text) {
   if (!text) return null;
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  // Whitespace/punctuation-only input slugs to '' — return null so callers fail
+  // loudly instead of creating empty/trailing-dash directories (dogfood).
+  return slug || null;
 }
 
 function getMilestoneInfo(cwd) {

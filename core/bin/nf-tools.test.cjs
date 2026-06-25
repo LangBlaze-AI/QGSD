@@ -4731,3 +4731,40 @@ describe('edge-path gaps: conflict markers + main() backstop (F50)', () => {
     assert.ok(/main\(\)\.catch\(/.test(src), 'main() should have a top-level .catch backstop for uncaught throws');
   });
 });
+
+// Dogfood Batch 5: nf-tools silent-success / path-resolution.
+describe('Batch 5 — silent-success / path guards', () => {
+  let tmpDir;
+  beforeEach(() => { tmpDir = createTempProject(); });
+  afterEach(() => { cleanup(tmpDir); });
+
+  test('generate-slug fails loudly on whitespace/punctuation-only input', () => {
+    assert.ok(!runNfTools("generate-slug '   '", tmpDir).success, 'whitespace → error, not empty slug');
+    assert.ok(!runNfTools('generate-slug "!!!"', tmpDir).success, 'punctuation → error');
+    assert.ok(runNfTools('generate-slug "Real Title"', tmpDir).success, 'real text still works');
+  });
+
+  test('find-phase <missing> --raw emits a not-found sentinel (not an empty string)', () => {
+    const r = runNfTools('find-phase 99 --raw', tmpDir);
+    assert.equal(r.output, 'not-found', 'raw not-found must be distinguishable from empty/error output');
+  });
+
+  test('summary-extract resolves an ABSOLUTE summary path (not cwd-joined → File not found)', () => {
+    const dir = path.join(tmpDir, '.planning', 'phases', '01-x');
+    fs.mkdirSync(dir, { recursive: true });
+    const abs = path.join(dir, '01-SUMMARY.md');
+    fs.writeFileSync(abs, '# Summary\n\n**One-liner**: hello\n');
+    const r = runNfTools(`summary-extract "${abs}"`, tmpDir);
+    assert.ok(r.success, `absolute path must resolve: ${r.error}`);
+    assert.ok(!/File not found/.test(r.output + r.error), 'must not report File not found for an existing absolute path');
+  });
+
+  test('commit reports git_error (not nothing_to_commit) when git itself fails', () => {
+    // tmpDir is NOT a git repo → git commit fails for a real reason, not "nothing to commit".
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'x.md'), 'content');
+    const r = runNfTools('commit "wip"', tmpDir);
+    const out = JSON.parse(r.output);
+    assert.equal(out.committed, false);
+    assert.equal(out.reason, 'git_error', 'a real git failure must not be mislabeled nothing_to_commit');
+  });
+});
