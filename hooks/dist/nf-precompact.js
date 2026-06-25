@@ -1,9 +1,18 @@
 #!/usr/bin/env node
 // hooks/nf-precompact.js
-// PreCompact hook — injects nForma session state as additionalContext before context compaction.
+// PreCompact hook — captures nForma session state before context compaction.
 // Reads .planning/STATE.md "Current Position" section and any pending task files.
-// Output survives compaction and appears in the first message of the compacted context.
-// Fails open on all errors — never blocks compaction.
+//
+// IMPORTANT: the harness does NOT accept hookSpecificOutput/additionalContext for
+// the PreCompact event (it validates output against a discriminated union that
+// only includes PreToolUse/UserPromptSubmit/PostToolUse/PostToolBatch/Stop) — a
+// PreCompact hook that emits it is rejected with "Invalid input" on every
+// compaction. Instead we persist the continuation context to a sidecar file
+// (.claude/precompact-continuation.txt) and emit NOTHING on stdout; the
+// nf-session-start hook injects it via the valid SessionStart channel on the
+// post-compaction SessionStart (source: "compact").
+//
+// Fails open on all errors — never blocks compaction, never writes to stdout.
 
 'use strict';
 
@@ -208,7 +217,7 @@ process.stdin.on('end', () => {
       } catch (e) {
         process.stderr.write('[nf-precompact] Could not read STATE.md: ' + e.message + '\n');
         additionalContext = 'nForma session resumed after compaction. Run `cat .planning/STATE.md` for project state.';
-        emitOutput(additionalContext);
+        emitOutput(cwd, additionalContext);
         return;
       }
 
@@ -302,7 +311,7 @@ process.stdin.on('end', () => {
       additionalContext = lines.join('\n');
     }
 
-    emitOutput(additionalContext);
+    emitOutput(cwd, additionalContext);
 
   } catch (e) {
     if (e instanceof SyntaxError) {
@@ -315,13 +324,25 @@ process.stdin.on('end', () => {
 });
 } // end require.main === module
 
-function emitOutput(additionalContext) {
-  process.stdout.write(JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: 'PreCompact',
+// Persist the continuation context to a sidecar file for the post-compaction
+// SessionStart hook to inject. We do NOT write to stdout: PreCompact output does
+// not support hookSpecificOutput.additionalContext (the harness rejects it), so
+// handing the context to nf-session-start via .claude/precompact-continuation.txt
+// is the only valid channel. nf-session-start consumes-and-deletes the file on
+// the next SessionStart (source: "compact"). Fail-open: any write error is
+// swallowed so compaction is never blocked.
+function emitOutput(cwd, additionalContext) {
+  try {
+    const claudeDir = path.join(cwd, '.claude');
+    fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(claudeDir, 'precompact-continuation.txt'),
       additionalContext,
-    },
-  }));
+      'utf8'
+    );
+  } catch (e) {
+    process.stderr.write('[nf-precompact] Could not persist continuation context: ' + e.message + '\n');
+  }
   process.exit(0);
 }
 

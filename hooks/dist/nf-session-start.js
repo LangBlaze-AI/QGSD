@@ -121,6 +121,29 @@ if (require.main === module) (async () => {
   // Collect all additionalContext pieces — write once at the end
   const _contextPieces = [];
 
+  // Post-compaction continuation context (CONT-01).
+  // nf-precompact persists rich resume context to this sidecar before compaction,
+  // because the PreCompact event cannot inject additionalContext itself (the
+  // harness rejects PreCompact hookSpecificOutput). We consume-and-delete it here,
+  // injecting via the valid SessionStart channel. One-shot, fresh-only (6h), and
+  // source-tolerant so it works whether the post-compaction event reports
+  // source "compact"/"resume" or omits source entirely.
+  try {
+    const contPath = path.join(_hookCwd, '.claude', 'precompact-continuation.txt');
+    if (fs.existsSync(contPath)) {
+      const _ageMs = Date.now() - fs.statSync(contPath).mtimeMs;
+      const _fresh = _ageMs >= 0 && _ageMs < 6 * 60 * 60 * 1000;
+      const _src = _parsedInput && _parsedInput.source;
+      const _wantInject = _src === 'compact' || _src === 'resume' || _src == null;
+      if (_fresh && _wantInject) {
+        const cont = fs.readFileSync(contPath, 'utf8').trim();
+        if (cont) _contextPieces.push(cont);
+      }
+      // One-shot: delete regardless of whether we injected (stale/wrong-source cleanup).
+      try { fs.unlinkSync(contPath); } catch (_) {}
+    }
+  } catch (_) {}
+
   // Telemetry surfacing — inject top unsurfaced issue as additionalContext
   // Guard: only active when running inside the nForma dev repo itself
   try {

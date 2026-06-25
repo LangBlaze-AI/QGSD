@@ -70,6 +70,75 @@ function readPendingFixes(dir) {
   return JSON.parse(fs.readFileSync(fixesPath, 'utf8'));
 }
 
+// Write the precompact continuation sidecar under .claude/ in the given dir.
+function writeContinuation(dir, content) {
+  const claudeDir = path.join(dir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  const p = path.join(claudeDir, 'precompact-continuation.txt');
+  fs.writeFileSync(p, content, 'utf8');
+  return p;
+}
+
+function continuationExists(dir) {
+  return fs.existsSync(path.join(dir, '.claude', 'precompact-continuation.txt'));
+}
+
+// ─── Post-compaction continuation sidecar (CONT-01) ─────────────────────────
+
+test('continuation: source=compact + fresh sidecar → injected via SessionStart channel and consumed', () => {
+  const tmpDir = makeTmpDir(); // non-nForma repo: only the continuation piece is present
+  writeContinuation(tmpDir, 'nForma CONTINUATION CONTEXT\n\n## Current Position\nPhase: v0.19-05');
+
+  const { exitCode, parsed } = runHook({ cwd: tmpDir, source: 'compact' });
+
+  assert.equal(exitCode, 0, 'hook must exit 0');
+  assert.ok(parsed && parsed.hookSpecificOutput, 'must emit SessionStart additionalContext');
+  assert.equal(parsed.hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.ok(
+    parsed.hookSpecificOutput.additionalContext.includes('nForma CONTINUATION CONTEXT'),
+    'continuation context must be injected'
+  );
+  assert.ok(!continuationExists(tmpDir), 'sidecar must be consumed (deleted) after injection');
+});
+
+test('continuation: absent source (post-compact event without source) → still injected', () => {
+  const tmpDir = makeTmpDir();
+  writeContinuation(tmpDir, 'nForma CONTINUATION CONTEXT\n\nResume at Task 4.');
+
+  const { exitCode, parsed } = runHook({ cwd: tmpDir }); // no source field
+
+  assert.equal(exitCode, 0);
+  assert.ok(
+    parsed && parsed.hookSpecificOutput.additionalContext.includes('Resume at Task 4'),
+    'continuation injected when source is omitted'
+  );
+  assert.ok(!continuationExists(tmpDir), 'sidecar consumed');
+});
+
+test('continuation: source=startup → NOT injected but sidecar cleaned up (one-shot)', () => {
+  const tmpDir = makeTmpDir();
+  writeContinuation(tmpDir, 'STALE continuation from a prior crashed compaction');
+
+  const { exitCode, stdout } = runHook({ cwd: tmpDir, source: 'startup' });
+
+  assert.equal(exitCode, 0);
+  assert.equal(stdout.trim(), '', 'must not inject continuation on a fresh startup');
+  assert.ok(!continuationExists(tmpDir), 'stale sidecar must be cleaned up even when not injected');
+});
+
+test('continuation: stale sidecar (mtime > 6h) → NOT injected, deleted', () => {
+  const tmpDir = makeTmpDir();
+  const p = writeContinuation(tmpDir, 'nForma CONTINUATION CONTEXT — too old to use');
+  const sevenHoursAgo = (Date.now() - 7 * 60 * 60 * 1000) / 1000;
+  fs.utimesSync(p, sevenHoursAgo, sevenHoursAgo);
+
+  const { exitCode, stdout } = runHook({ cwd: tmpDir, source: 'compact' });
+
+  assert.equal(exitCode, 0);
+  assert.equal(stdout.trim(), '', 'stale continuation must not be injected');
+  assert.ok(!continuationExists(tmpDir), 'stale sidecar deleted');
+});
+
 // ─── Subprocess integration tests ───────────────────────────────────────────
 
 test('valid empty JSON stdin → exits 0 (secrets not found, silently skips)', () => {
