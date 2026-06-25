@@ -384,7 +384,7 @@ if [ -d ".planning/formal/spec" ]; then
   # Use centralized semantic matching via scope.json metadata
   while IFS=$'\t' read -r mod modpath; do
     FORMAL_SPEC_CONTEXT+=("{\"module\":\"$mod\",\"path\":\"$modpath\"}")
-  done < <(node bin/formal-scope-scan.cjs --description "$DESCRIPTION" --format lines)
+  done < <(node bin/formal-scope-scan.cjs --description "$DESCRIPTION" --no-l3 --format lines)
   MATCH_COUNT=${#FORMAL_SPEC_CONTEXT[@]}
   if [ "$MATCH_COUNT" -gt 0 ]; then
     MATCHED_MODULES=$(printf '%s\n' "${FORMAL_SPEC_CONTEXT[@]}" | node --input-type=module -e "

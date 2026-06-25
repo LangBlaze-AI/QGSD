@@ -90,7 +90,7 @@ if [ -d ".planning/formal/spec" ]; then
   PHASE_DESC=$(node ~/.claude/nf/bin/nf-tools.cjs roadmap get-phase "${PHASE}" | jq -r '.goal // .phase_name')
   while IFS=$'\t' read -r mod modpath; do
     FORMAL_SPEC_CONTEXT+=("{\"module\":\"$mod\",\"path\":\"$modpath\"}")
-  done < <(node bin/formal-scope-scan.cjs --description "$PHASE_DESC" --format lines)
+  done < <(node bin/formal-scope-scan.cjs --description "$PHASE_DESC" --no-l3 --format lines)
   MATCH_COUNT=${#FORMAL_SPEC_CONTEXT[@]}
   if [ "$MATCH_COUNT" -gt 0 ]; then
     MATCHED_MODULES=$(printf '%s\n' "${FORMAL_SPEC_CONTEXT[@]}" | node -e "

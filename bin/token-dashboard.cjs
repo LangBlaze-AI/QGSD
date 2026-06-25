@@ -73,9 +73,9 @@ function aggregateBySlot(records) {
       map.set(family, { input: 0, output: 0, cacheHit: 0, recordCount: 0 });
     }
     const agg = map.get(family);
-    agg.input += (r.input_tokens || 0);
-    agg.output += (r.output_tokens || 0);
-    agg.cacheHit += (r.cache_read_input_tokens || 0);
+    agg.input += (Number(r.input_tokens) || 0);
+    agg.output += (Number(r.output_tokens) || 0);
+    agg.cacheHit += (Number(r.cache_read_input_tokens) || 0);
     agg.recordCount += 1;
   }
   return map;
@@ -94,8 +94,8 @@ function aggregateBySession(records) {
       map.set(sid, { input: 0, output: 0, ts: r.ts || '', recordCount: 0 });
     }
     const agg = map.get(sid);
-    agg.input += (r.input_tokens || 0);
-    agg.output += (r.output_tokens || 0);
+    agg.input += (Number(r.input_tokens) || 0);
+    agg.output += (Number(r.output_tokens) || 0);
     // Track earliest timestamp
     if (r.ts && (!agg.ts || r.ts < agg.ts)) {
       agg.ts = r.ts;
@@ -160,7 +160,7 @@ function formatDashboard(records, options) {
 
   // Filter to last N sessions if requested
   let filteredRecords = records;
-  if (options.last) {
+  if (options.last != null) { // honor an explicit 0 (was falsy → showed all)
     const sessionMap = aggregateBySession(records);
     const sessions = [...sessionMap.entries()]
       .sort((a, b) => (b[1].ts || '').localeCompare(a[1].ts || ''))
@@ -293,7 +293,8 @@ if (require.main === module) {
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--last' && args[i + 1]) {
-      last = parseInt(args[i + 1], 10) || 5;
+      const n = parseInt(args[i + 1], 10);
+      last = Number.isNaN(n) ? 5 : n; // allow an explicit 0 (|| 5 coerced it up)
       i++;
     } else if (args[i] === '--jsonl' && args[i + 1]) {
       jsonlPath = args[i + 1];

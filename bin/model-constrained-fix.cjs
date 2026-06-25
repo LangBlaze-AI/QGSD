@@ -402,7 +402,8 @@ function renderOneConstraint(constraint, formalism) {
  */
 function renderConstraintSummary(constraints, maxConstraints) {
   if (!Array.isArray(constraints)) return { model_path: '', formalism: 'unknown', constraint_count: 0, constraints: [] };
-  maxConstraints = maxConstraints || 5;
+  // `|| 5` coerced a legitimate 0 (falsy) up to 5; default only on null/NaN.
+  if (maxConstraints == null || Number.isNaN(maxConstraints)) maxConstraints = 5;
 
   // Determine formalism from first constraint
   const firstSpec = constraints[0]?.spec_path || '';
@@ -443,7 +444,9 @@ function parseArgs(argv) {
     if (argv[i] === '--spec' && argv[i + 1]) {
       args.spec = argv[++i];
     } else if (argv[i] === '--max-constraints' && argv[i + 1]) {
-      args.maxConstraints = parseInt(argv[++i], 10) || 5;
+      const mc = parseInt(argv[++i], 10);
+      args.maxConstraints = Number.isNaN(mc) ? 5 : mc; // allow an explicit 0
+
     } else if (argv[i] === '--format' && argv[i + 1]) {
       args.format = argv[++i];
     } else if (argv[i] === '--help' || argv[i] === '-h') {
