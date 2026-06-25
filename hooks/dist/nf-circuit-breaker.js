@@ -349,23 +349,28 @@ function detectOscillation(fileSets, depth, hashes, gitRoot, options) {
           continue;
         }
 
-        // Rollback detection: commit message intent + diff-level analysis
+        // Rollback detection: diff-level analysis + commit message corroboration
         // Only applies at the borderline (cycles == minCycles).
         // With cycles > minCycles, the pattern is sustained enough to be real oscillation
         // even if a commit message uses "revert" keywords.
+        //
+        // Two independent paths to suppression:
+        // Path A: Clean inverse diff (asymmetric add→remove) — strong structural signal
+        // Path B: BOTH intent keyword AND clean inverse diff — corroborated signal
+        //         (keyword alone is insufficient — true oscillation often has "revert" commits)
         const cycles = countOscillationCycles(keyRunList);
         if (options && options.rollbackDetection && cycles === minCycles) {
-          const messages = getCommitMessages(gitRoot, oscillatingHashes);
-          if (hasRollbackIntent(messages, pairStats)) {
-            // Deliberate rollback signaled by commit message — not oscillation
+          // Expensive check: diff-level inverse pair analysis (asymmetric add→remove)
+          const cleanRollback = isCleanRollback(gitRoot, oscillatingHashes, files);
+
+          if (cleanRollback) {
+            // Path A: strong structural signal — clean one-shot rollback
             continue;
           }
 
-          // Expensive check: diff-level inverse pair analysis
-          if (isCleanRollback(gitRoot, oscillatingHashes, files)) {
-            // Clean one-shot rollback — not oscillation
-            continue;
-          }
+          // Path B: keyword alone is NOT sufficient (true oscillation often says "revert")
+          // Removed: hasRollbackIntent as a standalone gate.
+          // Intent keywords are only useful for Haiku classification (see consultHaiku).
         }
       }
 
@@ -469,9 +474,9 @@ function writeState(statePath, fileSet, snapshot) {
 }
 
 // Appends a false-negative entry to .claude/circuit-breaker-false-negatives.json
-// for audit trail when Haiku classifies detected oscillation as REFINEMENT.
+// for audit trail when Haiku classifies detected oscillation as REFINEMENT or DELIBERATE_ROLLBACK.
 // Fail-open: any error is logged to stderr but does not block the tool call.
-function appendFalseNegative(statePath, fileSet) {
+function appendFalseNegative(statePath, fileSet, verdict) {
   try {
     const fnLogPath = statePath.replace('circuit-breaker-state.json', 'circuit-breaker-false-negatives.json');
     let existing = [];
@@ -487,7 +492,7 @@ function appendFalseNegative(statePath, fileSet) {
       detected_at: new Date().toISOString(),
       file_set: fileSet,
       reviewer: 'haiku',
-      verdict: 'REFINEMENT',
+      verdict: verdict || 'REFINEMENT',
     });
     fs.writeFileSync(fnLogPath, JSON.stringify(existing, null, 2), 'utf8');
   } catch (e) {
@@ -948,7 +953,7 @@ req.end();
           // Haiku confirmed this is iterative refinement or deliberate rollback, not a bug loop — do not notify.
           // Log false-negative for auditability (stderr + persistent file).
           process.stderr.write(`[nf] INFO: circuit breaker false-negative — Haiku classified oscillation as ${verdict} (files: ${result.fileSet.join(', ')}). Allowing tool call to proceed.\n`);
-          appendFalseNegative(statePath, result.fileSet);
+          appendFalseNegative(statePath, result.fileSet, verdict);
           process.exit(0);
         }
         // verdict === 'GENUINE' or null (API unavailable) → trust the algorithm and notify

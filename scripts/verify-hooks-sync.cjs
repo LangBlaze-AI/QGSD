@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 /**
  * CI guard: verifies that every hook registered by the installer has a
- * corresponding entry in the build-hooks HOOKS_TO_COPY list, and that
- * every require('./...') dependency inside those hooks is also included.
+ * corresponding entry in the build-hooks HOOKS_TO_COPY list, that every
+ * require('./...') dependency inside those hooks is also included, AND that
+ * each hook's built artifact in hooks/dist/ is byte-identical to its source
+ * (the installer ships hooks/dist/, so a stale dist means users run old code —
+ * exactly the drift that shipped a stale nf-circuit-breaker for several releases).
  *
  * Exits non-zero on drift so the test suite catches it early.
  */
@@ -16,6 +19,7 @@ const ROOT = path.resolve(__dirname, '..');
 const INSTALL_JS = path.join(ROOT, 'bin', 'install.js');
 const BUILD_HOOKS_JS = path.join(ROOT, 'scripts', 'build-hooks.js');
 const HOOKS_DIR = path.join(ROOT, 'hooks');
+const DIST_DIR = path.join(HOOKS_DIR, 'dist');
 
 // --- Extract HOOKS_TO_COPY from build-hooks.js ---
 function getHooksToCopy() {
@@ -78,13 +82,24 @@ for (const hook of hooksToCopy) {
       errors.push(`MISSING from HOOKS_TO_COPY: '${dep}' (required by ${hook})`);
     }
   }
+
+  // 3. The built artifact in hooks/dist/ must be byte-identical to the source.
+  //    build-hooks.js is a plain copy (no transform), so any difference means
+  //    dist is stale — the installer would ship outdated hook code.
+  const distPath = path.join(DIST_DIR, hook);
+  if (!fs.existsSync(distPath)) {
+    errors.push(`DIST MISSING: hooks/dist/${hook} does not exist (run 'npm run build:hooks')`);
+  } else if (fs.readFileSync(hookPath, 'utf8') !== fs.readFileSync(distPath, 'utf8')) {
+    errors.push(`DIST DRIFT: hooks/dist/${hook} differs from source hooks/${hook} (run 'npm run build:hooks' and commit)`);
+  }
 }
 
 if (errors.length > 0) {
   console.error('hooks-sync verification FAILED:\n');
   for (const e of errors) console.error(`  - ${e}`);
-  console.error('\nFix: update HOOKS_TO_COPY in scripts/build-hooks.js');
+  console.error('\nFix: update HOOKS_TO_COPY in scripts/build-hooks.js, and/or run');
+  console.error("     'npm run build:hooks' to refresh hooks/dist/, then commit the result.");
   process.exit(1);
 } else {
-  console.log(`hooks-sync OK: ${hooksToCopy.size} hooks in build list, ${installerHooks.size} registered by installer`);
+  console.log(`hooks-sync OK: ${hooksToCopy.size} hooks in build list, ${installerHooks.size} registered by installer, dist in sync`);
 }
