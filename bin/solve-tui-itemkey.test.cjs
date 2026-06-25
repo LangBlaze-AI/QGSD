@@ -13,12 +13,26 @@ const path = require('path');
 const { itemKey } = require('./solve-tui.cjs');
 
 // Batch 10: close-formal-gaps (formal-model-loop) crashed deref'ing modelResult.spec
-// on iteration 2 when iteration 1 failed before modelResult was set. Source-guarded
-// (a behavioral test would require mocking the whole LLM refine loop).
+// on iteration 2 when iteration 1 failed before modelResult was set. Exercised
+// behaviorally via the injectable callLlm.
+const { refineModel } = require('./formal-model-loop.cjs');
 describe('formal-model-loop regenerates instead of deref-ing a null prior result', () => {
-  it('the refine branch is guarded by `i === 1 || !modelResult`', () => {
-    const src = fs.readFileSync(path.join(__dirname, 'formal-model-loop.cjs'), 'utf8');
-    assert.match(src, /if \(i === 1 \|\| !modelResult\)/, 'must regenerate when there is no prior modelResult to refine');
+  it('iteration 1 failing (no modelResult) does not crash iteration 2', async () => {
+    let calls = 0;
+    // iter 1: LLM "fails" (non-zero status, no stdout) → modelResult stays null.
+    // iter 2: returns a valid model → must regenerate (not refine a null), then validate.
+    const callLlm = async () => {
+      calls++;
+      if (calls === 1) return { status: 1, stdout: '' }; // generate fails on iter 1
+      if (calls === 2) return { status: 0, stdout: 'SPEC_START\n```alloy\nsig X {}\n```\nSPEC_END\nINVARIANT: x>0\nENGLISH: x must be positive\nBUG_EXPLANATION: off-by-one' };
+      return { status: 0, stdout: 'EXPLAINS — the model matches' }; // validate
+    };
+    const result = await refineModel({
+      codeSource: 'function f(){}', testSource: 'test()', testFailureOutput: 'FAIL\n',
+      formalism: 'alloy', maxIterations: 3, callLlm, onLog: () => {},
+    });
+    assert.equal(result.converged, true, 'must recover and converge, not crash on a null prior result');
+    assert.ok(result.invariant, 'a real model was produced on iteration 2');
   });
 });
 
