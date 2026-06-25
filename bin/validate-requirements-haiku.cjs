@@ -250,7 +250,7 @@ async function validateRequirements(options = {}) {
   // Extract requirements array
   const requirements = Array.isArray(envelope.requirements) ? envelope.requirements : [];
   if (requirements.length === 0) {
-    return { status: 'validated', confirmed: [], total_passes: 0, message: 'No requirements to validate' };
+    return { status: 'validated', confirmed: [], total_passes: 0, agreement_threshold: 0, message: 'No requirements to validate' };
   }
 
   // Build prompt

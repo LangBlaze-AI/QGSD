@@ -265,7 +265,10 @@ function aggregateRequirements(options) {
   const existingFormalModels = {};
   if (fs.existsSync(outputPath)) {
     const existing = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-    if (existing.frozen_at !== null) {
+    // Truthy check, not `!== null`: a fresh envelope often omits `frozen_at` (or
+    // sets it undefined), and `undefined !== null` is true — which falsely tripped
+    // the frozen guard on every absent key (dogfood). Only a real timestamp freezes.
+    if (existing.frozen_at) {
       throw new Error('Envelope is frozen -- use amendment workflow (ENV-04)');
     }
     // Capture formal_models keyed by requirement id for merge-back after aggregation

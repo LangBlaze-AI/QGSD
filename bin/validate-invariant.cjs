@@ -223,6 +223,14 @@ Classify as exactly one of:
  * @returns {{ verdict: string, reason?: string, layer?: string }}
  */
 function validateInvariant(req) {
+  // Shape guard: a null/non-object req, or one without a string `text`, can't be
+  // classified — return a NON_INVARIANT shape verdict instead of crashing on
+  // `req.text.replace(...)` (dogfood F48: a requirement missing `text`, or a null
+  // array element, took down the whole batch with a raw TypeError).
+  if (!req || typeof req.text !== 'string') {
+    return { verdict: 'NON_INVARIANT', reason: 'missing or non-string text field', layer: 'shape' };
+  }
+
   // Layer 1: Regex fast-pass — obvious non-invariants
   const regexResult = regexPass(req.text);
   if (regexResult.matched) {
@@ -252,7 +260,9 @@ function validateInvariant(req) {
  * @returns {Array<{ id: string, verdict: string, reason?: string, layer?: string }>}
  */
 function validateInvariantBatch(requirements) {
-  return requirements.map(req => ({ id: req.id, ...validateInvariant(req) }));
+  // Non-array input (corrupt/wrong-shape envelope) → empty batch, not a `.map` crash.
+  if (!Array.isArray(requirements)) return [];
+  return requirements.map(req => ({ id: req ? req.id : null, ...validateInvariant(req) }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -383,8 +393,14 @@ function main() {
       process.exit(1);
     }
 
-    const envelope = JSON.parse(fs.readFileSync(envelopePath, 'utf8'));
-    const requirements = envelope.requirements || [];
+    let envelope;
+    try {
+      envelope = JSON.parse(fs.readFileSync(envelopePath, 'utf8'));
+    } catch (e) {
+      console.error(`validate-invariant: envelope is not valid JSON (${envelopePath}): ${e.message}`);
+      process.exit(1);
+    }
+    const requirements = Array.isArray(envelope.requirements) ? envelope.requirements : [];
 
     console.log(`Validating ${requirements.length} requirements...\n`);
 
