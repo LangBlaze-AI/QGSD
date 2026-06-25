@@ -285,7 +285,7 @@ For each question still in `for_user[]` (process sequentially):
    `--result` is the prediction-accuracy code (TP/TN/FP/FN); a gray-area vote has no ground truth, so pass `--result ""` (not scored) — the decision lives in `--verdict`.
    ```bash
    node "$HOME/.claude/nf-bin/update-scoreboard.cjs" \
-     --model <family> \   # native model; OR replace this line with: --slot <slot> --model-id <model_id>
+     --model <family> \
      --result "" \
      --task "discuss-phase-{PHASE_NUMBER}" \
      --round <round_number> \

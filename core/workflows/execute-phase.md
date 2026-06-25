@@ -710,7 +710,7 @@ Use the correct identity flags — `update-scoreboard` rejects a slot passed via
 `--result` is the prediction-accuracy code (TP/TN/FP/FN); this gating vote has no ground truth, so pass `--result ""` (not scored) — the decision lives in `--verdict`.
 ```bash
 node "$HOME/.claude/nf-bin/update-scoreboard.cjs" \
-  --model <family> \   # native model; OR replace this line with: --slot <slot> --model-id <model_id>
+  --model <family> \
   --result "" \
   --task "execute-phase-{PHASE_NUMBER}" \
   --round <round_number> \
