@@ -26,6 +26,9 @@ const { formatAgeFromMtime } = require('./observe-utils.cjs');
  * @returns {object} Standard observe schema result
  */
 function handleSessionInsights(sourceConfig, options) {
+  // Tolerate a null/missing sourceConfig (dogfood: deref of null.label crashed the
+  // handler before its try/catch).
+  sourceConfig = sourceConfig || {};
   const label = sourceConfig.label || 'Session Insights';
   const maxSessions = validateMaxSessions(sourceConfig.max_sessions);
   const maxFileSize = sourceConfig.max_file_size_bytes || 5242880; // 5MB default
@@ -150,7 +153,14 @@ function listSessionFiles(dir, maxSessions, maxFileSize) {
  */
 function analyzeSession(fileInfo) {
   const issues = [];
-  const sessionHash = fileInfo.name.slice(0, 8);
+  // Guard a missing `name` and a null/invalid `mtime`: both used to throw — the
+  // mtime `.toISOString()` threw INSIDE the try/catch, silently discarding every
+  // detected issue for the session (dogfood: silent issue-drop).
+  fileInfo = fileInfo || {};
+  if (!(fileInfo.mtime instanceof Date) || Number.isNaN(fileInfo.mtime.getTime())) {
+    fileInfo.mtime = new Date(0);
+  }
+  const sessionHash = (fileInfo.name || '').slice(0, 8);
 
   try {
     const content = fs.readFileSync(fileInfo.path, 'utf8');

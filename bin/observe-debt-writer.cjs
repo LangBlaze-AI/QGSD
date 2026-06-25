@@ -104,6 +104,9 @@ function writeObservationsToDebt(observations, ledgerPath, options = {}) {
   }
 
   // Phase 2: Dedup (fingerprint exact-match + Levenshtein near-duplicate)
+  // Normalize a non-array `debt_entries` (corrupt/partially-written ledger) so the
+  // dedup pass doesn't choke on a non-iterable (dogfood F48).
+  if (!Array.isArray(ledger.debt_entries)) ledger.debt_entries = [];
   const dedupResult = deduplicateEntries(ledger.debt_entries, {
     threshold: options.threshold ?? 0.85
   });

@@ -92,7 +92,9 @@ async function dispatchSource(sourceConfig, options, timeoutSeconds) {
  * @returns {Promise<object[]>} Array of results (standard schema)
  */
 async function dispatchAll(sources, options) {
-  const promises = sources.map(source =>
+  // A non-array `sources` (corrupt/empty config) → no dispatches, not a `.map` crash.
+  const list = Array.isArray(sources) ? sources : [];
+  const promises = list.map(source =>
     dispatchSource(source, options, source.timeout)
   );
 
