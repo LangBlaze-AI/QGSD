@@ -89,7 +89,9 @@ for (const hook of hooksToCopy) {
   const distPath = path.join(DIST_DIR, hook);
   if (!fs.existsSync(distPath)) {
     errors.push(`DIST MISSING: hooks/dist/${hook} does not exist (run 'npm run build:hooks')`);
-  } else if (fs.readFileSync(hookPath, 'utf8') !== fs.readFileSync(distPath, 'utf8')) {
+  } else if (!fs.readFileSync(hookPath).equals(fs.readFileSync(distPath))) {
+    // Compare raw Buffers (not UTF-8 strings) so the check is truly byte-level —
+    // catches BOM, CRLF, and any non-UTF8 byte differences a string compare hides.
     errors.push(`DIST DRIFT: hooks/dist/${hook} differs from source hooks/${hook} (run 'npm run build:hooks' and commit)`);
   }
 }
