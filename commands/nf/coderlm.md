@@ -110,7 +110,7 @@ node << 'NF_EVAL'
 const adapterPath = (require('fs').existsSync(process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs') ? process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs' : './bin/coderlm-adapter.cjs');
 let adapter;
 try { adapter = require(adapterPath).createAdapter(); }
-catch (e) { process.stdout.write(JSON.stringify({error: String(e)})); process.exit(0); }
+catch (e) { require('fs').writeSync(1, JSON.stringify({error: String(e)})); process.exit(0); }
 const symbol = process.env.NF_CODERLM_SYMBOL;
 const file = process.env.NF_CODERLM_FILE || undefined;
 adapter.getCallers(symbol, file).then(r => {
@@ -150,7 +150,7 @@ node << 'NF_EVAL'
 const adapterPath = (require('fs').existsSync(process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs') ? process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs' : './bin/coderlm-adapter.cjs');
 let adapter;
 try { adapter = require(adapterPath).createAdapter(); }
-catch (e) { process.stdout.write(JSON.stringify({error: String(e)})); process.exit(0); }
+catch (e) { require('fs').writeSync(1, JSON.stringify({error: String(e)})); process.exit(0); }
 const symbol = process.env.NF_CODERLM_SYMBOL;
 adapter.getImplementation(symbol).then(r => {
   process.stdout.write(JSON.stringify(r));
@@ -183,7 +183,7 @@ node << 'NF_EVAL'
 const adapterPath = (require('fs').existsSync(process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs') ? process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs' : './bin/coderlm-adapter.cjs');
 let adapter;
 try { adapter = require(adapterPath).createAdapter(); }
-catch (e) { process.stdout.write(JSON.stringify({error: String(e)})); process.exit(0); }
+catch (e) { require('fs').writeSync(1, JSON.stringify({error: String(e)})); process.exit(0); }
 const file = process.env.NF_CODERLM_FILE;
 adapter.findTests(file).then(r => {
   process.stdout.write(JSON.stringify(r));
@@ -223,7 +223,7 @@ node << 'NF_EVAL'
 const adapterPath = (require('fs').existsSync(process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs') ? process.env.HOME + '/.claude/nf-bin/coderlm-adapter.cjs' : './bin/coderlm-adapter.cjs');
 let adapter;
 try { adapter = require(adapterPath).createAdapter(); }
-catch (e) { process.stdout.write(JSON.stringify({error: String(e)})); process.exit(0); }
+catch (e) { require('fs').writeSync(1, JSON.stringify({error: String(e)})); process.exit(0); }
 const file = process.env.NF_CODERLM_FILE;
 const startLine = parseInt(process.env.NF_CODERLM_START, 10);
 const endLine = parseInt(process.env.NF_CODERLM_END, 10);
