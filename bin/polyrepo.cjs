@@ -33,7 +33,17 @@ function loadGroup(name) {
       return null;
     }
     const content = fs.readFileSync(filePath, 'utf8');
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    // A partially-written / wrong-shape group file must not crash every caller's
+    // `group.repos.length/.some/.filter/for-of` (dogfood F48). A non-object (e.g. a
+    // bare array/string) is not a group → null; an object with a missing/non-array
+    // `repos` is normalized to an empty array.
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      console.error(`${TAG} Warning: ${filePath} is not a group object, returning null`);
+      return null;
+    }
+    if (!Array.isArray(parsed.repos)) parsed.repos = [];
+    return parsed;
   } catch (err) {
     if (err instanceof SyntaxError) {
       console.error(`${TAG} Warning: malformed JSON in ${filePath}, returning null`);

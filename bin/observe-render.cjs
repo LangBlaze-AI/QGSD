@@ -48,6 +48,9 @@ function pad(str, width) {
  * @returns {string} Formatted output string
  */
 function renderObserveOutput(results) {
+  // A non-array `results` (null / wrong-shape) must not crash the render `.filter`
+  // (dogfood F48) — treat it as no results.
+  if (!Array.isArray(results)) results = [];
   const lines = [];
 
   // Separate successes and errors
