@@ -726,3 +726,41 @@ test('aggregateRequirements defaults tier field for all merged requirements', fu
     cleanupTempDir(tempDir);
   }
 });
+
+// Dogfood regression: the freeze guard used `existing.frozen_at !== null`, which is
+// TRUE when the key is absent/undefined — so a fresh (unfrozen) envelope falsely
+// tripped "Envelope is frozen". Only a real timestamp should freeze.
+// (fs, os, path, aggregateRequirements are already imported at the top of this file)
+test('frozen guard: absent frozen_at does NOT trip the freeze error', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-agg-'));
+  try {
+    fs.mkdirSync(path.join(dir, '.planning', 'formal'), { recursive: true });
+    const outputPath = path.join(dir, '.planning', 'formal', 'requirements.json');
+    fs.writeFileSync(outputPath, JSON.stringify({ requirements: [] })); // no frozen_at key
+    const reqPath = path.join(dir, 'REQUIREMENTS.md');
+    fs.writeFileSync(reqPath, '# Requirements\n\n- The system MUST work.\n');
+    assert.doesNotThrow(
+      () => aggregateRequirements({ outputPath, requirementsPath: reqPath, skipArchive: true, deterministic: true }),
+      /frozen/i
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('frozen guard: a real frozen_at timestamp still freezes', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-agg-'));
+  try {
+    fs.mkdirSync(path.join(dir, '.planning', 'formal'), { recursive: true });
+    const outputPath = path.join(dir, '.planning', 'formal', 'requirements.json');
+    fs.writeFileSync(outputPath, JSON.stringify({ requirements: [], frozen_at: '2026-01-01T00:00:00Z' }));
+    const reqPath = path.join(dir, 'REQUIREMENTS.md');
+    fs.writeFileSync(reqPath, '# Requirements\n\n- The system MUST work.\n');
+    assert.throws(
+      () => aggregateRequirements({ outputPath, requirementsPath: reqPath, skipArchive: true, deterministic: true }),
+      /frozen/i
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

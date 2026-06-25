@@ -404,3 +404,30 @@ test('buildValidationPrompt preserves markdown in requirement text', () => {
   assert.ok(prompt.includes('`.planning/formal/requirements.json`'), 'Should preserve backticks');
   assert.ok(prompt.includes('**strong**'), 'Should preserve bold');
 });
+
+// Dogfood regression: the 0-requirements early return omitted `agreement_threshold`,
+// which the /nf:review-requirements renderer reads — printing `undefined`.
+const fsH = require('node:fs');
+const osH = require('node:os');
+const pathH = require('node:path');
+// (validateRequirements is already imported at the top of this file)
+
+test('0-requirement envelope returns agreement_threshold (not undefined)', async () => {
+  const dir = fsH.mkdtempSync(pathH.join(osH.tmpdir(), 'nf-haiku-'));
+  // A key must be set to pass the ANTHROPIC_API_KEY short-circuit and reach the
+  // requirements-length branch — but with 0 requirements the function returns
+  // BEFORE building/sending any prompt, so no network call is made by this dummy.
+  const hadKey = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-test-dummy';
+  try {
+    const envPath = pathH.join(dir, 'requirements.json');
+    fsH.writeFileSync(envPath, JSON.stringify({ requirements: [] }));
+    const result = await validateRequirements({ envelopePath: envPath });
+    assert.strictEqual(result.agreement_threshold, 0, 'agreement_threshold must be present (0), not undefined');
+    assert.strictEqual(result.total_passes, 0);
+  } finally {
+    if (hadKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = hadKey;
+    fsH.rmSync(dir, { recursive: true, force: true });
+  }
+});

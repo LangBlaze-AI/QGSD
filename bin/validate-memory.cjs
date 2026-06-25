@@ -58,7 +58,7 @@ function checkStaleCounts(memoryContent, cwd) {
     if (fs.existsSync(envelopePath)) {
       try {
         const envelope = JSON.parse(fs.readFileSync(envelopePath, 'utf8'));
-        const actualCount = (envelope.requirements || []).length;
+        const actualCount = Array.isArray(envelope.requirements) ? envelope.requirements.length : 0;
         if (claimedCount !== actualCount) {
           findings.push({
             type: 'stale_count',
@@ -241,7 +241,7 @@ function checkContradictions(memoryContent, cwd) {
     return findings;
   }
 
-  const requirements = envelope.requirements || [];
+  const requirements = Array.isArray(envelope.requirements) ? envelope.requirements : [];
 
   // Check if memory references CLAUDE.md but it doesn't exist
   if (memoryContent.includes('CLAUDE.md')) {
@@ -258,7 +258,7 @@ function checkContradictions(memoryContent, cwd) {
   // Check if memory mentions specific requirement IDs that no longer exist
   const idPattern = /\b([A-Z]+-\d+)\b/g;
   let match;
-  const reqIds = new Set(requirements.map(r => r.id));
+  const reqIds = new Set(requirements.map(r => r && r.id).filter(Boolean));
   const mentionedIds = new Set();
 
   while ((match = idPattern.exec(memoryContent)) !== null) {
