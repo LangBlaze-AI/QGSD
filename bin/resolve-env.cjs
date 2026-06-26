@@ -5,7 +5,13 @@
 // in providers.json and resolved from process.env at dispatch time. Actual values
 // are stored in the secrets store (~/.claude/nf-secrets.json) via bin/secrets.cjs.
 
-const SECRET_KEY_RE = /_(API_KEY|AUTH_TOKEN|TOKEN)$/;
+// Match any env key whose final word denotes a credential — suffix-based and
+// case-insensitive so it also catches camelCase (authToken, apiKey) and the shapes
+// the old `_(API_KEY|AUTH_TOKEN|TOKEN)$` missed: *_ACCESS_KEY, *_SECRET[_ACCESS_KEY],
+// bare *_KEY (ANTHROPIC_KEY), *PASSWORD. Missing one means a real token gets written
+// as plaintext into providers.json / left unmasked in logs. Non-secret provider env
+// keys end in URL/MODEL/MS/SLOT/PATH/etc., none of which match.
+const SECRET_KEY_RE = /(api_?key|auth_?token|access_?key|secret|password|passwd|token|key|credential)$/i;
 const PLACEHOLDER_RE = /^\$\{([^}]+)\}$/;
 
 function isSecretKey(key) {

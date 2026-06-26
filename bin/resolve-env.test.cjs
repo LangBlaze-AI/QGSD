@@ -224,3 +224,159 @@ test('namespacedSecretKey: combines slot and env key', () => {
   assert.equal(namespacedSecretKey('claude-z-ai', 'ANTHROPIC_AUTH_TOKEN'), 'claude-z-ai__ANTHROPIC_AUTH_TOKEN');
   assert.equal(namespacedSecretKey('claude-minimax', 'ANTHROPIC_API_KEY'), 'claude-minimax__ANTHROPIC_API_KEY');
 });
+
+// ===========================================================================
+// ADVERSARIAL SECURITY PROBES — credential-leak / mis-resolution hunting.
+// These are written to FAIL on a real defect.
+// ===========================================================================
+
+// --- isSecretKey / maskSecrets false-negative leak class --------------------
+// SECRET_KEY_RE only matches /_(API_KEY|AUTH_TOKEN|TOKEN)$/. Any secret-bearing
+// env var that does not end in one of those three suffixes is classified as
+// NON-secret, so maskSecrets leaves its plaintext value in place. In the live
+// flow (bin/migrate-plaintext-tokens.cjs) that plaintext value is then written
+// straight back into providers.json on disk — i.e. the migration that is
+// supposed to strip plaintext silently leaves it behind. LEAK.
+
+test('SECURITY: isSecretKey classifies AWS_SECRET_ACCESS_KEY as a secret (false-negative leak)', () => {
+  // AWS_SECRET_ACCESS_KEY ends in _ACCESS_KEY, not _API_KEY → regex miss.
+  assert.equal(
+    isSecretKey('AWS_SECRET_ACCESS_KEY'), true,
+    'AWS_SECRET_ACCESS_KEY holds a credential but is not recognized as a secret key'
+  );
+});
+
+test('SECURITY: maskSecrets masks every credential-bearing key shape (not just *_API_KEY/*_TOKEN)', () => {
+  const env = {
+    AWS_SECRET_ACCESS_KEY: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', // _ACCESS_KEY suffix → missed
+    ANTHROPIC_KEY:         'sk-ant-realsecretvalue000000000000000000', // *_KEY (not *_API_KEY) → missed
+    OPENAI_SECRET:         'sk-proj-anotherrealsecret00000000000000',   // *_SECRET → missed
+    DB_PASSWORD:           'hunter2-super-secret-password',             // *_PASSWORD → missed
+    authToken:             'camelCase-bearer-token-value',              // no underscore suffix → missed
+  };
+  const { masked, secrets } = maskSecrets(env);
+  const leaked = Object.entries(masked).filter(([, v]) => !isPlaceholder(v)).map(([k]) => k);
+  assert.deepEqual(
+    leaked, [],
+    'these credential-bearing keys were left as plaintext in the masked output: ' + leaked.join(', ')
+  );
+  assert.equal(secrets.length, 5, 'all five credential values should have been extracted to the secrets array');
+});
+
+// --- resolveSinglePlaceholder re-expansion / injection guard ----------------
+// If a resolved value itself contains ${OTHER}, it must be returned LITERALLY
+// (no second expansion pass) — otherwise a stored secret value could be used to
+// inject a reference to a different env var. This probe documents the behavior;
+// it is expected to PASS (resolveSinglePlaceholder does a single pass).
+
+test('SECURITY: resolveSinglePlaceholder does NOT re-expand a resolved value containing ${OTHER}', () => {
+  process.env._NF_SEC_OUTER = '${_NF_SEC_INNER}';
+  process.env._NF_SEC_INNER = 'inner-secret-should-not-appear';
+  try {
+    const out = resolveSinglePlaceholder('${_NF_SEC_OUTER}');
+    assert.equal(
+      out, '${_NF_SEC_INNER}',
+      'resolved value must be returned literally, not recursively expanded into the inner secret'
+    );
+    assert.notEqual(out, 'inner-secret-should-not-appear', 'inner secret must never leak via double expansion');
+  } finally {
+    delete process.env._NF_SEC_OUTER;
+    delete process.env._NF_SEC_INNER;
+  }
+});
+
+// --- ROUND 2: BROADENED SECRET_KEY_RE over-match (false-positive) guard ------
+// Round 1 broadened SECRET_KEY_RE to /(api_?key|auth_?token|access_?key|secret|
+// password|passwd|token|key|credential)$/i to stop false-NEGATIVE leaks. The
+// adversarial inverse risk: a broadened, suffix-anchored regex could now
+// OVER-match a non-secret provider CONFIG key. If isSecretKey wrongly returns
+// true for a config value, maskSecrets rewrites that concrete config value into
+// a ${PLACEHOLDER}; at dispatch time resolveEnvPlaceholders can't find an env
+// var of that name → the config value is LOST and dispatch breaks (base URL /
+// model / timeout silently blanked). The two highest-risk boundaries are
+// `token$` vs the real config key `MAX_TOKENS`/`MAX_THINKING_TOKENS` (plural →
+// must NOT match) and `key$` vs config keys that merely contain "key".
+// This is an INVARIANT: all real nForma provider config keys must be non-secret.
+
+test('SECURITY: SECRET_KEY_RE does NOT over-match real provider config keys (false-positive would placeholder config and break dispatch)', () => {
+  const realConfigKeys = [
+    'ANTHROPIC_BASE_URL',
+    'ANTHROPIC_DEFAULT_OPUS_MODEL',
+    'ANTHROPIC_DEFAULT_SONNET_MODEL',
+    'ANTHROPIC_SMALL_FAST_MODEL',
+    'ANTHROPIC_MODEL',
+    'API_TIMEOUT_MS',
+    'PROVIDER_SLOT',
+    'UNIFIED_PROVIDERS_CONFIG',
+    'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+    'MAX_TOKENS',            // token$ must NOT match the plural "TOKENS"
+    'MAX_THINKING_TOKENS',   // same boundary
+    'MAX_OUTPUT_TOKENS',     // same boundary
+  ];
+  const overMatched = realConfigKeys.filter(isSecretKey);
+  assert.deepEqual(
+    overMatched, [],
+    'these NON-secret config keys were misclassified as secrets and would be placeholdered away: ' + overMatched.join(', ')
+  );
+});
+
+test('SECURITY: real credential-shaped keys are still classified as secrets (no regression from the over-match guard)', () => {
+  // The over-match guard must not have been "fixed" by narrowing the regex back
+  // down — the round-1 false-negative shapes must still be caught.
+  for (const k of ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_KEY',
+                   'AWS_SECRET_ACCESS_KEY', 'OPENAI_SECRET', 'DB_PASSWORD']) {
+    assert.equal(isSecretKey(k), true, k + ' is a credential and must classify as a secret');
+  }
+});
+
+test('SECURITY: maskSecrets leaves a config-only env block byte-identical (does not blank a config value)', () => {
+  // Live consequence of an over-match: maskSecrets is what actually rewrites the
+  // value. A config-only env block must pass through unchanged with zero secrets
+  // extracted — otherwise the dispatcher resolves a now-missing placeholder to
+  // the literal "${...}" string and the provider call is sent with garbage.
+  const env = {
+    ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-4-8',
+    API_TIMEOUT_MS: '600000',
+    MAX_TOKENS: '8192',
+    PROVIDER_SLOT: 'claude-1',
+  };
+  const { masked, secrets } = maskSecrets(env);
+  assert.deepEqual(masked, env, 'config-only env must be returned unchanged');
+  assert.equal(secrets.length, 0, 'no config value should be extracted as a secret');
+});
+
+// --- ROUND 3: partial/embedded placeholders must stay LITERAL (no leak) ------
+// PLACEHOLDER_RE is fully anchored (/^\$\{([^}]+)\}$/) and [^}]+ cannot cross a
+// `}`. So a value that merely CONTAINS a placeholder — `${A}${B}` (two adjacent
+// placeholders) or `prefix-${VAR}-suffix` (one embedded in a larger string) —
+// must NOT match, and resolveSinglePlaceholder must return it byte-for-byte,
+// resolving nothing. The security property: a partial-match must never trigger a
+// resolution that splices a real process.env secret into the middle of a string
+// (which would leak the secret into logs / on-disk providers.json). INVARIANT.
+test('SECURITY: resolveSinglePlaceholder leaves multi/embedded placeholders literal and never splices an env secret into them', () => {
+  process.env._NF_SEC_A = 'AAA-secret';
+  process.env._NF_SEC_B = 'BBB-secret';
+  process.env._NF_SEC_VAR = 'VAR-secret';
+  try {
+    // Two adjacent placeholders — not a single anchored placeholder.
+    const both = resolveSinglePlaceholder('${_NF_SEC_A}${_NF_SEC_B}');
+    assert.equal(both, '${_NF_SEC_A}${_NF_SEC_B}', 'adjacent placeholders must stay literal');
+    assert.equal(both.includes('AAA-secret'), false, 'first env secret must not be spliced in');
+    assert.equal(both.includes('BBB-secret'), false, 'second env secret must not be spliced in');
+
+    // Placeholder embedded in a larger string.
+    const embedded = resolveSinglePlaceholder('prefix-${_NF_SEC_VAR}-suffix');
+    assert.equal(embedded, 'prefix-${_NF_SEC_VAR}-suffix', 'embedded placeholder must stay literal');
+    assert.equal(embedded.includes('VAR-secret'), false, 'embedded env secret must not be spliced in');
+
+    // isPlaceholder must agree these are NOT placeholders (so maskSecrets/sync
+    // treat them as concrete values, never as resolvable slots).
+    assert.equal(isPlaceholder('${_NF_SEC_A}${_NF_SEC_B}'), false);
+    assert.equal(isPlaceholder('prefix-${_NF_SEC_VAR}-suffix'), false);
+  } finally {
+    delete process.env._NF_SEC_A;
+    delete process.env._NF_SEC_B;
+    delete process.env._NF_SEC_VAR;
+  }
+});

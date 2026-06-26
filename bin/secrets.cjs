@@ -109,13 +109,46 @@ async function syncToClaudeJson(_service) {
 
   if (!claudeJson.mcpServers || typeof claudeJson.mcpServers !== 'object') return;
 
+  // A value is "fillable" (safe to overwrite) when it's an unresolved ${VAR}
+  // placeholder, empty, or absent — i.e. it's not a concrete provisioned credential.
+  const isFillable = (v) => v == null || v === '' || (typeof v === 'string' && /^\$\{[^}]+\}$/.test(v));
+
+  // Count how many mcpServers define each env key. A RAW (non-namespaced) secret may
+  // overwrite a CONCRETE value only when its key is unique to one server; when ≥2
+  // servers share the key NAME, overwriting a concrete value risks writing one slot's
+  // credential into another (the ANTHROPIC_AUTH_TOKEN cross-slot leak). For shared
+  // keys, a raw secret only fills placeholders — use a namespaced `<slot>__<KEY>`
+  // secret to set a per-slot value.
+  const keyServerCount = {};
+  for (const s of Object.values(claudeJson.mcpServers)) {
+    if (s && s.env && typeof s.env === 'object') {
+      for (const k of Object.keys(s.env)) keyServerCount[k] = (keyServerCount[k] || 0) + 1;
+    }
+  }
+
   let patched = 0;
   for (const serverName of Object.keys(claudeJson.mcpServers)) {
     const server = claudeJson.mcpServers[serverName];
-    if (!server.env || typeof server.env !== 'object') continue;
+    // Guard `server` itself: a null/non-object mcpServers entry in a hand-edited or
+    // malformed ~/.claude.json would otherwise throw on `server.env` and crash the sync.
+    if (!server || typeof server !== 'object' || !server.env || typeof server.env !== 'object') continue;
     for (const envKey of Object.keys(server.env)) {
-      if (credMap[envKey] !== undefined) {
-        server.env[envKey] = credMap[envKey];
+      // Namespaced secret (`<slot>__<KEY>`) is unambiguous → always apply (mirrors
+      // call-quorum-slot / unified-mcp-server, and lets namespaced secrets actually
+      // sync — the old raw-only match never fired for them → stale ${PLACEHOLDER}).
+      const namespaced = credMap[serverName + '__' + envKey];
+      let value;
+      if (namespaced !== undefined) {
+        value = namespaced;
+      } else if (credMap[envKey] !== undefined &&
+                 (keyServerCount[envKey] === 1 || isFillable(server.env[envKey]))) {
+        value = credMap[envKey];
+      }
+      // Only write (and count) when the value actually changes — keeps sync
+      // idempotent so an unchanged ~/.claude.json isn't rewritten on every session
+      // start (avoids needless mtime churn / file-watcher wakeups / concurrent-sync races).
+      if (value !== undefined && server.env[envKey] !== value) {
+        server.env[envKey] = value;
         patched++;
       }
     }
@@ -155,7 +188,9 @@ function patchClaudeJsonForKey(envKey, value) {
   let patched = 0;
   for (const serverName of Object.keys(claudeJson.mcpServers)) {
     const server = claudeJson.mcpServers[serverName];
-    if (!server.env || typeof server.env !== 'object') continue;
+    // Guard `server` itself: a null/non-object mcpServers entry in a hand-edited or
+    // malformed ~/.claude.json would otherwise throw on `server.env` and crash the sync.
+    if (!server || typeof server !== 'object' || !server.env || typeof server.env !== 'object') continue;
     if (Object.prototype.hasOwnProperty.call(server.env, envKey)) {
       server.env[envKey] = value;
       patched++;
