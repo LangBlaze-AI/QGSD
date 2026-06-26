@@ -1,0 +1,39 @@
+'use strict';
+
+// STALL-TIMEOUT-01: the <500-byte "stall" timer was hardcoded to 30s, which
+// false-killed slow-bursty models (GLM-5.2[1m], MiniMax-M3 via a third-party
+// Anthropic-compatible API) — they emit a short preamble then pause >30s while
+// generating. `stall_timeout_ms` on the provider raises the threshold; absent /
+// invalid values fall back to the 30s default.
+
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
+const { stallTimeoutFor } = require('./call-quorum-slot.cjs');
+
+describe('stallTimeoutFor — per-slot stall timeout override', () => {
+  it('defaults to 30000ms when stall_timeout_ms is absent', () => {
+    assert.equal(stallTimeoutFor({ name: 'codex-1' }), 30000);
+    assert.equal(stallTimeoutFor({}), 30000);
+  });
+
+  it('honors a positive per-slot stall_timeout_ms (the GLM/MiniMax fix)', () => {
+    assert.equal(stallTimeoutFor({ name: 'claude-z-ai', stall_timeout_ms: 120000 }), 120000);
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: 90000 }), 90000);
+  });
+
+  it('accepts a numeric string value', () => {
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: '120000' }), 120000);
+  });
+
+  it('falls back to 30000 for non-positive / NaN / null values', () => {
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: 0 }), 30000);
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: -5 }), 30000);
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: 'nope' }), 30000);
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: null }), 30000);
+  });
+
+  it('never returns the bare 30s default for a slot that configured a longer one', () => {
+    // Regression guard: before STALL-TIMEOUT-01 this was hardcoded 30000 regardless.
+    assert.notEqual(stallTimeoutFor({ stall_timeout_ms: 120000 }), 30000);
+  });
+});
