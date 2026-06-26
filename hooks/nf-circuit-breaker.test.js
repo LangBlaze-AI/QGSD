@@ -1615,3 +1615,468 @@ test('CB-FP09: min_cycles=0 (disabled) allows single cycle to trigger on depth',
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });
+
+// ── Adversarial probes (CB-ADV series) ───────────────────────────────────────
+// These exercise the breaker through its real stdin→state-file I/O path with the
+// haiku reviewer disabled via project nf.json (deterministic, no live API), at
+// production defaults (depth=3, window=6, min_cycles=2, rollback_detection=true)
+// filled in by config-loader. Each can FAIL on a genuine, reachable defect.
+
+// Writes a project nf.json that disables the live Haiku reviewer so detection is
+// driven purely by the deterministic algorithm. Written AFTER commits so git
+// never captures it in a commit file-set.
+function writeBreakerConfig(repoDir, overrides) {
+  const claudeDir = path.join(repoDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(claudeDir, 'nf.json'),
+    JSON.stringify({
+      circuit_breaker: Object.assign({
+        oscillation_depth: 3,
+        commit_window: 6,
+        haiku_reviewer: false,
+        min_cycles: 2,
+        rollback_detection: true,
+      }, overrides || {}),
+    }),
+    'utf8'
+  );
+  const statePath = path.join(claudeDir, 'circuit-breaker-state.json');
+  if (fs.existsSync(statePath)) fs.unlinkSync(statePath);
+  return statePath;
+}
+
+// CB-ADV01 (was MISSED, now CAUGHT): an equal-length A→B→A value flip — the canonical
+// "agent toggles a constant back and forth" loop. The old reversion heuristic required a
+// net-negative pair (hasNegativePair); pure substitutions are net-zero, so a real toggle
+// with equal-length states slipped through. FIXED by the byte-level content-reversion
+// signal; EXPECTED: PASSES (the breaker now flags it). Regression guard for the miss.
+test('CB-ADV01: equal-length A→B→A value-flip oscillation is caught (content reversion)', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    // app.js: "on" → (filler) → "off" → (filler) → "on"  (3 run-groups for app.js)
+    commitInRepo(repoDir, 'app.js', 'const FLAG = "on";\n', 'feat: flag on');
+    commitInRepo(repoDir, 'filler1.txt', 'f1\n', 'chore: filler 1');
+    commitInRepo(repoDir, 'app.js', 'const FLAG = "off";\n', 'fix: flip flag off');
+    commitInRepo(repoDir, 'filler2.txt', 'f2\n', 'chore: filler 2');
+    commitInRepo(repoDir, 'app.js', 'const FLAG = "on";\n', 'fix: flip flag back on');
+
+    const statePath = writeBreakerConfig(repoDir);
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'stdout must be empty on first detection');
+    // A genuine A→B→A toggle is real oscillation — the breaker SHOULD activate.
+    assert(
+      fs.existsSync(statePath),
+      'state file MUST be written — equal-length A→B→A value flip is a real oscillation loop (CB-ADV01)'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// CB-ADV02 (was MISSED, now CAUGHT, sustained): a sustained 4-group equal-length toggle
+// (A→B→A→B, 3 full cycles) — exactly the runaway loop a circuit breaker exists to stop —
+// was missed for the same net-zero/hasNegativePair reason. FIXED by the content-reversion
+// signal; EXPECTED: PASSES. Regression guard for the sustained-toggle miss.
+test('CB-ADV02: sustained equal-length toggle (A→B→A→B) is caught despite net-zero pairs', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    commitInRepo(repoDir, 'app.js', 'x = 1\n', 'feat: x=1');
+    commitInRepo(repoDir, 'f1.txt', 'a\n', 'chore: f1');
+    commitInRepo(repoDir, 'app.js', 'x = 2\n', 'fix: x=2');
+    commitInRepo(repoDir, 'f2.txt', 'a\n', 'chore: f2');
+    commitInRepo(repoDir, 'app.js', 'x = 1\n', 'fix: x=1 again');
+    commitInRepo(repoDir, 'f3.txt', 'a\n', 'chore: f3');
+    commitInRepo(repoDir, 'app.js', 'x = 2\n', 'fix: x=2 again');
+
+    // 7 commits → window must cover all of them to see 4 app.js run-groups.
+    const statePath = writeBreakerConfig(repoDir, { commit_window: 8 });
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'stdout must be empty on first detection');
+    assert(
+      fs.existsSync(statePath),
+      'state file MUST be written — a sustained equal-length toggle is the exact loop the breaker exists to stop (CB-ADV02)'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// CB-ADV03 (FALSE BLOCK): a legitimate incremental dead-code cleanup — the same
+// file is trimmed across several commits (interspersed with edits to other
+// files), content only ever REMOVED, never re-added — is wrongly flagged as
+// oscillation. The reversion heuristic conflates "file shrinking monotonically"
+// (net<0 + a negative pair) with "content added then removed". This false block
+// halts a normal refactor.
+test('CB-ADV03: monotonic incremental deletion (dead-code cleanup) is a FALSE BLOCK', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    // cleanup.js: 6 lines → trim to 4 → trim to 2, with fillers between (3 run-groups).
+    commitInRepo(repoDir, 'cleanup.js', 'a\nb\nc\nd\ne\nf\n', 'feat: add module');
+    commitInRepo(repoDir, 'filler1.txt', 'f1\n', 'chore: filler 1');
+    commitInRepo(repoDir, 'cleanup.js', 'a\nb\nc\nd\n', 'refactor: drop dead code (e,f)');
+    commitInRepo(repoDir, 'filler2.txt', 'f2\n', 'chore: filler 2');
+    commitInRepo(repoDir, 'cleanup.js', 'a\nb\n', 'refactor: drop more dead code (c,d)');
+
+    const statePath = writeBreakerConfig(repoDir);
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'stdout must be empty');
+    // Content is only ever removed, never re-added — this is a cleanup, not a loop.
+    assert(
+      !fs.existsSync(statePath),
+      'state file must NOT be written — incremental deletion is a legitimate cleanup refactor, not oscillation (CB-ADV03)'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// CB-ADV04 (FAIL-OPEN / state corruption): an ACTIVE state whose file_set has the
+// wrong shape (an object, not an array) must not crash the hook. buildBlockReason
+// and makeFileSetHash both call array methods on file_set; a wrong shape throws,
+// and the outer try/catch must keep this fail-OPEN (exit 0, no output). If the
+// guard regressed, the hook would exit non-zero — fail-CLOSED, blocking every
+// tool call.
+test('CB-ADV04: active state with wrong-shape file_set fails open (exit 0, no crash)', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    commitInRepo(repoDir, 'seed.txt', 'seed\n', 'init');
+    const stateDir = path.join(repoDir, '.claude');
+    fs.mkdirSync(stateDir, { recursive: true });
+    const statePath = path.join(stateDir, 'circuit-breaker-state.json');
+    // Valid JSON, active, but file_set is an object instead of an array.
+    fs.writeFileSync(statePath, JSON.stringify({
+      active: true,
+      file_set: { not: 'an-array' },
+      activated_at: new Date().toISOString(),
+      commit_window_snapshot: [['seed.txt']],
+    }), 'utf8');
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0 — corrupt active state must fail OPEN, not crash the hook');
+    // Must not emit a malformed/partial deny decision.
+    assert.ok(
+      stdout === '' || (() => { try { JSON.parse(stdout); return true; } catch { return false; } })(),
+      'stdout must be empty or well-formed JSON, never a partial/corrupt payload'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// CB-ADV05 (RESET SEMANTICS): once an oscillation is marked resolved in the
+// oscillation log, an ACTIVE breaker must stop blocking — otherwise the next
+// legitimate edit is re-blocked forever. The active-state path keys the log as
+// `${makeFileSetHash(file_set)}:legacy`; a resolvedAt on that key must allow the
+// write through (exit 0, no deny).
+test('CB-ADV05: resolved oscillation-log entry releases an active breaker (no re-block)', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    commitInRepo(repoDir, 'seed.txt', 'seed\n', 'init');
+
+    const stateDir = path.join(repoDir, '.claude');
+    fs.mkdirSync(stateDir, { recursive: true });
+    const statePath = path.join(stateDir, 'circuit-breaker-state.json');
+    fs.writeFileSync(statePath, JSON.stringify({
+      active: true,
+      file_set: ['x.js'],
+      activated_at: new Date().toISOString(),
+      commit_window_snapshot: [['x.js']],
+    }), 'utf8');
+
+    // Write a resolved oscillation-log entry under the legacy key the active path reads.
+    const planningDir = path.join(repoDir, '.planning');
+    fs.mkdirSync(planningDir, { recursive: true });
+    const logKey = `${makeFileSetHash(['x.js'])}:legacy`;
+    fs.writeFileSync(
+      path.join(planningDir, 'oscillation-log.json'),
+      JSON.stringify({ [logKey]: { files: ['x.js'], resolvedAt: new Date().toISOString(), resolvedByCommit: 'deadbeef' } }),
+      'utf8'
+    );
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'a resolved oscillation must NOT re-block — stdout must be empty (no deny) (CB-ADV05)');
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// ── Round-2 adversarial probes (CB-RND2 series) ───────────────────────────────
+// Targeting the round-1 rework of hasReversionInHashes: the byte-level CONTENT
+// REVERSION signal (fileSetContentFingerprint / hasContentReversion) and the
+// SUSTAINED-MONOTONIC-SHRINK exemption (negPairs>=2 && !hasPositivePair &&
+// !contentReverts → not oscillation). These call hasReversionInHashes directly
+// (the changed unit) over real temp repos, except CB-RND2-05 which drives the full
+// stdin→state pipeline. Each can FAIL on a genuine, reachable defect.
+
+// Commit helper that stages a single named file (handles paths with spaces).
+function rnd2Commit(repoDir, fileName, content, message) {
+  fs.writeFileSync(path.join(repoDir, fileName), content, 'utf8');
+  spawnSync('git', ['add', fileName], { cwd: repoDir, encoding: 'utf8' });
+  spawnSync('git', ['commit', '-m', message], { cwd: repoDir, encoding: 'utf8' });
+}
+
+// Newest-first commit hashes (same order hasReversionInHashes expects).
+function rnd2Hashes(repoDir, n) {
+  const r = spawnSync('git', ['log', '--format=%H', `-${n}`], { cwd: repoDir, encoding: 'utf8' });
+  return (r.stdout || '').trim().split('\n').filter(Boolean);
+}
+
+// CB-RND2-01 (EXEMPTION BOUNDARY / off-by-one): the monotonic-shrink exemption is
+// gated on `negPairs >= 2`. Confirm the threshold is exact:
+//   • EXACTLY 1 deletion pair (4→2 lines) is NOT exempted — the established size
+//     signal still flags it as a reversion (old CB-TC18 behavior preserved).
+//   • EXACTLY 2 deletion-only pairs (6→4→2) IS exempted — directional cleanup.
+// If the boundary regressed to `>= 1`, the 1-pair case would be wrongly swallowed
+// (a real net-negative reversion MISSED); if it regressed to `>= 3`, the 2-pair
+// cleanup would FALSE-BLOCK.
+test('CB-RND2-01: monotonic-shrink exemption boundary is exact (1 pair flags, 2 pairs exempt)', () => {
+  // One deletion pair → must still read as reversion (true).
+  const repo1 = createTempGitRepo();
+  try {
+    rnd2Commit(repo1, 'a.txt', 'l1\nl2\nl3\nl4\n', 'c0: four lines');
+    rnd2Commit(repo1, 'a.txt', 'l1\nl2\n', 'c1: drop to two');
+    const h1 = rnd2Hashes(repo1, 2);
+    assert.strictEqual(
+      hasReversionInHashes(repo1, h1, ['a.txt']), true,
+      'a single net-negative deletion pair must NOT be exempted — size signal flags it (CB-RND2-01)'
+    );
+  } finally {
+    fs.rmSync(repo1, { recursive: true, force: true });
+  }
+
+  // Two deletion-only pairs, no additions, no content reversion → exempt (false).
+  const repo2 = createTempGitRepo();
+  try {
+    rnd2Commit(repo2, 'a.txt', 'a\nb\nc\nd\ne\nf\n', 'c0: six lines');
+    rnd2Commit(repo2, 'a.txt', 'a\nb\nc\nd\n', 'c1: drop to four');
+    rnd2Commit(repo2, 'a.txt', 'a\nb\n', 'c2: drop to two');
+    const h2 = rnd2Hashes(repo2, 3);
+    assert.strictEqual(
+      hasReversionInHashes(repo2, h2, ['a.txt']), false,
+      'two deletion-only pairs (no re-add, no content reversion) is directional cleanup, must be exempt (CB-RND2-01)'
+    );
+  } finally {
+    fs.rmSync(repo2, { recursive: true, force: true });
+  }
+});
+
+// CB-RND2-02 (REGRESSION on the exemption — genuine loop with >=2 negative pairs):
+// a real down-down-up loop (6→4→2→6, content returns byte-identical to the start)
+// has negPairs==2 but is NOT a monotonic shrink: it re-adds content and reverts to
+// a prior state. The exemption MUST be overridden (by hasPositivePair AND by
+// contentReverts) and the loop still flagged. If the exemption ignored the re-add /
+// content-reversion, this runaway loop would be silently swallowed.
+test('CB-RND2-02: down-down-up loop (>=2 neg pairs but content reverts) is STILL caught', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    rnd2Commit(repoDir, 'a.txt', 'a\nb\nc\nd\ne\nf\n', 'c0: six');
+    rnd2Commit(repoDir, 'a.txt', 'a\nb\nc\nd\n', 'c1: four');
+    rnd2Commit(repoDir, 'a.txt', 'a\nb\n', 'c2: two');
+    rnd2Commit(repoDir, 'a.txt', 'a\nb\nc\nd\ne\nf\n', 'c3: re-add original six');
+    const h = rnd2Hashes(repoDir, 4);
+    assert.strictEqual(
+      hasReversionInHashes(repoDir, h, ['a.txt']), true,
+      'down-down-up that restores a prior byte-identical state is a loop, not a cleanup — must be caught (CB-RND2-02)'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// CB-RND2-03 (3-STATE CYCLE via content reversion): an equal-length A→B→C→A cycle
+// (all net-zero substitutions, content returns to A after two distinct states) is
+// invisible to the size signal (no negative pair, totalNet==0) and can ONLY be
+// caught by the byte-level content-reversion fingerprint. Confirms hasContentReversion
+// detects a recurrence that is non-adjacent and separated by >1 intermediate state.
+test('CB-RND2-03: equal-length 3-state cycle A→B→C→A is caught via content reversion', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    rnd2Commit(repoDir, 'cfg.txt', 'x = 1\n', 'A');
+    rnd2Commit(repoDir, 'cfg.txt', 'x = 2\n', 'B');
+    rnd2Commit(repoDir, 'cfg.txt', 'x = 3\n', 'C');
+    rnd2Commit(repoDir, 'cfg.txt', 'x = 1\n', 'A again (cycle closes)');
+    const h = rnd2Hashes(repoDir, 4);
+    assert.strictEqual(
+      hasReversionInHashes(repoDir, h, ['cfg.txt']), true,
+      'A→B→C→A equal-length cycle returns to a prior state — only content reversion can see it; must be caught (CB-RND2-03)'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// CB-RND2-04 (FINGERPRINT ROBUSTNESS): fileSetContentFingerprint parses `git ls-tree`
+// output with a regex `^\S+\s+\S+\s+(\S+)\t(.+)$`. Two adversarial inputs:
+//   (a) a path WITH SPACES, toggled equal-length A→B→A — net-zero so ONLY the
+//       fingerprint can flag it; if the regex mis-parsed the spaced path, pairs would
+//       be empty and every commit would fingerprint identically → reversion MISSED.
+//   (b) a file present→absent→present (deleted then re-added byte-identical) — the
+//       absent state must fingerprint differently and the recurrence be caught, with
+//       no crash on the delete.
+test('CB-RND2-04: fingerprint handles spaced paths and present→absent→present without misdecide/crash', () => {
+  // (a) path with spaces, equal-length toggle → only content reversion can catch it.
+  const repoA = createTempGitRepo();
+  try {
+    rnd2Commit(repoA, 'my file.txt', 'v = 1\n', 'A');
+    rnd2Commit(repoA, 'my file.txt', 'v = 2\n', 'B');
+    rnd2Commit(repoA, 'my file.txt', 'v = 1\n', 'A again');
+    const h = rnd2Hashes(repoA, 3);
+    assert.strictEqual(
+      hasReversionInHashes(repoA, h, ['my file.txt']), true,
+      'equal-length A→B→A on a spaced path must be caught — fingerprint regex must parse the path (CB-RND2-04a)'
+    );
+  } finally {
+    fs.rmSync(repoA, { recursive: true, force: true });
+  }
+
+  // (b) present → absent → present (identical content re-added).
+  const repoB = createTempGitRepo();
+  try {
+    rnd2Commit(repoB, 'feat.txt', 'alpha\nbeta\n', 'add feat');
+    fs.rmSync(path.join(repoB, 'feat.txt'));
+    spawnSync('git', ['rm', 'feat.txt'], { cwd: repoB, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'delete feat'], { cwd: repoB, encoding: 'utf8' });
+    rnd2Commit(repoB, 'feat.txt', 'alpha\nbeta\n', 're-add identical feat');
+    const h = rnd2Hashes(repoB, 3);
+    let result;
+    assert.doesNotThrow(() => { result = hasReversionInHashes(repoB, h, ['feat.txt']); },
+      'present→absent→present must not crash fingerprinting (CB-RND2-04b)');
+    assert.strictEqual(
+      result, true,
+      're-adding byte-identical deleted content is a reversion loop — must be caught (CB-RND2-04b)'
+    );
+  } finally {
+    fs.rmSync(repoB, { recursive: true, force: true });
+  }
+});
+
+// CB-RND2-05 (FALSE-POSITIVE GUARD — clean rollback survives the new content signal):
+// a deliberate one-shot rollback at depth 3 (base → +30-line feature → cleanly remove
+// it, content returns byte-identical to base) now trips the content-reversion signal,
+// so hasReversionInHashes returns true. The downstream rollback rescue (isCleanRollback:
+// asymmetric +30/-0 then +0/-30, exactly one inverse pair) MUST still suppress it.
+// If the content-reversion signal short-circuited the clean-rollback path, this normal
+// add-then-revert refactor would be FALSE-BLOCKED. Drives the full stdin→state pipeline.
+test('CB-RND2-05: big one-shot clean rollback (A→B→A) is NOT blocked despite content reversion', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    const base = 'function base() { return 0; }\n';
+    const feature = base + Array.from({ length: 30 }, (_, i) => `const f${i} = ${i};`).join('\n') + '\n';
+    // app.js base → (filler) → +feature → (filler) → cleanly reverted to base. 3 app.js run-groups.
+    rnd2Commit(repoDir, 'app.js', base, 'feat: base');
+    rnd2Commit(repoDir, 'filler1.txt', 'f1\n', 'chore: filler 1');
+    rnd2Commit(repoDir, 'app.js', feature, 'feat: add big feature (+30)');
+    rnd2Commit(repoDir, 'filler2.txt', 'f2\n', 'chore: filler 2');
+    rnd2Commit(repoDir, 'app.js', base, 'revert: remove big feature, back to base');
+
+    const statePath = writeBreakerConfig(repoDir);
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'stdout must be empty');
+    assert(
+      !fs.existsSync(statePath),
+      'state file must NOT be written — a deliberate one-shot clean rollback must stay rescued by isCleanRollback even though content reverts (CB-RND2-05)'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// ── Round-3 convergence invariant (CB-RND3) ───────────────────────────────────
+// Final round found no missed-loop / false-block / crash across the probed shapes
+// (net-zero substitution between deletion pairs keeps negPairs exact; a multi-file
+// set where one file reverts while another progresses correctly stays unflagged by
+// the file-set-as-unit semantic; submodule/spaced/tab paths parse without misdecide).
+// This invariant pins the ONE real-world property with no prior coverage: the content
+// fingerprint is MODE-INSENSITIVE. fileSetContentFingerprint captures only the blob
+// SHA (`(\S+)\t(.+)`), never the file mode, so a chmod toggle (644→755→644) with
+// byte-identical content must NOT read as an A→B→A content reversion. If the regex
+// regressed to fold mode into the fingerprinted state, this normal permission flip
+// would recur the 644 state and FALSE-BLOCK a chmod-heavy change.
+test('CB-RND3-01: chmod toggle with identical blob is NOT a content reversion (mode-insensitive fingerprint)', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    const f = 'script.sh';
+    fs.writeFileSync(path.join(repoDir, f), 'echo hi\n', 'utf8');
+    spawnSync('git', ['add', f], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'add script (644)'], { cwd: repoDir, encoding: 'utf8' });
+    // Flip executable bit on, then off — content (blob SHA) never changes.
+    spawnSync('git', ['update-index', '--chmod=+x', f], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'chmod +x'], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['update-index', '--chmod=-x', f], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'chmod -x'], { cwd: repoDir, encoding: 'utf8' });
+
+    const r = spawnSync('git', ['log', '--format=%H', '-3'], { cwd: repoDir, encoding: 'utf8' });
+    const hashes = r.stdout.trim().split('\n').filter(Boolean);
+
+    assert.strictEqual(
+      hasReversionInHashes(repoDir, hashes, [f]), false,
+      'a 644→755→644 mode toggle with identical content must NOT read as a reversion — the fingerprint is mode-insensitive (CB-RND3-01)'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});

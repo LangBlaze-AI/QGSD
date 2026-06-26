@@ -628,7 +628,11 @@ function detectUnavailWithoutFallback(currentTurnLines, cwd) {
 
     for (const taskId of round.taskIds) {
       const result = taskResults.get(taskId) || '';
-      if (/verdict:\s*UNAVAIL/i.test(result) || /\bUNAVAIL\b/.test(result)) {
+      // Anchor to the verdict line only. The old bare `/\bUNAVAIL\b/` whole-text match
+      // false-blocked a legitimate all-APPROVE consensus whose reasoning prose merely
+      // mentioned the word "UNAVAIL" (e.g. "codex-1 was UNAVAIL earlier") with a
+      // FALLBACK-01 VIOLATION — mirrors the hardening already in countLiveSlotWorkers.
+      if (/verdict:\s*UNAVAIL/i.test(result)) {
         hasUnavail = true;
         break;
       }
@@ -660,16 +664,13 @@ function detectUnavailWithoutFallback(currentTurnLines, cwd) {
   return { violated: false };
 }
 
-// Counts the number of live slot-worker voters in the current turn. Walks assistant
-// messages for Task(nf-quorum-slot-worker) dispatches, then inspects the matching
-// tool_result blocks. A result counts as a live voter only if it carries an explicit
-// APPROVE or BLOCK verdict — UNAVAIL, FLAG_TRUNCATED, error, and empty results are
-// non-votes and excluded. Returns the count of valid votes in the last dispatch round.
-function countLiveSlotWorkers(currentTurnLines) {
-  // Track dispatch rounds (groups of parallel slot-worker Tasks per assistant message)
+// Walks the current turn for nf-quorum-slot-worker dispatch rounds and returns the
+// result texts of the LAST (consensus) dispatch round. Shared by countLiveSlotWorkers
+// and detectUnresolvedBlock so both reason over the same round with identical scoping —
+// a BLOCK that a later deliberation round resolved into APPROVE is never seen here.
+function getLastDispatchRoundResults(currentTurnLines) {
   const roundIds = [];       // Array of Sets, one per dispatch round
   const taskResults = new Map(); // tool_use_id → result text
-
   let currentRoundIds = null;
 
   for (const line of currentTurnLines) {
@@ -720,20 +721,40 @@ function countLiveSlotWorkers(currentTurnLines) {
     } catch { /* skip malformed */ }
   }
 
-  // Only count live voters from the LAST dispatch round (the consensus round)
-  if (roundIds.length === 0) return 0;
+  if (roundIds.length === 0) return [];
   const lastRound = roundIds[roundIds.length - 1];
+  return [...lastRound].map(id => taskResults.get(id) || '');
+}
 
+// Counts live slot-worker voters in the LAST (consensus) dispatch round. A result is a
+// live voter only if it carries an explicit APPROVE/BLOCK/REJECT verdict; UNAVAIL,
+// FLAG_TRUNCATED, error, and empty results are non-votes and excluded.
+function countLiveSlotWorkers(currentTurnLines) {
   let liveCount = 0;
-  for (const id of lastRound) {
-    const result = taskResults.get(id) || '';
-    // A live voter carries an explicit APPROVE/BLOCK verdict. Matching the verdict
-    // positively (rather than excluding UNAVAIL/FLAG_TRUNCATED) avoids counting error
-    // results as votes, and avoids dropping a valid vote whose reasoning text merely
-    // mentions the word "UNAVAIL". Fails safe: an unrecognized result is not a vote.
-    if (/verdict:\s*(?:APPROVE|BLOCK)\b/i.test(result)) liveCount++;
+  for (const result of getLastDispatchRoundResults(currentTurnLines)) {
+    // A live voter carries an explicit APPROVE/BLOCK/REJECT verdict. Matching the
+    // verdict positively (rather than excluding UNAVAIL/FLAG_TRUNCATED) avoids counting
+    // error results as votes, and avoids dropping a valid vote whose reasoning text
+    // merely mentions the word "UNAVAIL". REJECT (Mode B) counts like BLOCK (Mode A) so
+    // a mixed [APPROVE, REJECT] round reaches the CE-2 consensus backstop with the
+    // accurate "consensus not reached" reason instead of a misleading floor block.
+    // Fails safe: an unrecognized result is not a vote.
+    if (/verdict:\s*(?:APPROVE|BLOCK|REJECT)\b/i.test(result)) liveCount++;
   }
   return liveCount;
+}
+
+// CE-2 (BLOCK is absolute) gate backstop. Returns true when the consensus (last)
+// dispatch round still carries an unresolved BLOCK/REJECT verdict. Anchored to the
+// verdict line so prose mentioning "block"/"reject" is not a vote; scoped to the last
+// round (via getLastDispatchRoundResults) so a BLOCK resolved by a later deliberation
+// round does NOT false-block. Without this the gate counted a BLOCK as a live voter and
+// let a unanimous-BLOCK / split-APPROVE-BLOCK round ship the planning output.
+function detectUnresolvedBlock(currentTurnLines) {
+  for (const result of getLastDispatchRoundResults(currentTurnLines)) {
+    if (/verdict:\s*(?:BLOCK|REJECT)\b/i.test(result)) return true;
+  }
+  return false;
 }
 
 // Extracts min_live_voters from config with safe default.
@@ -980,6 +1001,29 @@ function main() {
           process.stdout.write(JSON.stringify({
             decision: 'block',
             reason: fallbackCheck.reason
+          }));
+          process.exit(0);
+        }
+
+        // CE-2 BLOCK-is-absolute backstop — checked BEFORE the floor so an unresolved
+        // BLOCK/REJECT in the consensus (last) round reports the accurate "consensus not
+        // reached" reason even when live voters are also below the floor (a lone BLOCK is
+        // a dissent, not merely a thin roster). A single dissenting voter prevents the
+        // output from shipping; this is the mechanical backstop for a buggy/over-eager
+        // orchestrator that ignores a BLOCK. Unconditional — not waivable by --force-quorum.
+        if (detectUnresolvedBlock(currentTurnLines)) {
+          appendConformanceEvent({
+            ts:              new Date().toISOString(),
+            phase:           'DECIDING',
+            action:          'consensus_block',
+            outcome:         'BLOCK',
+            reason:          'unresolved BLOCK/REJECT in consensus round',
+            schema_version,
+          });
+          process.stdout.write(JSON.stringify({
+            decision: 'block',
+            reason: 'QUORUM CONSENSUS NOT REACHED: a BLOCK/REJECT verdict is unresolved in the final dispatch round. ' +
+              'BLOCK is absolute (CE-2) — deliberate to resolve the objection (provide its rationale to all voters and re-dispatch), do not override it.'
           }));
           process.exit(0);
         }

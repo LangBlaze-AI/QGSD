@@ -129,6 +129,8 @@ function hasReversionInHashes(gitRoot, hashes, files, pairStatsOut) {
   // We diff older → newer: git diff <hashes[i]> <hashes[i-1]>
   let totalNetChange = 0;
   let hasNegativePair = false;
+  let hasPositivePair = false;
+  let negPairs = 0;
   let errorsOnly = true;
 
   for (let i = hashes.length - 1; i >= 1; i--) {
@@ -155,7 +157,8 @@ function hasReversionInHashes(gitRoot, hashes, files, pairStatsOut) {
 
     const pairNet = additions - deletions;
     totalNetChange += pairNet;
-    if (pairNet < 0) hasNegativePair = true;
+    if (pairNet < 0) { hasNegativePair = true; negPairs++; }
+    if (pairNet > 0) hasPositivePair = true;
 
     // Collect pair stats for rollback intent detection
     if (Array.isArray(pairStatsOut)) {
@@ -166,10 +169,68 @@ function hasReversionInHashes(gitRoot, hashes, files, pairStatsOut) {
   // If all pairs errored out → fall back to original behavior (treat as oscillation)
   if (errorsOnly) return true;
 
-  // Positive net change → file grew overall → TDD progression, not oscillation
-  // Zero or negative net change WITH at least one negative pair → real oscillation
-  // Zero or negative net change with NO negative pair → monotonic substitution workflow, not oscillation
-  return totalNetChange <= 0 && hasNegativePair;
+  const reversion = hasContentReversion(gitRoot, hashes, files); // true | false | null (git error)
+  const contentReverts = reversion === true;
+
+  // SUSTAINED MONOTONIC SHRINK is a directional cleanup (e.g. dead-code removal
+  // 6→4→2 lines: two-plus deletion-only pairs, no additions anywhere, and the content
+  // never returns to a prior state), NOT a loop — do not trip the breaker. This is the
+  // false-positive the old `totalNetChange <= 0 && hasNegativePair` proxy produced. A
+  // SINGLE deletion pair or any size churn is still judged by the size signal below, so
+  // short patterns keep their established behavior. Gate on `reversion === false`
+  // (POSITIVELY confirmed no reversion), not `!contentReverts` — if fingerprinting was
+  // unavailable (reversion === null, a transient git error) we must NOT assume "no
+  // reversion" and silently exempt; fall through to the size heuristic instead.
+  if (negPairs >= 2 && !hasPositivePair && reversion === false) return false;
+
+  // Oscillation when EITHER:
+  //  - the established size signal: non-positive net change with at least one removal
+  //    (catches size-alternating churn 1→2→1→2 and short net-negative reversions), OR
+  //  - a byte-level CONTENT REVERSION (A→B→A): catches EQUAL-LENGTH value toggles
+  //    (FLAG="on"↔"off") whose pairs are all net-zero, so the size signal can't see them.
+  return (totalNetChange <= 0 && hasNegativePair) || contentReverts;
+}
+
+// Content fingerprint of the file set at one commit: git's own (repo-relative path, blob
+// SHA) pairs for `files`, sorted for determinism. An absent file simply doesn't appear in
+// the ls-tree output (so add/remove of a file changes the fingerprint). One `git ls-tree`
+// call per commit. Returns null on git error so the caller can fall back, not mis-decide.
+function fileSetContentFingerprint(gitRoot, hash, files) {
+  const r = spawnSync('git', ['ls-tree', hash, '--', ...files], {
+    cwd: gitRoot, encoding: 'utf8', timeout: 5000,
+  });
+  if (r.error || r.status !== 0) return null;
+  // Build the fingerprint from git's OWN output pairs (repo-relative path + blob SHA),
+  // NOT by looking up the original `files` pathspecs — those may be absolute while
+  // ls-tree emits repo-relative paths, so a lookup would never match and every commit
+  // would fingerprint identically. An absent file simply doesn't appear (its state).
+  const pairs = [];
+  for (const line of (r.stdout || '').split('\n')) {
+    const m = line.match(/^\S+\s+\S+\s+(\S+)\t(.+)$/); // "<mode> blob <sha>\t<path>"
+    if (m) pairs.push(m[2] + '=' + m[1]);
+  }
+  pairs.sort();
+  return pairs.join('\0');
+}
+
+// True if the file set's content returns to a prior state across `hashes` (a real
+// A→B→A reversion), false if every state is unique (monotonic shrink or forward
+// progression — NOT oscillation), or null if fingerprints can't be computed (git error
+// → caller falls back). Consecutive identical states (a commit that touched only OTHER
+// files) are collapsed first so they don't read as a spurious repeat.
+function hasContentReversion(gitRoot, hashes, files) {
+  const fps = [];
+  for (const hash of hashes) {
+    const fp = fileSetContentFingerprint(gitRoot, hash, files);
+    if (fp === null) return null;
+    if (fps.length === 0 || fps[fps.length - 1] !== fp) fps.push(fp); // collapse adjacent dups
+  }
+  const seen = new Set();
+  for (const fp of fps) {
+    if (seen.has(fp)) return true; // a state recurs after leaving it → reversion
+    seen.add(fp);
+  }
+  return false;
 }
 
 // Counts full oscillation cycles for a file set key.
