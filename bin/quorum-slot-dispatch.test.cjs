@@ -1438,3 +1438,84 @@ test('ADV-R6-3: INVARIANT — formatters String()-coerce wrong-typed fields and 
     fs.rmSync(base, { recursive: true, force: true });
   }
 });
+
+// ── Round 7: FINAL convergence — full corrupt-input matrix through BOTH matchers ──
+// CONVERGED. Rounds 5 (null/scalar ELEMENTS) + 6 (number/object FIELDS) are joined here
+// by the remaining shapes the prompt asked to re-verify: array fields and nested-object
+// fields, plus a wrong-typed prec.date. This re-runs the COMPLETE matrix end-to-end
+// through the two matchers main() actually calls — matchRequirementsByKeywords (line
+// ~1603) and matchPrecedentsByKeywords (line ~1607) — which are the live entry points a
+// corrupt repoDir/.planning/*.json reaches. Every shape must degrade to a returned array,
+// never throw: a TypeError here becomes process.exit(1) under main()'s entry catch (a
+// fail-open / DoS). This is the PASSING invariant that pins the convergence point so a
+// future regression that un-guards ANY matcher field is caught.
+//
+// Field enumeration verified covered (all String()-coerced or type-guarded):
+//   requirements: req.id (typeof-string guard) · req.text · req.category · req.category_raw (String())
+//   precedents:   prec.question · prec.outcome (extractKeywords String()) · prec.date (new Date()+isNaN skip)
+// NOTE (non-gap observation): formatPrecedentsSection lacks the null-element skip that
+// formatRequirementsSection has, so formatPrecedentsSection([null]) throws in ISOLATION —
+// but it is UNREACHABLE from the live path: matchPrecedentsByKeywords filters null/scalar
+// elements upstream (its try/catch date guard), so the formatter only ever receives objects.
+// Hence no reachable defect; a defense-in-depth asymmetry only.
+test('ADV-R7-1: INVARIANT — full corrupt element+field matrix degrades to an array through BOTH matchers (no throw)', () => {
+  assert.ok(mod, 'module not loaded');
+  const recent = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  // (1) Corrupt ELEMENTS — not objects. Must be filtered, never deref a field.
+  const badElements = [null, undefined, 42, 'foo', ['a', 'b'], NaN, true];
+  for (const el of badElements) {
+    assert.doesNotThrow(
+      () => mod.matchRequirementsByKeywords([el], 'quorum dispatch slot timeout', 'hooks/x.js'),
+      `matchRequirementsByKeywords must not throw on element ${String(el)}`);
+    assert.doesNotThrow(
+      () => mod.matchPrecedentsByKeywords([el], 'keyword match lookup quorum'),
+      `matchPrecedentsByKeywords must not throw on element ${String(el)}`);
+  }
+
+  // (2) Corrupt FIELD TYPES on a real object — number / array / nested-object / absent —
+  //     for EVERY field each matcher reads. (Array + nested-object are the shapes r5/r6
+  //     had not yet exercised on the matchers.)
+  const reqFieldVariants = [
+    { id: 1, text: 2, category: 3, category_raw: 4 },                       // number
+    { id: [1], text: [2], category: [3], category_raw: [4] },              // array
+    { id: { a: 1 }, text: { b: 2 }, category: { c: 3 }, category_raw: { d: 4 } }, // nested object
+    {},                                                                     // all fields absent
+  ];
+  for (const r of reqFieldVariants) {
+    assert.doesNotThrow(
+      () => mod.matchRequirementsByKeywords([r], 'quorum dispatch slot', 'bin/slot.js'),
+      `matchRequirementsByKeywords must not throw on field-corrupt req ${JSON.stringify(r)}`);
+  }
+  // Precedents carry a RECENT date so the wrong-typed question/outcome actually reaches
+  // extractKeywords (past the TTL guard) — otherwise the entry is date-skipped and the
+  // coercion path is never exercised.
+  const precFieldVariants = [
+    { date: recent, question: 1, outcome: 2, consensus: 3 },               // number fields
+    { date: recent, question: [1], outcome: [2], consensus: [3] },         // array fields
+    { date: recent, question: { a: 1 }, outcome: { b: 2 }, consensus: { c: 3 } }, // nested-object fields
+    { date: recent },                                                      // question/outcome absent
+    { date: { nested: 1 }, question: 'keyword' },                          // wrong-typed DATE (object) must skip
+    { date: ['arr'], question: 'keyword' },                                // wrong-typed DATE (array) must skip
+    { date: 'not-a-date', question: 'keyword' },                           // garbage DATE must skip
+  ];
+  for (const p of precFieldVariants) {
+    assert.doesNotThrow(
+      () => mod.matchPrecedentsByKeywords([p], 'keyword match lookup'),
+      `matchPrecedentsByKeywords must not throw on field-corrupt prec ${JSON.stringify(p)}`);
+  }
+
+  // (3) Mixed list — corrupt entries interleaved with one clean match — must still RETURN
+  //     an array (degrade, not throw) in both matchers.
+  const outReq = mod.matchRequirementsByKeywords(
+    [null, { id: 1 }, { id: ['x'] }, { id: { a: 1 } },
+     { id: 'OK-1', text: 'quorum dispatch slot', category: 'Quorum & Dispatch' }],
+    'quorum dispatch slot', null);
+  assert.ok(Array.isArray(outReq), 'matchRequirementsByKeywords must return an array on a mixed corrupt/clean list');
+
+  const outPrec = mod.matchPrecedentsByKeywords(
+    [null, 42, 'str', { date: recent, question: { x: 1 } },
+     { date: recent, question: 'keyword match', outcome: 'keyword' }],
+    'keyword match lookup');
+  assert.ok(Array.isArray(outPrec), 'matchPrecedentsByKeywords must return an array on a mixed corrupt/clean list');
+});

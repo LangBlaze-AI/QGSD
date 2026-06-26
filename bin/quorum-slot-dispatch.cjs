@@ -243,6 +243,7 @@ function formatPrecedentsSection(precedents) {
   lines.push('');
 
   for (const prec of precedents) {
+    if (!prec || typeof prec !== 'object') continue; // defense-in-depth, mirrors formatRequirementsSection
     // Collapse newlines: precedents are loaded from .planning/quorum/precedents.json
     // inside the untrusted repoDir, so a newline could inject a forged section line.
     const q = oneLine(prec.question && prec.question.length > 120
