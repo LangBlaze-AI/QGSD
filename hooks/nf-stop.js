@@ -734,11 +734,14 @@ function getLastDispatchRoundResults(currentTurnLines) {
 function countLiveSlotWorkers(currentTurnLines) {
   let liveCount = 0;
   for (const result of getLastDispatchRoundResults(currentTurnLines)) {
-    // A live voter carries an explicit APPROVE/BLOCK verdict. Matching the verdict
-    // positively (rather than excluding UNAVAIL/FLAG_TRUNCATED) avoids counting error
-    // results as votes, and avoids dropping a valid vote whose reasoning text merely
-    // mentions the word "UNAVAIL". Fails safe: an unrecognized result is not a vote.
-    if (/verdict:\s*(?:APPROVE|BLOCK)\b/i.test(result)) liveCount++;
+    // A live voter carries an explicit APPROVE/BLOCK/REJECT verdict. Matching the
+    // verdict positively (rather than excluding UNAVAIL/FLAG_TRUNCATED) avoids counting
+    // error results as votes, and avoids dropping a valid vote whose reasoning text
+    // merely mentions the word "UNAVAIL". REJECT (Mode B) counts like BLOCK (Mode A) so
+    // a mixed [APPROVE, REJECT] round reaches the CE-2 consensus backstop with the
+    // accurate "consensus not reached" reason instead of a misleading floor block.
+    // Fails safe: an unrecognized result is not a vote.
+    if (/verdict:\s*(?:APPROVE|BLOCK|REJECT)\b/i.test(result)) liveCount++;
   }
   return liveCount;
 }
