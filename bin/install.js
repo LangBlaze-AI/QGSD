@@ -3210,12 +3210,19 @@ function install(isGlobal, runtime = 'claude') {
     // ── MIGRATION: remove old nf-* hook entries ─────────────────────────
     // Old installs registered hooks as nf-prompt.js, nf-stop.js, nf-circuit-breaker.js.
     // Remove them so the nf-* replacements below can register cleanly.
+    // These map an event to OLD/renamed hook names whose stale registrations must
+    // be stripped. The matching CURRENT hooks (nf-prompt, nf-stop, …) are
+    // re-registered AFTER this migration, so removing them here is harmless.
+    // nf-session-start is the EXCEPTION: it is registered ABOVE (before this
+    // migration) and never re-added after, so listing it here removed the live
+    // hook on every install — silently disabling SessionStart (incl. the
+    // post-compaction continuation injection). It is NOT an old name; do not list it.
     const OLD_HOOK_MAP = {
       UserPromptSubmit: 'nf-prompt',
       Stop: 'nf-stop',
       PreToolUse: 'nf-circuit-breaker',
       PostToolUse: ['nf-spec-regen', 'nf-context-monitor', 'nf-context-monitor'],
-      SessionStart: ['nf-check-update', 'nf-session-start'],
+      SessionStart: ['nf-check-update'],
     };
     for (const [event, oldNames] of Object.entries(OLD_HOOK_MAP)) {
       if (settings.hooks[event]) {

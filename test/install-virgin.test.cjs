@@ -150,6 +150,19 @@ describe('virgin install: claude', () => {
     assert.ok(parsed.hooks, 'settings.json must have hooks key');
   });
 
+  test('nf-session-start survives the OLD_HOOK_MAP migration (registered in SessionStart)', () => {
+    // Regression: nf-session-start was registered before the migration AND listed
+    // in OLD_HOOK_MAP.SessionStart, so it was stripped on every install — silently
+    // disabling SessionStart (incl. #272's post-compaction continuation injection).
+    const parsed = JSON.parse(readIfExists(path.join(tmpDir, 'settings.json')));
+    const ssCommands = (parsed.hooks.SessionStart || [])
+      .flatMap(g => (g.hooks || []).map(h => h.command || ''));
+    assert.ok(
+      ssCommands.some(c => c.includes('nf-session-start')),
+      'nf-session-start must remain registered in SessionStart after install'
+    );
+  });
+
   test('package.json exists with CommonJS type', () => {
     const content = readIfExists(path.join(tmpDir, 'package.json'));
     assert.ok(content, 'package.json must exist');
