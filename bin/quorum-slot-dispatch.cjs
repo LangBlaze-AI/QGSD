@@ -362,15 +362,17 @@ function matchRequirementsByKeywords(requirements, question, artifactPath) {
   const scored = requirements.filter(req => req && typeof req === 'object').map(req => {
     let score = 0;
 
-    // Match on id prefix (e.g. "DISP" from "DISP-01")
-    const idPrefix = req.id ? req.id.split('-')[0].toLowerCase() : '';
+    // Match on id prefix (e.g. "DISP" from "DISP-01"). Fields come from a possibly
+    // corrupt/hostile requirements.json, so a number/object field would throw
+    // .split/.toLowerCase — coerce to strings to fail open (matching loadRequirements).
+    const idPrefix = (typeof req.id === 'string' && req.id) ? req.id.split('-')[0].toLowerCase() : '';
     if (idPrefix && (questionKeywords.has(idPrefix) || pathKeywords.has(idPrefix))) {
       score += 2;
     }
 
     // Match on category_raw
     if (req.category_raw) {
-      const catRaw = req.category_raw.toLowerCase();
+      const catRaw = String(req.category_raw).toLowerCase();
       for (const kw of questionKeywords) {
         if (catRaw.includes(kw)) score += 1;
       }
@@ -378,7 +380,7 @@ function matchRequirementsByKeywords(requirements, question, artifactPath) {
 
     // Match on category (group)
     if (req.category) {
-      const cat = req.category.toLowerCase();
+      const cat = String(req.category).toLowerCase();
       for (const kw of questionKeywords) {
         if (cat.includes(kw)) score += 1;
       }
@@ -392,7 +394,7 @@ function matchRequirementsByKeywords(requirements, question, artifactPath) {
 
     // Match on text
     if (req.text) {
-      const text = req.text.toLowerCase();
+      const text = String(req.text).toLowerCase();
       for (const kw of questionKeywords) {
         if (text.includes(kw)) score += 1;
       }
@@ -421,6 +423,10 @@ function matchRequirementsByKeywords(requirements, question, artifactPath) {
  */
 function extractKeywords(text) {
   if (!text) return new Set();
+
+  // Coerce to string: callers pass precedent fields (prec.question/outcome) from a
+  // possibly-corrupt precedents.json, where a non-string would throw .toLowerCase.
+  if (typeof text !== 'string') text = String(text);
 
   // Split on common delimiters: space, /, -, ., _
   const tokens = text.toLowerCase()

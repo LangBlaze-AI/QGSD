@@ -1335,3 +1335,106 @@ test('ADV-R5-2: GAP — a non-object (null) requirement element must fail-open, 
     () => mod.matchRequirementsByKeywords([null], 'quorum dispatch question', null),
     'matchRequirementsByKeywords must not throw on a null requirement element (fail-open)');
 });
+
+// ── Round 6 (FINAL sweep): GAP — object requirement/precedent with WRONG-TYPED ──
+// fields. Round 5 closed null/non-object ELEMENTS. But an element that IS an object
+// can still carry parseable-but-wrong-typed FIELDS — `{"id": 123}`, `{"text": {...}}`,
+// `{"category": 5}` — all valid JSON that survives JSON.parse + Array.isArray + the
+// round-5 `typeof req === 'object'` guard. matchRequirementsByKeywords then calls
+// `req.id.split(...)` (line ~366) and `req.{category,category_raw,text}.toLowerCase()`
+// (lines ~373/381/395) directly on the non-string value → TypeError. In main()
+// (line ~1597) matchRequirementsByKeywords is called UNGUARDED on loadRequirements()
+// output, so the entry catch turns the TypeError into process.exit(1): a corrupt/hostile
+// requirements.json in the repoDir under review crashes the whole slot dispatch instead
+// of degrading to []. Same fail-open / DoS class as round 5, one field-type deeper.
+// This asserts the DESIRED fail-open and currently FAILS, demonstrating the gap.
+test('ADV-R6-1: GAP — requirement object with non-string id/text/category must fail-open, not crash the matcher', () => {
+  assert.ok(mod, 'module not loaded');
+
+  // req.id numeric → `req.id.split` is not a function.
+  assert.doesNotThrow(
+    () => mod.matchRequirementsByKeywords([{ id: 123, text: 'x' }], 'quorum dispatch question', null),
+    'matchRequirementsByKeywords must not throw on a numeric req.id (fail-open to [])');
+
+  // req.text a non-string (object/array) → `req.text.toLowerCase` is not a function.
+  assert.doesNotThrow(
+    () => mod.matchRequirementsByKeywords([{ id: 'A-1', text: { nested: true } }], 'quorum dispatch question', null),
+    'matchRequirementsByKeywords must not throw on an object req.text (fail-open to [])');
+
+  // req.category / req.category_raw numeric → `.toLowerCase` is not a function.
+  assert.doesNotThrow(
+    () => mod.matchRequirementsByKeywords([{ id: 'A-1', category: 5, category_raw: 7 }], 'quorum dispatch question', null),
+    'matchRequirementsByKeywords must not throw on numeric req.category/category_raw (fail-open to [])');
+
+  // It must still RETURN an array in every case (the fail-open contract loadRequirements documents).
+  const out = mod.matchRequirementsByKeywords(
+    [{ id: 123, text: {}, category: 5 }, { id: 'OK-1', text: 'quorum dispatch slot', category: 'Quorum & Dispatch' }],
+    'quorum dispatch slot', null);
+  assert.ok(Array.isArray(out), 'matchRequirementsByKeywords must return an array even when some entries are corrupt');
+});
+
+// ── Round 6: GAP — precedent object with WRONG-TYPED question/outcome ───────────
+// loadPrecedents() documents the same fail-open contract. matchPrecedentsByKeywords
+// passes prec.question / prec.outcome straight into extractKeywords(), which runs
+// `text.toLowerCase()` (line ~426) on a truthy non-string → TypeError. A recent date
+// passes the TTL guard, so a corrupt `{"date": <recent>, "question": 123}` reaches the
+// crash. In main() (line ~1601) the call is UNGUARDED on loadPrecedents() output, so a
+// corrupt precedents.json in the repoDir crashes the slot instead of returning []. Asserts
+// the DESIRED fail-open and currently FAILS.
+test('ADV-R6-2: GAP — precedent object with non-string question/outcome must fail-open, not crash the matcher', () => {
+  assert.ok(mod, 'module not loaded');
+  const recent = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  // prec.question numeric → extractKeywords → `text.toLowerCase` is not a function.
+  assert.doesNotThrow(
+    () => mod.matchPrecedentsByKeywords([{ date: recent, question: 123, outcome: 'x' }], 'keyword match lookup'),
+    'matchPrecedentsByKeywords must not throw on a numeric prec.question (fail-open to [])');
+
+  // prec.outcome a non-string (object) → same crash on the outcome side.
+  assert.doesNotThrow(
+    () => mod.matchPrecedentsByKeywords([{ date: recent, question: 'keyword', outcome: { x: 1 } }], 'keyword match lookup'),
+    'matchPrecedentsByKeywords must not throw on an object prec.outcome (fail-open to [])');
+
+  const out = mod.matchPrecedentsByKeywords([{ date: recent, question: 123, outcome: {} }], 'keyword match lookup');
+  assert.ok(Array.isArray(out), 'matchPrecedentsByKeywords must return an array even when entries are corrupt');
+});
+
+// ── Round 6: INVARIANT (boundary — should PASS) — the formatters and loaders ────
+// already handle the same wrong-typed input safely, which is exactly why the gap is
+// isolated to the MATCHERS. oneLine() String()-coerces every field, so the formatters
+// never call a string method on a non-string; and the loaders' Array.isArray guard
+// rejects a non-array/scalar top-level. This pins that boundary so a future "fix" that
+// merely moves the crash from the matcher into the formatter/loader is also caught.
+test('ADV-R6-3: INVARIANT — formatters String()-coerce wrong-typed fields and loaders fail-open on non-array JSON', () => {
+  assert.ok(mod, 'module not loaded');
+
+  // Formatters must coerce (never throw) on numeric/object fields.
+  assert.doesNotThrow(
+    () => mod.formatRequirementsSection([{ id: 123, text: { a: 1 }, category: 5 }]),
+    'formatRequirementsSection must String()-coerce non-string fields (no crash)');
+  assert.doesNotThrow(
+    () => mod.formatPrecedentsSection([{ question: 123, outcome: { a: 1 }, consensus: 1, date: 2 }]),
+    'formatPrecedentsSection must String()-coerce non-string fields (no crash)');
+
+  // Loaders must fail-open to [] on a top-level JSON that is a bare string / number /
+  // object-without-`requirements` array (not the expected { requirements: [...] } shape).
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const tmp = require('node:path');
+  const base = fs.mkdtempSync(tmp.join(os.tmpdir(), 'qsd-r6-'));
+  try {
+    const bodies = ['"just a string"', '42', '{"not_requirements": true}'];
+    bodies.forEach((body, i) => {
+      // Distinct projectRoot per body so the per-projectRoot loader cache never short-circuits,
+      // and the file actually lives under the projectRoot we query.
+      const root = tmp.join(base, 'root-' + i);
+      const reqDir = tmp.join(root, '.planning', 'formal');
+      fs.mkdirSync(reqDir, { recursive: true });
+      fs.writeFileSync(tmp.join(reqDir, 'requirements.json'), body);
+      const r = mod.loadRequirements(root);
+      assert.ok(Array.isArray(r), `loadRequirements must fail-open to an array for top-level JSON: ${body}`);
+    });
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
