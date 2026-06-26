@@ -243,13 +243,15 @@ function formatPrecedentsSection(precedents) {
   lines.push('');
 
   for (const prec of precedents) {
-    const q = prec.question && prec.question.length > 120
+    // Collapse newlines: precedents are loaded from .planning/quorum/precedents.json
+    // inside the untrusted repoDir, so a newline could inject a forged section line.
+    const q = oneLine(prec.question && prec.question.length > 120
       ? prec.question.slice(0, 120) + '...'
-      : (prec.question || '');
-    const o = prec.outcome && prec.outcome.length > 150
+      : (prec.question || ''));
+    const o = oneLine(prec.outcome && prec.outcome.length > 150
       ? prec.outcome.slice(0, 150) + '...'
-      : (prec.outcome || '');
-    lines.push(`- **${prec.consensus}** (${prec.date}): ${q}`);
+      : (prec.outcome || ''));
+    lines.push(`- **${oneLine(prec.consensus)}** (${oneLine(prec.date)}): ${q}`);
     lines.push(`  Outcome: ${o}`);
   }
 
@@ -485,7 +487,11 @@ function formatRequirementsSection(requirements) {
 
   for (const req of requirements) {
     const category = req.category || 'Unknown';
-    lines.push(`- [${req.id}] ${req.text} (${category})`);
+    // Collapse newlines: these fields come from .planning/formal/requirements.json
+    // INSIDE the untrusted repoDir under review, so a newline in req.text could break
+    // out into a forged `=== EXECUTION TRACES ===` section line (same injection class
+    // as artifactContent). One-lining keeps them confined to this list item.
+    lines.push(`- [${oneLine(req.id)}] ${oneLine(req.text)} (${oneLine(category)})`);
   }
 
   lines.push('');
@@ -581,6 +587,15 @@ function neutralizeArtifactDelimiters(content) {
     if (/^={3,}$/.test(t) || /^={3,}/.test(t)) return line.replace(/={3,}/g, '==');
     return line;
   }).join('\n');
+}
+
+// Sanitize an untrusted SINGLE-LINE field (repo-loaded requirements/precedents text):
+//   1. collapse newlines so it can't break out of its list item into a new line, and
+//   2. defang 3+ `=` runs so it can't render a `=== SECTION ===` delimiter even inline.
+// These fields are short governance text where a literal `===` is rare, so the tiny
+// cosmetic loss is worth closing the injection vector.
+function oneLine(s) {
+  return String(s == null ? '' : s).replace(/[\r\n]+/g, ' ').replace(/={3,}/g, '==');
 }
 
 /**
