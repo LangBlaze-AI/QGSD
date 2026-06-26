@@ -2377,12 +2377,10 @@ function slotWorkerConsensusTranscript(verdicts) {
   return lines;
 }
 
-// ADV-1 (🔴 CE-2): every slot-worker returned BLOCK, yet the gate passes.
-// detectUnavailWithoutFallback ignores BLOCK; countLiveSlotWorkers counts BLOCK
-// as a live voter, so the floor is "met" and main() exits 0 with no decision.
-// A unanimous REJECT must NOT ship the planning output. EXPECTED: this FAILS,
-// exposing the bypass (nf-stop.js:734 counts BLOCK; :1008 exits 0 with no
-// verdict-disagreement check).
+// ADV-1 (🔴 CE-2): every slot-worker returned BLOCK. This exposed a bypass — the gate
+// counted BLOCK as a live voter so the floor was "met" and main() exited 0 with no
+// decision, shipping the planning output. FIXED by the detectUnresolvedBlock backstop;
+// EXPECTED: PASSES (a unanimous BLOCK now blocks). Regression guard for the bypass.
 test('ADV-1: unanimous slot-worker BLOCK must block the gate (CE-2 absolute reject)', () => {
   const dir = setupQuorumDir('ce2', 2);
   try {
@@ -2408,9 +2406,10 @@ test('ADV-1: unanimous slot-worker BLOCK must block the gate (CE-2 absolute reje
   }
 });
 
-// ADV-2 (🔴 CE-3): split decision — 1 APPROVE + 1 BLOCK. Both count toward the
-// floor (=2), so the gate passes. Unanimity requires 100% APPROVE; one dissenting
-// BLOCK is not consensus. EXPECTED: FAILS — the gate ships a non-unanimous result.
+// ADV-2 (🔴 CE-3): split decision — 1 APPROVE + 1 BLOCK. Both count toward the floor
+// (=2), so the floor was "met" and the gate shipped a non-unanimous result. Unanimity
+// requires 100% APPROVE; one dissenting BLOCK is not consensus. FIXED by the backstop;
+// EXPECTED: PASSES (the dissenting BLOCK now blocks). Regression guard for the bypass.
 test('ADV-2: split APPROVE/BLOCK slot-worker quorum must block (CE-3 unanimity)', () => {
   const dir = setupQuorumDir('ce3', 2);
   try {
@@ -2440,9 +2439,10 @@ test('ADV-2: split APPROVE/BLOCK slot-worker quorum must block (CE-3 unanimity)'
 // merely mentions the word "UNAVAIL". detectUnavailWithoutFallback uses a broad
 // /\bUNAVAIL\b/ match over the *entire* result text (nf-stop.js:631) — unlike
 // countLiveSlotWorkers, which was deliberately hardened to match only
-// `verdict: APPROVE|BLOCK`. So an APPROVE vote that references a prior slot being
-// UNAVAIL in prose trips the FALLBACK-01 gate and the legitimate decision is
-// wrongly blocked. EXPECTED: FAILS — the all-APPROVE consensus should pass.
+// `verdict: APPROVE|BLOCK`. So an APPROVE vote that referenced a prior slot being
+// UNAVAIL in prose tripped the FALLBACK-01 gate and the legitimate decision was
+// wrongly blocked. FIXED by anchoring detectUnavailWithoutFallback to the verdict
+// line; EXPECTED: PASSES (the all-APPROVE consensus is no longer false-blocked).
 test('ADV-3: APPROVE consensus mentioning "UNAVAIL" in prose must not be false-blocked', () => {
   const dir = setupQuorumDir('falseblock', 1);
   try {
@@ -2626,10 +2626,10 @@ test('R2-1: early-round BLOCK resolved by a later all-APPROVE round must PASS (b
 });
 
 // R2-2 (vocabulary — REJECT): the Mode-B dissent verdict `REJECT` must trip the
-// backstop just like `BLOCK`. countLiveSlotWorkers counts only APPROVE/BLOCK (NOT
-// REJECT), so min_live_voters=1 + one APPROVE meets the floor; the REJECT then must
-// be caught by detectUnresolvedBlock → CONSENSUS block (not a FLOOR block).
-// EXPECTED: BLOCKS with the consensus reason.
+// backstop just like `BLOCK`. Here min_live_voters=1 + one APPROVE already meets the
+// floor; the REJECT must then be caught by detectUnresolvedBlock → CONSENSUS block
+// (not a FLOOR block). EXPECTED: BLOCKS with the consensus reason. (See R2-7 for the
+// floor=2 case proving REJECT now counts as a live voter.)
 test('R2-2: a REJECT verdict in the last round trips the backstop (CONSENSUS block, not floor)', () => {
   const dir = setupQuorumDir('r2-reject', 1);
   try {

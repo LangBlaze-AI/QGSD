@@ -187,10 +187,10 @@ function hasReversionInHashes(gitRoot, hashes, files, pairStatsOut) {
   return (totalNetChange <= 0 && hasNegativePair) || contentReverts;
 }
 
-// Content fingerprint of the file set at one commit: the blob SHAs of `files`, sorted
-// for determinism, with an absent file recorded as a sentinel (so add/remove of a file
-// is itself a state change). One `git ls-tree` call per commit. Returns null on git
-// error so the caller can fall back rather than mis-decide.
+// Content fingerprint of the file set at one commit: git's own (repo-relative path, blob
+// SHA) pairs for `files`, sorted for determinism. An absent file simply doesn't appear in
+// the ls-tree output (so add/remove of a file changes the fingerprint). One `git ls-tree`
+// call per commit. Returns null on git error so the caller can fall back, not mis-decide.
 function fileSetContentFingerprint(gitRoot, hash, files) {
   const r = spawnSync('git', ['ls-tree', hash, '--', ...files], {
     cwd: gitRoot, encoding: 'utf8', timeout: 5000,

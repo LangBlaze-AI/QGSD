@@ -664,11 +664,6 @@ function detectUnavailWithoutFallback(currentTurnLines, cwd) {
   return { violated: false };
 }
 
-// Counts the number of live slot-worker voters in the current turn. Walks assistant
-// messages for Task(nf-quorum-slot-worker) dispatches, then inspects the matching
-// tool_result blocks. A result counts as a live voter only if it carries an explicit
-// APPROVE or BLOCK verdict — UNAVAIL, FLAG_TRUNCATED, error, and empty results are
-// non-votes and excluded. Returns the count of valid votes in the last dispatch round.
 // Walks the current turn for nf-quorum-slot-worker dispatch rounds and returns the
 // result texts of the LAST (consensus) dispatch round. Shared by countLiveSlotWorkers
 // and detectUnresolvedBlock so both reason over the same round with identical scoping —
@@ -731,6 +726,9 @@ function getLastDispatchRoundResults(currentTurnLines) {
   return [...lastRound].map(id => taskResults.get(id) || '');
 }
 
+// Counts live slot-worker voters in the LAST (consensus) dispatch round. A result is a
+// live voter only if it carries an explicit APPROVE/BLOCK/REJECT verdict; UNAVAIL,
+// FLAG_TRUNCATED, error, and empty results are non-votes and excluded.
 function countLiveSlotWorkers(currentTurnLines) {
   let liveCount = 0;
   for (const result of getLastDispatchRoundResults(currentTurnLines)) {
@@ -1007,6 +1005,29 @@ function main() {
           process.exit(0);
         }
 
+        // CE-2 BLOCK-is-absolute backstop — checked BEFORE the floor so an unresolved
+        // BLOCK/REJECT in the consensus (last) round reports the accurate "consensus not
+        // reached" reason even when live voters are also below the floor (a lone BLOCK is
+        // a dissent, not merely a thin roster). A single dissenting voter prevents the
+        // output from shipping; this is the mechanical backstop for a buggy/over-eager
+        // orchestrator that ignores a BLOCK. Unconditional — not waivable by --force-quorum.
+        if (detectUnresolvedBlock(currentTurnLines)) {
+          appendConformanceEvent({
+            ts:              new Date().toISOString(),
+            phase:           'DECIDING',
+            action:          'consensus_block',
+            outcome:         'BLOCK',
+            reason:          'unresolved BLOCK/REJECT in consensus round',
+            schema_version,
+          });
+          process.stdout.write(JSON.stringify({
+            decision: 'block',
+            reason: 'QUORUM CONSENSUS NOT REACHED: a BLOCK/REJECT verdict is unresolved in the final dispatch round. ' +
+              'BLOCK is absolute (CE-2) — deliberate to resolve the objection (provide its rationale to all voters and re-dispatch), do not override it.'
+          }));
+          process.exit(0);
+        }
+
         // MIN_LIVE_VOTERS floor (issue #170)
         const minLiveVoters = getMinLiveVoters(config);
         const liveSlotWorkers = countLiveSlotWorkers(currentTurnLines);
@@ -1024,27 +1045,6 @@ function main() {
             decision: 'block',
             reason: 'QUORUM FLOOR NOT MET: Only ' + liveSlotWorkers + ' live voter(s) (min_live_voters = ' + minLiveVoters + '). ' +
               'Too many slots are UNAVAIL for reliable consensus. Re-dispatch with extended timeouts, or re-run with --force-quorum to waive.'
-          }));
-          process.exit(0);
-        }
-
-        // CE-2 BLOCK-is-absolute backstop: even with the floor met, an unresolved
-        // BLOCK/REJECT in the consensus round means consensus was NOT reached — a single
-        // dissenting voter prevents the output from shipping. This is the mechanical
-        // backstop for a buggy/over-eager orchestrator that ignores a BLOCK.
-        if (detectUnresolvedBlock(currentTurnLines)) {
-          appendConformanceEvent({
-            ts:              new Date().toISOString(),
-            phase:           'DECIDING',
-            action:          'consensus_block',
-            outcome:         'BLOCK',
-            reason:          'unresolved BLOCK/REJECT in consensus round',
-            schema_version,
-          });
-          process.stdout.write(JSON.stringify({
-            decision: 'block',
-            reason: 'QUORUM CONSENSUS NOT REACHED: a BLOCK/REJECT verdict is unresolved in the final dispatch round. ' +
-              'BLOCK is absolute (CE-2) — deliberate to resolve the objection (provide its rationale to all voters and re-dispatch), do not override it.'
           }));
           process.exit(0);
         }

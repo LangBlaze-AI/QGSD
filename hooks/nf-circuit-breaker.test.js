@@ -1646,12 +1646,12 @@ function writeBreakerConfig(repoDir, overrides) {
   return statePath;
 }
 
-// CB-ADV01 (MISSED OSCILLATION): an equal-length A→B→A value flip — the canonical
-// "agent toggles a constant back and forth" loop — is NOT detected because the
-// reversion heuristic requires at least one strictly net-negative pair
-// (hasNegativePair). Pure substitutions are net-zero, so a real toggle loop with
-// equal-length states slips through. A correct breaker MUST flag this.
-test('CB-ADV01: equal-length A→B→A value-flip oscillation is MISSED (no negative pair)', () => {
+// CB-ADV01 (was MISSED, now CAUGHT): an equal-length A→B→A value flip — the canonical
+// "agent toggles a constant back and forth" loop. The old reversion heuristic required a
+// net-negative pair (hasNegativePair); pure substitutions are net-zero, so a real toggle
+// with equal-length states slipped through. FIXED by the byte-level content-reversion
+// signal; EXPECTED: PASSES (the breaker now flags it). Regression guard for the miss.
+test('CB-ADV01: equal-length A→B→A value-flip oscillation is caught (content reversion)', () => {
   const repoDir = createTempGitRepo();
   try {
     // app.js: "on" → (filler) → "off" → (filler) → "on"  (3 run-groups for app.js)
@@ -1685,11 +1685,11 @@ test('CB-ADV01: equal-length A→B→A value-flip oscillation is MISSED (no nega
   }
 });
 
-// CB-ADV02 (MISSED OSCILLATION, sustained): even a sustained 4-group equal-length
-// toggle (A→B→A→B, 3 full cycles) — exactly the runaway loop a circuit breaker
-// exists to stop — is missed for the same hasNegativePair reason. Cycle count is
-// not the gate here; the net-zero substitution heuristic is.
-test('CB-ADV02: sustained equal-length toggle (A→B→A→B) is MISSED despite 3 cycles', () => {
+// CB-ADV02 (was MISSED, now CAUGHT, sustained): a sustained 4-group equal-length toggle
+// (A→B→A→B, 3 full cycles) — exactly the runaway loop a circuit breaker exists to stop —
+// was missed for the same net-zero/hasNegativePair reason. FIXED by the content-reversion
+// signal; EXPECTED: PASSES. Regression guard for the sustained-toggle miss.
+test('CB-ADV02: sustained equal-length toggle (A→B→A→B) is caught despite net-zero pairs', () => {
   const repoDir = createTempGitRepo();
   try {
     commitInRepo(repoDir, 'app.js', 'x = 1\n', 'feat: x=1');
