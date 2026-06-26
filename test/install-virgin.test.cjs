@@ -154,7 +154,9 @@ describe('virgin install: claude', () => {
     // Regression: nf-session-start was registered before the migration AND listed
     // in OLD_HOOK_MAP.SessionStart, so it was stripped on every install — silently
     // disabling SessionStart (incl. #272's post-compaction continuation injection).
-    const parsed = JSON.parse(readIfExists(path.join(tmpDir, 'settings.json')));
+    const content = readIfExists(path.join(tmpDir, 'settings.json'));
+    assert.ok(content, 'settings.json must exist');
+    const parsed = JSON.parse(content);
     const ssCommands = (parsed.hooks.SessionStart || [])
       .flatMap(g => (g.hooks || []).map(h => h.command || ''));
     assert.ok(
