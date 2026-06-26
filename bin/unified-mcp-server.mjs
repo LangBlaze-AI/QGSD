@@ -723,7 +723,16 @@ async function runDeepHealthCheck(provider) {
 
   // Step 3: Run the actual inference probe
   const startTime = Date.now();
-  const probeTemplate = resolveArgsTemplate(provider) || [];
+  // Resolve args_template (explicit field → canonical family default). A null here
+  // (unknown family, no template) must report unhealthy with a clear config error —
+  // probing with empty argv would send no prompt and could read as a false success.
+  const probeTemplate = resolveArgsTemplate(provider);
+  if (!Array.isArray(probeTemplate)) {
+    return JSON.stringify({
+      healthy: false, latencyMs: 0, layer: 'CONFIG',
+      error: `provider ${provider.name || '(unnamed)'} has no args_template and family '${provider.mainTool || '?'}' has no canonical default — fix providers.json`,
+    });
+  }
   const probeArgs = probeTemplate.map(a => a === '{prompt}' ? probe.prompt : a);
   const output = await runSubprocessWithArgs(provider, probeArgs, timeoutMs);
   const latencyMs = Date.now() - startTime;

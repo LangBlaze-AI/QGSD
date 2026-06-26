@@ -185,7 +185,17 @@ async function probeProvider(provider, quick) {
 
   // Deep probe: send actual prompt, check for PROBE_OK in output
   const probe = provider.deep_probe ?? { prompt: 'respond with: PROBE_OK', expect: 'PROBE_OK', timeout_ms: 45000 };
-  const args  = (resolveArgsTemplate(provider) || []).map(a => (a === '{prompt}' ? probe.prompt : a));
+  // Resolve the args_template (explicit field → canonical family default). A null
+  // here means an unknown family with no template — report MISCONFIGURED explicitly
+  // rather than probing with empty argv (which would mask the config error).
+  const argsTemplate = resolveArgsTemplate(provider);
+  if (!Array.isArray(argsTemplate)) {
+    return {
+      slot: name, status: 'MISCONFIGURED', version: null, latencyMs: 0,
+      detail: `no args_template and family '${provider.mainTool || '?'}' has no canonical default — fix providers.json`,
+    };
+  }
+  const args  = argsTemplate.map(a => (a === '{prompt}' ? probe.prompt : a));
   const result = await runCommand(spawnTarget, args, probe.timeout_ms, provider.env);
   const combined = result.output;
 

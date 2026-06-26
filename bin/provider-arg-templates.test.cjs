@@ -36,6 +36,14 @@ describe('provider-arg-templates: canonical map', () => {
     assert.ok(!argsTemplateFor('gemini').includes('MUTATED'), 'must return a defensive copy');
     assert.equal(argsTemplateFor('nope'), null);
   });
+
+  it('IDE runtimes (kilo/cursor/windsurf/augment/trae/cline) have NO canonical template', () => {
+    // install.js admits these as KNOWN_CLI_PREFIXES but they are not quorum CLIs;
+    // they must NOT get a guessed `-p {prompt}` template (CodeRabbit #275).
+    for (const ide of ['kilo', 'cursor', 'windsurf', 'augment', 'trae', 'cline']) {
+      assert.equal(argsTemplateFor(ide), null, `${ide} must have no canonical template`);
+    }
+  });
 });
 
 describe('resolveArgsTemplate: resolution order', () => {

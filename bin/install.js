@@ -633,15 +633,21 @@ function ensureMcpSlotsFromProviders() {
               mainTool,
               display_type: mainTool + '-cli',
               display_provider: mainTool.charAt(0).toUpperCase() + mainTool.slice(1),
-              // ARGS-TEMPLATE-01: emit the canonical per-family invocation template so
-              // call-quorum-slot / unified-mcp-server don't crash on a missing field.
-              args_template: argsTemplateFor(mainTool) || ['-p', '{prompt}'],
             };
-            // antigravity's family name ≠ its binary (`agy`); record the resolved
-            // binary so spawn targets `agy`, not a non-existent `antigravity`.
+            // ARGS-TEMPLATE-01: emit the canonical per-family invocation template so
+            // call-quorum-slot / unified-mcp-server don't crash on a missing field.
+            // Only for families with a KNOWN template — KNOWN_CLI_PREFIXES also admits
+            // IDE runtimes (kilo/cursor/windsurf/augment/trae/cline) that are NOT quorum
+            // CLIs; writing a guessed `-p {prompt}` for those would be wrong. Leave the
+            // field absent for unknown families so the consumer fail-loud contract applies.
+            const _tmpl = argsTemplateFor(mainTool);
+            if (_tmpl) base.args_template = _tmpl;
+            // antigravity's family name ≠ its binary (`agy`); record the resolved binary
+            // so spawn targets `agy`, never a non-existent `antigravity`. Persist it even
+            // when resolution falls back to bare `agy` (better an explicit ENOENT on `agy`
+            // than silently spawning the wrong mainTool).
             if (mainTool === 'antigravity' && !base.cli) {
-              const _agy = resolveCli('agy');
-              if (_agy !== 'agy') base.cli = _agy;
+              base.cli = resolveCli('agy');
             }
             const existing = existingByName.get(slotName);
             // Overlay existing on top of base (preserves Daintree metadata, env, etc.)
@@ -678,7 +684,9 @@ function ensureMcpSlotsFromProviders() {
                 cli: resolved,
                 display_type: family + '-cli',
                 display_provider: family.charAt(0).toUpperCase() + family.slice(1),
-                args_template: argsTemplateFor(family) || ['-p', '{prompt}'],
+                // All Step-2 families have a canonical template; argsTemplateFor is
+                // authoritative (no guessed fallback).
+                args_template: argsTemplateFor(family),
               });
             }
           }
