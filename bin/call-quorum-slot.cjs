@@ -440,6 +440,16 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
       `(run install or /nf:mcp-setup), or add an args_template to this slot.`
     );
   }
+  // The prompt is delivered exclusively through a {prompt} placeholder (no slot uses
+  // stdin). An empty template or one lacking the placeholder would silently drop the
+  // prompt — the CLI runs with flags but no question. Fail LOUD instead, matching the
+  // missing-args_template contract above.
+  if (!useStdinPrompt && !argsTemplate.some(a => typeof a === 'string' && a.includes('{prompt}'))) {
+    throw new Error(
+      `provider ${provider.name || '(unnamed)'} args_template has no {prompt} placeholder ` +
+      `(${JSON.stringify(argsTemplate)}) — the prompt would be silently dropped; fix providers.json.`
+    );
+  }
   // Substitute the {prompt} placeholder. Handle both a bare element (`'{prompt}'`)
   // AND an embedded form (`'--prompt={prompt}'`), and replace every occurrence —
   // exact-equality-only substitution silently shipped a literal `{prompt}` to the CLI.

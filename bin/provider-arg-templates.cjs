@@ -58,7 +58,9 @@ function argsTemplateFor(mainTool) {
  * @returns {string[]|null}
  */
 function resolveArgsTemplate(provider) {
-  if (provider && Array.isArray(provider.args_template)) return provider.args_template;
+  // Return a defensive COPY (like argsTemplateFor) so a caller mutating the result
+  // can't corrupt the provider's stored args_template for later dispatches.
+  if (provider && Array.isArray(provider.args_template)) return provider.args_template.slice();
   if (provider && provider.mainTool) return argsTemplateFor(provider.mainTool);
   return null;
 }

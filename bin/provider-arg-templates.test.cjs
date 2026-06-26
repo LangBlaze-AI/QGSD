@@ -120,3 +120,57 @@ describe('ADVERSARIAL: provider-arg-templates + buildSpawnArgs edge cases', () =
     assert.equal(args[0], '--prompt=HELLO', 'embedded {prompt} token must be substituted');
   });
 });
+
+// ─── ADVERSARIAL round 2: silent prompt-drop + reference aliasing ─────────────
+describe('ADVERSARIAL round 2: silent prompt-drop + template aliasing', () => {
+  it('buildSpawnArgs does NOT silently drop the prompt when args_template is an empty array []', () => {
+    // resolveArgsTemplate accepts [] (it IS an Array, so the shape guard passes), then
+    // buildSpawnArgs maps it to [] and returns an EMPTY argv — the prompt vanishes and
+    // the CLI is spawned with no input at all. There is no guard that the resolved
+    // template actually carries a {prompt} slot, so the slot runs the model against an
+    // empty prompt instead of failing LOUD the way an unknown family does. A malformed
+    // providers.json with `args_template: []` is exactly the ARGS-TEMPLATE-01 failure
+    // class (auto-generated bad templates) — it should not silently mis-dispatch.
+    // Fix chose the loud-failure path (which this test's own comment endorses): an
+    // empty template can't carry the prompt, so dispatch throws a clear config error
+    // rather than spawning the CLI with an empty argv. Safer than guessing where to
+    // append the prompt.
+    assert.throws(
+      () => buildSpawnArgs({ name: 'gemini-1', mainTool: 'gemini', args_template: [] }, 'PAYLOAD'),
+      /no \{prompt\} placeholder/,
+      'an empty args_template must fail loud, not silently drop the prompt'
+    );
+  });
+
+  it('buildSpawnArgs does NOT silently drop the prompt when args_template has no {prompt} placeholder', () => {
+    // A provider that forgets the {prompt} token (e.g. a typo'd ['-p'] template) is
+    // mapped verbatim — nothing matches `.includes('{prompt}')`, so the prompt is never
+    // substituted in. The CLI is invoked with flags but NO actual question. Exact-token
+    // substitution means a missing placeholder is completely undetected; the model
+    // answers an empty prompt and the verdict telemetry records garbage.
+    // Loud-failure path (per the test's own comment): a template lacking {prompt}
+    // can't deliver the prompt, so dispatch throws rather than invoking the CLI with
+    // flags but no question.
+    assert.throws(
+      () => buildSpawnArgs({ name: 'gemini-1', mainTool: 'gemini', args_template: ['-p'] }, 'PAYLOAD'),
+      /no \{prompt\} placeholder/,
+      'a template missing {prompt} must fail loud, not silently drop the prompt'
+    );
+  });
+
+  it('resolveArgsTemplate returns a defensive COPY of an explicit args_template, not the provider\'s own array by reference', () => {
+    // argsTemplateFor() returns `t.slice()` (round-1 locked this in), but the explicit
+    // branch of resolveArgsTemplate returns `provider.args_template` DIRECTLY. A caller
+    // that mutates the returned array (e.g. an EXEC-01 --allowedTools splice, or any
+    // consumer in unified-mcp-server / probe-quorum-slots) corrupts the provider's
+    // STORED template for every subsequent dispatch in the same process — an
+    // inconsistent, unsafe aliasing gap relative to argsTemplateFor.
+    const p = { mainTool: 'gemini', args_template: ['-p', '{prompt}'] };
+    const returned = resolveArgsTemplate(p);
+    returned.push('MUTATED');
+    assert.ok(
+      !p.args_template.includes('MUTATED'),
+      'resolveArgsTemplate must not expose the provider\'s stored template by reference'
+    );
+  });
+});

@@ -68,4 +68,27 @@ describe('ADVERSARIAL: parseVerdictLine edge cases', () => {
     // Sanity guard the multiline anchor + case-insensitivity actually work together.
     assert.equal(parseVerdictLine('here is my reasoning\nVerdict: reject\n(done)'), 'REJECT');
   });
+
+  // ─── ADVERSARIAL round 2 ────────────────────────────────────────────────────
+  it('extracts APPROVE from "verdict: APPROVE BUT WITH CONCERNS" (trailing prose after the keyword)', () => {
+    // The keyword sits immediately after `verdict:`; the \b boundary before the
+    // following space lets trailing prose ("BUT WITH CONCERNS") follow without
+    // breaking the capture. Confirms a hedged-but-on-protocol verdict still records.
+    assert.equal(parseVerdictLine('verdict: APPROVE BUT WITH CONCERNS'), 'APPROVE');
+  });
+
+  it('does NOT false-match REJECT inside "verdict: REJECTED" — the \\b boundary rejects an off-protocol suffix', () => {
+    // REJECTED is off the APPROVE|REJECT|FLAG protocol. The trailing \b after REJECT
+    // sees T→E (two word chars, no boundary), so the capture fails and the parser
+    // returns null rather than silently coercing a partial match to REJECT. This
+    // invariant-confirms the boundary anchor isn't leaking longer words into telemetry.
+    assert.equal(parseVerdictLine('verdict: REJECTED'), null);
+  });
+
+  it('extracts a verdict across a CRLF (\\r\\n) line ending without the \\r leaking into the keyword', () => {
+    // LLM output piped through Windows-ish tooling can carry CRLFs. The multiline ^
+    // must re-anchor after \n and a trailing \r must not corrupt the captured keyword
+    // (a \r immediately after APPROVE is non-word, so \b still holds).
+    assert.equal(parseVerdictLine('reasoning here\r\nverdict: APPROVE\r\nnext line'), 'APPROVE');
+  });
 });
