@@ -25,6 +25,7 @@ const os         = require('os');
 const { resolveSpawnTarget } = require('./resolve-cli.cjs');
 const { resolveEnvPlaceholders } = require('./resolve-env.cjs');
 const { loadProviders } = require('./resolve-providers.cjs');
+const { resolveArgsTemplate } = require('./provider-arg-templates.cjs');
 
 // ─── Find providers.json ─────────────────────────────────────────────────────
 // Delegates to the single source of truth in resolve-providers.cjs (issue #197).
@@ -51,8 +52,18 @@ function probeSlot(provider, timeoutMs, spawnCwd) {
   return new Promise((resolve) => {
     const start = Date.now();
 
-    // Replace {prompt} with the minimal probe string
-    const args = provider.args_template.map(a => (a === '{prompt}' ? 'OK' : a));
+    // Replace {prompt} with the minimal probe string. Use the canonical per-family
+    // template when the entry lacks args_template; if NEITHER resolves (unknown
+    // family), report an explicit config error rather than probing with empty argv
+    // (which would dispatch no prompt and read as a false success/usage banner).
+    const argsTemplate = resolveArgsTemplate(provider);
+    if (!Array.isArray(argsTemplate)) {
+      return resolve({
+        slot: provider.name, healthy: false, latencyMs: Date.now() - start,
+        error: `no args_template and family '${provider.mainTool || '?'}' has no canonical default — fix providers.json`,
+      });
+    }
+    const args = argsTemplate.map(a => (a === '{prompt}' ? 'OK' : a));
     // Resolve ${VAR} placeholders in provider.env (issue parity with
     // call-quorum-slot.cjs:462 / unified-mcp-server.mjs) — a secret-placeholder
     // slot was previously probed with an UNRESOLVED env and false-failed.

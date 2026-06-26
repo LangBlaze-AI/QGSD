@@ -612,6 +612,8 @@ function ensureMcpSlotsFromProviders() {
           // Step 1: Sync slots from ~/.claude.json (fan-out creates MCP entries here)
           // Only include slots whose prefix is a known coding agent CLI.
           const KNOWN_CLI_PREFIXES = ['claude', 'codex', 'gemini', 'opencode', 'copilot', 'kilo', 'cursor', 'windsurf', 'antigravity', 'augment', 'trae', 'cline'];
+          const { resolveCli } = require('./resolve-cli.cjs');
+          const { argsTemplateFor } = require('./provider-arg-templates.cjs');
           const claudeJsonPath = path.join(os.homedir(), '.claude.json');
           const claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8'));
           const mcpSlots = Object.keys(claudeJson.mcpServers || {}).filter(name =>
@@ -632,6 +634,21 @@ function ensureMcpSlotsFromProviders() {
               display_type: mainTool + '-cli',
               display_provider: mainTool.charAt(0).toUpperCase() + mainTool.slice(1),
             };
+            // ARGS-TEMPLATE-01: emit the canonical per-family invocation template so
+            // call-quorum-slot / unified-mcp-server don't crash on a missing field.
+            // Only for families with a KNOWN template — KNOWN_CLI_PREFIXES also admits
+            // IDE runtimes (kilo/cursor/windsurf/augment/trae/cline) that are NOT quorum
+            // CLIs; writing a guessed `-p {prompt}` for those would be wrong. Leave the
+            // field absent for unknown families so the consumer fail-loud contract applies.
+            const _tmpl = argsTemplateFor(mainTool);
+            if (_tmpl) base.args_template = _tmpl;
+            // antigravity's family name ≠ its binary (`agy`); record the resolved binary
+            // so spawn targets `agy`, never a non-existent `antigravity`. Persist it even
+            // when resolution falls back to bare `agy` (better an explicit ENOENT on `agy`
+            // than silently spawning the wrong mainTool).
+            if (mainTool === 'antigravity' && !base.cli) {
+              base.cli = resolveCli('agy');
+            }
             const existing = existingByName.get(slotName);
             // Overlay existing on top of base (preserves Daintree metadata, env, etc.)
             // BUT force `name` and `mainTool` from the base (slot-name-derived). Otherwise
@@ -641,23 +658,35 @@ function ensureMcpSlotsFromProviders() {
               ? { ...base, ...existing, name: base.name, mainTool: base.mainTool }
               : base);
           }
-          // Step 2: Also add PATH-detected CLIs that aren't already in ~/.claude.json
-          const { resolveCli } = require('./resolve-cli.cjs');
-          const KNOWN_CLIS = ['claude', 'codex', 'gemini', 'opencode', 'copilot'];
+          // Step 2: Also add PATH-detected CLIs that aren't already in ~/.claude.json.
+          // Each family's binary name usually matches the family, except antigravity
+          // (family `antigravity` ships the `agy` binary) — so resolve by binary but
+          // record the family name + its canonical args_template.
+          const KNOWN_CLIS = [
+            { family: 'claude',      bin: 'claude' },
+            { family: 'codex',       bin: 'codex' },
+            { family: 'gemini',      bin: 'gemini' },
+            { family: 'opencode',    bin: 'opencode' },
+            { family: 'copilot',     bin: 'copilot' },
+            { family: 'antigravity', bin: 'agy' },
+          ];
           const existingNames = new Set(mcpSlots);
-          for (const name of KNOWN_CLIS) {
-            if (existingNames.has(name + '-1')) continue; // Already covered by step 1
-            const resolved = resolveCli(name);
-            if (resolved !== name) {
+          for (const { family, bin } of KNOWN_CLIS) {
+            if (existingNames.has(family + '-1')) continue; // Already covered by step 1
+            const resolved = resolveCli(bin);
+            if (resolved !== bin) {
               merged.providers.push({
-                name: name + '-1',
+                name: family + '-1',
                 provider: 'auto-detected',
                 type: 'subprocess',
-                description: `Auto-detected ${name} on PATH`,
-                mainTool: name,
+                description: `Auto-detected ${family} on PATH`,
+                mainTool: family,
                 cli: resolved,
-                display_type: name + '-cli',
-                display_provider: name.charAt(0).toUpperCase() + name.slice(1),
+                display_type: family + '-cli',
+                display_provider: family.charAt(0).toUpperCase() + family.slice(1),
+                // All Step-2 families have a canonical template; argsTemplateFor is
+                // authoritative (no guessed fallback).
+                args_template: argsTemplateFor(family),
               });
             }
           }
@@ -3181,12 +3210,19 @@ function install(isGlobal, runtime = 'claude') {
     // ── MIGRATION: remove old nf-* hook entries ─────────────────────────
     // Old installs registered hooks as nf-prompt.js, nf-stop.js, nf-circuit-breaker.js.
     // Remove them so the nf-* replacements below can register cleanly.
+    // These map an event to OLD/renamed hook names whose stale registrations must
+    // be stripped. The matching CURRENT hooks (nf-prompt, nf-stop, …) are
+    // re-registered AFTER this migration, so removing them here is harmless.
+    // nf-session-start is the EXCEPTION: it is registered ABOVE (before this
+    // migration) and never re-added after, so listing it here removed the live
+    // hook on every install — silently disabling SessionStart (incl. the
+    // post-compaction continuation injection). It is NOT an old name; do not list it.
     const OLD_HOOK_MAP = {
       UserPromptSubmit: 'nf-prompt',
       Stop: 'nf-stop',
       PreToolUse: 'nf-circuit-breaker',
       PostToolUse: ['nf-spec-regen', 'nf-context-monitor', 'nf-context-monitor'],
-      SessionStart: ['nf-check-update', 'nf-session-start'],
+      SessionStart: ['nf-check-update'],
     };
     for (const [event, oldNames] of Object.entries(OLD_HOOK_MAP)) {
       if (settings.hooks[event]) {
