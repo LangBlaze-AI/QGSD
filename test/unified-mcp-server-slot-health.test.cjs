@@ -279,3 +279,116 @@ test('args_template fallback: known family dispatches (#275); unknown family ret
   assert.match(textOf(probeOut.cfgErr), /args_template/i, 'config error must name the missing args_template');
   assert.match(textOf(probeOut.alive), /still-here/, 'server must survive the config error');
 });
+
+// ─── Round 2: convergence-confirmation probes ─────────────────────────────────
+// Round 1 covered malformed-json / unknown-tool / missing-args / unknown-slot /
+// missing-cli. These exercise three paths round 1 never reached: the child-exit
+// close handler (non-zero exit + stderr-only-exit-0), env-secret non-leakage, and
+// deep_health_check with no deep_probe config. Each fails on a REAL defect — a
+// mid-exchange server exit is a crash; a hang trips driveServer's timeout.
+
+// A 'gemini'-family slot whose CLI is the node binary. mainTool='gemini' HAS a
+// canonical args_template ['-p','{prompt}'], so dispatch runs `node -p '<prompt>'`
+// — letting a test choose the child's stdout/stderr/exit-code from the prompt.
+const GEMINI_NODE_SLOT = {
+  name: 'gemini-1', provider: 'test', type: 'subprocess',
+  mainTool: 'gemini', cli: process.execPath,
+  display_type: 'gemini-cli', display_provider: 'Gemini',
+};
+
+test('subprocess exit non-zero AND stderr-only-exit-0 both return clean frames; server stays alive', async () => {
+  const providersPath = writeProviders([GEMINI_NODE_SLOT]);
+  const out = await driveServer(
+    { PROVIDER_SLOT: 'gemini-1', UNIFIED_PROVIDERS_CONFIG: providersPath },
+    {
+      afterInit: async ({ sendObj, waitForId }) => {
+        // (a) child writes to stderr then exits NON-ZERO. The close handler must
+        //     surface stderr as text + an [exit code N] note, isError:false, no crash.
+        sendObj({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: {
+          name: 'gemini',
+          arguments: { prompt: "process.stderr.write('BOOM_STDERR');process.exit(3)" },
+        } });
+        const nonZero = await waitForId(5);
+        // (b) child writes ONLY to stderr but exits 0 → stderr surfaces as the output
+        //     (stdout||stderr fallback), isError:false, and NO [exit code] note.
+        sendObj({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: {
+          name: 'gemini',
+          arguments: { prompt: "process.stderr.write('WARN_ONLY');process.exit(0)" },
+        } });
+        const stderrOk = await waitForId(6);
+        // (c) server must still answer after both subprocess exits.
+        sendObj({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'ping', arguments: { prompt: 'still-alive' } } });
+        const alive = await waitForId(7);
+        return { nonZero, stderrOk, alive };
+      },
+    }
+  );
+  // Non-zero exit: clean frame, NOT a JSON-RPC error, carries stderr + exit note.
+  assert.equal(out.nonZero.result?.isError ?? false, false, 'non-zero exit must be a clean result frame, not isError');
+  assert.match(textOf(out.nonZero), /BOOM_STDERR/, 'stderr of a failing child must be surfaced');
+  assert.match(textOf(out.nonZero), /\[exit code 3\]/, 'non-zero exit must append the [exit code N] note');
+  // stderr-only, exit 0: surfaced as output, no exit-code note.
+  assert.equal(out.stderrOk.result?.isError ?? false, false, 'stderr-with-exit-0 must not be an error');
+  assert.match(textOf(out.stderrOk), /WARN_ONLY/, 'stderr must be the output when stdout is empty');
+  assert.ok(!/\[exit code/.test(textOf(out.stderrOk)), 'exit-0 must NOT append an [exit code] note');
+  // Survival proof — a crash on either prior call would have rejected via child exit.
+  assert.match(textOf(out.alive), /still-alive/, 'server must survive both child exits');
+});
+
+test('slot env secrets are NEVER echoed into identity/ping/health_check responses (no leak)', async () => {
+  const CANARY = 'sk-leak-canary-DEADBEEF-0xC0FFEE';
+  // Literal (non-${...}) env value: passed straight into the child env, must never
+  // reflect back into any tool response. Uses the node-cli probe slot (health_check
+  // runs `node --version`, which does not echo its environment).
+  const providersPath = writeProviders([{
+    ...PROBE_SLOT,
+    env: { ANTHROPIC_AUTH_TOKEN: CANARY, ANTHROPIC_API_KEY: CANARY },
+  }]);
+  const out = await driveServer(
+    { PROVIDER_SLOT: 'probe-1', UNIFIED_PROVIDERS_CONFIG: providersPath },
+    {
+      afterInit: async ({ sendObj, waitForId }) => {
+        sendObj({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'identity', arguments: {} } });
+        const identity = await waitForId(5);
+        sendObj({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'health_check', arguments: {} } });
+        const health = await waitForId(6);
+        sendObj({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'ping', arguments: { prompt: 'hello' } } });
+        const ping = await waitForId(7);
+        return { identity, health, ping };
+      },
+    }
+  );
+  // Scan whole frames (text AND any envelope field) — secret must appear nowhere.
+  for (const [label, frame] of Object.entries(out)) {
+    const blob = JSON.stringify(frame);
+    assert.ok(!blob.includes(CANARY), `secret leaked into ${label} response: ${blob.slice(0, 300)}`);
+  }
+  // Sanity: identity still returned its documented shape (proves the calls ran).
+  const idJson = JSON.parse(textOf(out.identity));
+  assert.equal(idJson.name, 'unified-mcp-server', 'identity must carry documented name field');
+  assert.equal(idJson.slot, 'probe-1', 'identity must carry the slot name');
+});
+
+test('deep_health_check on a slot with NO deep_probe config returns a clean error frame (no crash/hang)', async () => {
+  // PROBE_SLOT has no deep_probe; runDeepHealthCheck must short-circuit to a clean
+  // { healthy:false, layer:'BINARY_MISSING', error:'No deep_probe config' } result —
+  // not throw, not hang, and not block subsequent requests.
+  const providersPath = writeProviders([PROBE_SLOT]);
+  const out = await driveServer(
+    { PROVIDER_SLOT: 'probe-1', UNIFIED_PROVIDERS_CONFIG: providersPath },
+    {
+      afterInit: async ({ sendObj, waitForId }) => {
+        sendObj({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'deep_health_check', arguments: {} } });
+        const deep = await waitForId(5);
+        sendObj({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'ping', arguments: { prompt: 'alive' } } });
+        const alive = await waitForId(6);
+        return { deep, alive };
+      },
+    }
+  );
+  assert.equal(out.deep.result?.isError ?? false, false, 'missing deep_probe must be a clean result, not isError/crash');
+  const parsed = JSON.parse(textOf(out.deep));
+  assert.equal(parsed.healthy, false, 'no deep_probe → healthy:false');
+  assert.match(parsed.error, /No deep_probe config/i, 'must name the missing deep_probe config');
+  assert.match(textOf(out.alive), /alive/, 'server must survive a deep_health_check with no probe config');
+});

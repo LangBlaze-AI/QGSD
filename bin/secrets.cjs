@@ -142,7 +142,10 @@ async function syncToClaudeJson(_service) {
                  (keyServerCount[envKey] === 1 || isFillable(server.env[envKey]))) {
         value = credMap[envKey];
       }
-      if (value !== undefined) {
+      // Only write (and count) when the value actually changes — keeps sync
+      // idempotent so an unchanged ~/.claude.json isn't rewritten on every session
+      // start (avoids needless mtime churn / file-watcher wakeups / concurrent-sync races).
+      if (value !== undefined && server.env[envKey] !== value) {
         server.env[envKey] = value;
         patched++;
       }

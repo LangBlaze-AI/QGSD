@@ -862,10 +862,13 @@ function buildModeBPrompt({ round, repoDir, question, traces, artifactPath, arti
     lines.push(`\u26a0 REVIEW CONTEXT: ${reviewContext}`);
   }
 
-  // Execution traces (always present in Mode B)
+  // Execution traces (always present in Mode B). Trace output is attacker-influenceable
+  // (a test under review can print arbitrary text), so neutralize delimiter-shaped lines
+  // — same injection class as artifactContent — to stop a fake `=== APPLICABLE
+  // REQUIREMENTS ===` / duplicate `=== EXECUTION TRACES ===` from spoofing a real section.
   lines.push('');
   lines.push('=== EXECUTION TRACES ===');
-  lines.push(traces || '');
+  lines.push(neutralizeArtifactDelimiters(traces || ''));
 
   // Prior positions (Round 2+)
   if (round >= 2 && priorPositions) {

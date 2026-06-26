@@ -284,3 +284,64 @@ test('SECURITY: resolveSinglePlaceholder does NOT re-expand a resolved value con
     delete process.env._NF_SEC_INNER;
   }
 });
+
+// --- ROUND 2: BROADENED SECRET_KEY_RE over-match (false-positive) guard ------
+// Round 1 broadened SECRET_KEY_RE to /(api_?key|auth_?token|access_?key|secret|
+// password|passwd|token|key|credential)$/i to stop false-NEGATIVE leaks. The
+// adversarial inverse risk: a broadened, suffix-anchored regex could now
+// OVER-match a non-secret provider CONFIG key. If isSecretKey wrongly returns
+// true for a config value, maskSecrets rewrites that concrete config value into
+// a ${PLACEHOLDER}; at dispatch time resolveEnvPlaceholders can't find an env
+// var of that name → the config value is LOST and dispatch breaks (base URL /
+// model / timeout silently blanked). The two highest-risk boundaries are
+// `token$` vs the real config key `MAX_TOKENS`/`MAX_THINKING_TOKENS` (plural →
+// must NOT match) and `key$` vs config keys that merely contain "key".
+// This is an INVARIANT: all real nForma provider config keys must be non-secret.
+
+test('SECURITY: SECRET_KEY_RE does NOT over-match real provider config keys (false-positive would placeholder config and break dispatch)', () => {
+  const realConfigKeys = [
+    'ANTHROPIC_BASE_URL',
+    'ANTHROPIC_DEFAULT_OPUS_MODEL',
+    'ANTHROPIC_DEFAULT_SONNET_MODEL',
+    'ANTHROPIC_SMALL_FAST_MODEL',
+    'ANTHROPIC_MODEL',
+    'API_TIMEOUT_MS',
+    'PROVIDER_SLOT',
+    'UNIFIED_PROVIDERS_CONFIG',
+    'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+    'MAX_TOKENS',            // token$ must NOT match the plural "TOKENS"
+    'MAX_THINKING_TOKENS',   // same boundary
+    'MAX_OUTPUT_TOKENS',     // same boundary
+  ];
+  const overMatched = realConfigKeys.filter(isSecretKey);
+  assert.deepEqual(
+    overMatched, [],
+    'these NON-secret config keys were misclassified as secrets and would be placeholdered away: ' + overMatched.join(', ')
+  );
+});
+
+test('SECURITY: real credential-shaped keys are still classified as secrets (no regression from the over-match guard)', () => {
+  // The over-match guard must not have been "fixed" by narrowing the regex back
+  // down — the round-1 false-negative shapes must still be caught.
+  for (const k of ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_KEY',
+                   'AWS_SECRET_ACCESS_KEY', 'OPENAI_SECRET', 'DB_PASSWORD']) {
+    assert.equal(isSecretKey(k), true, k + ' is a credential and must classify as a secret');
+  }
+});
+
+test('SECURITY: maskSecrets leaves a config-only env block byte-identical (does not blank a config value)', () => {
+  // Live consequence of an over-match: maskSecrets is what actually rewrites the
+  // value. A config-only env block must pass through unchanged with zero secrets
+  // extracted — otherwise the dispatcher resolves a now-missing placeholder to
+  // the literal "${...}" string and the provider call is sent with garbage.
+  const env = {
+    ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-4-8',
+    API_TIMEOUT_MS: '600000',
+    MAX_TOKENS: '8192',
+    PROVIDER_SLOT: 'claude-1',
+  };
+  const { masked, secrets } = maskSecrets(env);
+  assert.deepEqual(masked, env, 'config-only env must be returned unchanged');
+  assert.equal(secrets.length, 0, 'no config value should be extracted as a secret');
+});

@@ -900,6 +900,131 @@ test('SECURITY: syncToClaudeJson resolves namespaced (slot__KEY) secrets — the
   );
 });
 
+// ROUND 2 — atomic-write failure must not corrupt ~/.claude.json.
+// syncToClaudeJson writes a tmp file then renames. There is NO try/catch around
+// that write, so if writeFileSync throws (disk full, tmp path unwritable) the
+// call rejects — but the WHOLE point of write-tmp-then-rename is that the live
+// ~/.claude.json (every slot's credentials + config) is never left half-written.
+// We force the tmp write to fail by pre-creating `.claude.json.tmp` as a
+// DIRECTORY (writeFileSync onto a dir → EISDIR), then assert the original file
+// is byte-identical and still parseable. A non-atomic implementation would have
+// truncated/corrupted the real file here. All writes stay inside os.tmpdir().
+test('SECURITY: syncToClaudeJson atomic-write failure must not corrupt or truncate ~/.claude.json', async () => {
+  const tmpDir = makeTmpDir();
+  writeSecrets(tmpDir, { API_KEY: 'new-secret-value' });
+  writeClaudeJson(tmpDir, {
+    mcpServers: { 'srv': { command: 'claude', env: { API_KEY: 'old-but-valid' } } },
+  });
+
+  const claudeJsonPath = path.join(tmpDir, '.claude.json');
+  const original = fs.readFileSync(claudeJsonPath, 'utf8');
+
+  // Booby-trap the atomic-write target so the tmp write throws.
+  fs.mkdirSync(claudeJsonPath + '.tmp', { recursive: true });
+
+  const realHomedir = os.homedir.bind(os);
+  const mod = requireSecretsWithTmpHome(tmpDir);
+  try {
+    // May reject (no try/catch around the write); we only care that the live
+    // file is never corrupted by a failed write.
+    try { await mod.syncToClaudeJson('nforma'); } catch (_) { /* expected */ }
+  } finally {
+    restoreHomedir(realHomedir);
+    clearSecretsCache();
+  }
+
+  const after = fs.readFileSync(claudeJsonPath, 'utf8');
+  assert.equal(after, original, 'live ~/.claude.json must be byte-identical after a failed atomic write');
+  assert.doesNotThrow(() => JSON.parse(after), 'live ~/.claude.json must remain valid JSON after a failed write');
+});
+
+// ROUND 2 — namespaced secret for slot-A must not bleed into sibling slot-B.
+// Round 1 tested two slots that were BOTH namespaced. The adversarial mixed case:
+// only slot-A has a namespaced secret in the store (NO raw env-key entry), while
+// sibling slot-B carries its OWN concrete token under the same shared env-key
+// name. After sync, slot-A must receive its namespaced value, and slot-B must
+// keep its own concrete token — never inherit slot-A's, and never be blanked.
+// A regression that reintroduced a raw fallback, or that mis-scoped the
+// namespaced write, would surface here as a cross-slot credential leak.
+test('SECURITY: a namespaced secret for one slot must not overwrite a sibling slot holding its own concrete token', async () => {
+  const tmpDir = makeTmpDir();
+
+  // Only z-ai is provisioned namespaced. No raw ANTHROPIC_AUTH_TOKEN in the store.
+  writeSecrets(tmpDir, { 'claude-z-ai__ANTHROPIC_AUTH_TOKEN': 'zai-REAL-token-aaa' });
+
+  writeClaudeJson(tmpDir, {
+    mcpServers: {
+      'claude-z-ai':    { command: 'claude', env: { ANTHROPIC_AUTH_TOKEN: '${ANTHROPIC_AUTH_TOKEN}' } },
+      'claude-minimax': { command: 'claude', env: { ANTHROPIC_AUTH_TOKEN: 'minimax-OWN-concrete-zzz' } },
+    },
+  });
+
+  const realHomedir = os.homedir.bind(os);
+  const mod = requireSecretsWithTmpHome(tmpDir);
+  try {
+    await mod.syncToClaudeJson('nforma');
+  } finally {
+    restoreHomedir(realHomedir);
+    clearSecretsCache();
+  }
+
+  const written  = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude.json'), 'utf8'));
+  const zaiTok     = written.mcpServers['claude-z-ai'].env.ANTHROPIC_AUTH_TOKEN;
+  const minimaxTok = written.mcpServers['claude-minimax'].env.ANTHROPIC_AUTH_TOKEN;
+
+  assert.equal(zaiTok, 'zai-REAL-token-aaa', 'z-ai must receive its own namespaced token');
+  assert.equal(
+    minimaxTok, 'minimax-OWN-concrete-zzz',
+    'CREDENTIAL LEAK/CLOBBER: minimax must keep its own concrete token, not inherit z-ai\'s nor be blanked'
+  );
+});
+
+// ROUND 2 — malformed / mismatched credMap accounts must never be misapplied.
+// syncToClaudeJson builds the lookup key as `serverName + '__' + envKey` and does
+// an EXACT match (it never splits the account). Adversarial store contents:
+//   - an account whose env-key half doesn't exist in any server's env,
+//   - a multi-`__` account (a__b__c) that could be mis-split by a naive parser,
+//   - a leading-`__` (empty-slot) account.
+// None of these should crash, and none should be written into the real slot
+// (which carries only an unresolved placeholder and has no matching credential).
+test('SECURITY: malformed/mismatched namespaced accounts are never misapplied and never crash', async () => {
+  const tmpDir = makeTmpDir();
+
+  writeSecrets(tmpDir, {
+    'realslot__SOME_OTHER_KEY': 'wrong-key-value',  // env-key half absent from realslot.env
+    'a__b__c':                  'multi-underscore',  // would mis-split on a naive parser
+    '__ANTHROPIC_AUTH_TOKEN':   'leading-empty-slot',// empty slot half
+    // NOTE: deliberately NO raw 'ANTHROPIC_AUTH_TOKEN' and NO
+    // 'realslot__ANTHROPIC_AUTH_TOKEN' → nothing legitimately matches realslot.
+  });
+
+  writeClaudeJson(tmpDir, {
+    mcpServers: {
+      'realslot': { command: 'claude', env: { ANTHROPIC_AUTH_TOKEN: '${ANTHROPIC_AUTH_TOKEN}' } },
+    },
+  });
+
+  const claudeJsonPath = path.join(tmpDir, '.claude.json');
+  const before = fs.readFileSync(claudeJsonPath, 'utf8');
+
+  const realHomedir = os.homedir.bind(os);
+  const mod = requireSecretsWithTmpHome(tmpDir);
+  try {
+    await assert.doesNotReject(() => mod.syncToClaudeJson('nforma'), 'malformed accounts must not crash sync');
+  } finally {
+    restoreHomedir(realHomedir);
+    clearSecretsCache();
+  }
+
+  const after = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8'));
+  assert.equal(
+    after.mcpServers['realslot'].env.ANTHROPIC_AUTH_TOKEN, '${ANTHROPIC_AUTH_TOKEN}',
+    'no malformed account may be written into realslot — its placeholder must remain untouched'
+  );
+  // Nothing matched → file should not have been rewritten at all.
+  assert.equal(fs.readFileSync(claudeJsonPath, 'utf8'), before, 'unmatched sync must not rewrite claude.json');
+});
+
 test('patchCcrConfigForKey: patches all providers with matching name (case-insensitive)', () => {
   const tmpDir = makeTmpDir();
   const ccrDir = path.join(tmpDir, '.claude-code-router');
@@ -924,4 +1049,34 @@ test('patchCcrConfigForKey: patches all providers with matching name (case-insen
   const out = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   assert.equal(out.providers[0].api_key, 'new-fw', 'Fireworks (title case) should be patched');
   assert.equal(out.providers[1].api_key, 'new-fw', 'FIREWORKS (upper case) should be patched');
+});
+
+// ─── HARDEN: syncToClaudeJson idempotency ────────────────────────────────────
+
+test('SECURITY/perf: syncToClaudeJson is idempotent — a no-change sync does NOT rewrite ~/.claude.json', async () => {
+  // When the env already holds the exact secret value, sync must not rewrite the file
+  // (avoids mtime churn / file-watcher wakeups / concurrent-sync races).
+  const tmpDir = makeTmpDir();
+  writeSecrets(tmpDir, { OPENAI_API_KEY: 'sk-final' });
+  writeClaudeJson(tmpDir, {
+    mcpServers: { only: { command: 'node', env: { OPENAI_API_KEY: 'sk-final' } } },
+  });
+  const claudeJsonPath = path.join(tmpDir, '.claude.json');
+  const realHomedir = os.homedir.bind(os);
+  const mod = requireSecretsWithTmpHome(tmpDir);
+  try {
+    // First sync resolves it (value already equal → no write); capture mtime.
+    await mod.syncToClaudeJson('nforma');
+    const before = fs.statSync(claudeJsonPath).mtimeMs;
+    await new Promise((r) => setTimeout(r, 12));
+    await mod.syncToClaudeJson('nforma');
+    const after = fs.statSync(claudeJsonPath).mtimeMs;
+    assert.equal(after, before, 'an unchanged sync must not rewrite the file');
+    // And the value is still correct.
+    const out = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8'));
+    assert.equal(out.mcpServers.only.env.OPENAI_API_KEY, 'sk-final');
+  } finally {
+    restoreHomedir(realHomedir);
+    clearSecretsCache();
+  }
 });
