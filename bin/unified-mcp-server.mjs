@@ -853,7 +853,11 @@ async function handleSlotToolCall(toolName, toolArgs) {
       return runProvider({ ...slotProvider, args_template: extra.args_template }, toolArgs);
     }
 
-    if (toolName === 'health_check' && slotProvider.health_check_args) {
+    if (toolName === 'health_check') {
+      // health_check is always advertised in tools/list; runSubprocessHealthCheck
+      // defaults to ['--version'] when health_check_args is absent. Gating on the
+      // field made every auto-detected slot (no health_check_args) answer "Unknown
+      // tool" — contradicting the advertised surface. Always handle it.
       return runSubprocessHealthCheck(slotProvider);
     }
 
@@ -869,7 +873,7 @@ async function handleSlotToolCall(toolName, toolArgs) {
     if (toolName === 'ask') {
       return runProvider(slotProvider, toolArgs);
     }
-    if (toolName === 'health_check' && slotProvider.health_check_args) {
+    if (toolName === 'health_check') {
       const result = await runSubprocessHealthCheck(slotProvider);
       // Override type field to 'ccr' for clarity
       try {
