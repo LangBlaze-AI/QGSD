@@ -612,6 +612,8 @@ function ensureMcpSlotsFromProviders() {
           // Step 1: Sync slots from ~/.claude.json (fan-out creates MCP entries here)
           // Only include slots whose prefix is a known coding agent CLI.
           const KNOWN_CLI_PREFIXES = ['claude', 'codex', 'gemini', 'opencode', 'copilot', 'kilo', 'cursor', 'windsurf', 'antigravity', 'augment', 'trae', 'cline'];
+          const { resolveCli } = require('./resolve-cli.cjs');
+          const { argsTemplateFor } = require('./provider-arg-templates.cjs');
           const claudeJsonPath = path.join(os.homedir(), '.claude.json');
           const claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8'));
           const mcpSlots = Object.keys(claudeJson.mcpServers || {}).filter(name =>
@@ -631,7 +633,16 @@ function ensureMcpSlotsFromProviders() {
               mainTool,
               display_type: mainTool + '-cli',
               display_provider: mainTool.charAt(0).toUpperCase() + mainTool.slice(1),
+              // ARGS-TEMPLATE-01: emit the canonical per-family invocation template so
+              // call-quorum-slot / unified-mcp-server don't crash on a missing field.
+              args_template: argsTemplateFor(mainTool) || ['-p', '{prompt}'],
             };
+            // antigravity's family name ≠ its binary (`agy`); record the resolved
+            // binary so spawn targets `agy`, not a non-existent `antigravity`.
+            if (mainTool === 'antigravity' && !base.cli) {
+              const _agy = resolveCli('agy');
+              if (_agy !== 'agy') base.cli = _agy;
+            }
             const existing = existingByName.get(slotName);
             // Overlay existing on top of base (preserves Daintree metadata, env, etc.)
             // BUT force `name` and `mainTool` from the base (slot-name-derived). Otherwise
@@ -641,23 +652,33 @@ function ensureMcpSlotsFromProviders() {
               ? { ...base, ...existing, name: base.name, mainTool: base.mainTool }
               : base);
           }
-          // Step 2: Also add PATH-detected CLIs that aren't already in ~/.claude.json
-          const { resolveCli } = require('./resolve-cli.cjs');
-          const KNOWN_CLIS = ['claude', 'codex', 'gemini', 'opencode', 'copilot'];
+          // Step 2: Also add PATH-detected CLIs that aren't already in ~/.claude.json.
+          // Each family's binary name usually matches the family, except antigravity
+          // (family `antigravity` ships the `agy` binary) — so resolve by binary but
+          // record the family name + its canonical args_template.
+          const KNOWN_CLIS = [
+            { family: 'claude',      bin: 'claude' },
+            { family: 'codex',       bin: 'codex' },
+            { family: 'gemini',      bin: 'gemini' },
+            { family: 'opencode',    bin: 'opencode' },
+            { family: 'copilot',     bin: 'copilot' },
+            { family: 'antigravity', bin: 'agy' },
+          ];
           const existingNames = new Set(mcpSlots);
-          for (const name of KNOWN_CLIS) {
-            if (existingNames.has(name + '-1')) continue; // Already covered by step 1
-            const resolved = resolveCli(name);
-            if (resolved !== name) {
+          for (const { family, bin } of KNOWN_CLIS) {
+            if (existingNames.has(family + '-1')) continue; // Already covered by step 1
+            const resolved = resolveCli(bin);
+            if (resolved !== bin) {
               merged.providers.push({
-                name: name + '-1',
+                name: family + '-1',
                 provider: 'auto-detected',
                 type: 'subprocess',
-                description: `Auto-detected ${name} on PATH`,
-                mainTool: name,
+                description: `Auto-detected ${family} on PATH`,
+                mainTool: family,
                 cli: resolved,
-                display_type: name + '-cli',
-                display_provider: name.charAt(0).toUpperCase() + name.slice(1),
+                display_type: family + '-cli',
+                display_provider: family.charAt(0).toUpperCase() + family.slice(1),
+                args_template: argsTemplateFor(family) || ['-p', '{prompt}'],
               });
             }
           }

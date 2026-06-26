@@ -21,6 +21,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const { resolveCli, resolveSpawnTarget: sharedResolveSpawnTarget } = require('./resolve-cli.cjs');
 const { resolveProvidersConfig } = require('./resolve-providers.cjs');
+const { resolveArgsTemplate } = require('./provider-arg-templates.cjs');
 const { _pure: { detectInstalledProviders } } = require('./manage-agents-core.cjs');
 const { resolveEnvPlaceholders, findUnresolvedPlaceholders } = require('./resolve-env.cjs');
 const { extractPlaceholderVar, namespacedSecretKey } = require('./resolve-env.cjs');
@@ -326,8 +327,18 @@ async function runProvider(provider, toolArgs) {
   const prompt = toolArgs.prompt;
   const timeoutMs = toolArgs.timeout_ms ?? provider.timeout_ms ?? 300000;
 
-  // Substitute {prompt} placeholder in args_template
-  const args = provider.args_template.map(a =>
+  // Substitute {prompt} placeholder in args_template.
+  // ARGS-TEMPLATE-01: fall back to the canonical per-family template when the
+  // provider entry lacks args_template (auto-detect install path omitted it), and
+  // fail loud rather than crashing opaquely on `.map` of undefined.
+  const argsTemplate = resolveArgsTemplate(provider);
+  if (!Array.isArray(argsTemplate)) {
+    throw new Error(
+      `provider ${provider.name || '(unnamed)'} has no args_template and family ` +
+      `'${provider.mainTool || '?'}' has no canonical default — regenerate providers.json.`
+    );
+  }
+  const args = argsTemplate.map(a =>
     a === '{prompt}' ? prompt : a
   );
 
@@ -712,7 +723,8 @@ async function runDeepHealthCheck(provider) {
 
   // Step 3: Run the actual inference probe
   const startTime = Date.now();
-  const probeArgs = provider.args_template.map(a => a === '{prompt}' ? probe.prompt : a);
+  const probeTemplate = resolveArgsTemplate(provider) || [];
+  const probeArgs = probeTemplate.map(a => a === '{prompt}' ? probe.prompt : a);
   const output = await runSubprocessWithArgs(provider, probeArgs, timeoutMs);
   const latencyMs = Date.now() - startTime;
 

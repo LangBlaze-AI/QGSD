@@ -20,6 +20,7 @@ const path = require('path');
 const os   = require('os');
 const { resolveSpawnTarget } = require('./resolve-cli.cjs');
 const { loadProviders: loadProvidersConfig } = require('./resolve-providers.cjs');
+const { resolveArgsTemplate } = require('./provider-arg-templates.cjs');
 
 // ─── Error pattern classification ────────────────────────────────────────────
 
@@ -184,7 +185,7 @@ async function probeProvider(provider, quick) {
 
   // Deep probe: send actual prompt, check for PROBE_OK in output
   const probe = provider.deep_probe ?? { prompt: 'respond with: PROBE_OK', expect: 'PROBE_OK', timeout_ms: 45000 };
-  const args  = provider.args_template.map(a => (a === '{prompt}' ? probe.prompt : a));
+  const args  = (resolveArgsTemplate(provider) || []).map(a => (a === '{prompt}' ? probe.prompt : a));
   const result = await runCommand(spawnTarget, args, probe.timeout_ms, provider.env);
   const combined = result.output;
 

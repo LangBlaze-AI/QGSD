@@ -25,6 +25,7 @@ const os         = require('os');
 const { resolveSpawnTarget } = require('./resolve-cli.cjs');
 const { resolveEnvPlaceholders } = require('./resolve-env.cjs');
 const { loadProviders } = require('./resolve-providers.cjs');
+const { resolveArgsTemplate } = require('./provider-arg-templates.cjs');
 
 // ─── Find providers.json ─────────────────────────────────────────────────────
 // Delegates to the single source of truth in resolve-providers.cjs (issue #197).
@@ -51,8 +52,9 @@ function probeSlot(provider, timeoutMs, spawnCwd) {
   return new Promise((resolve) => {
     const start = Date.now();
 
-    // Replace {prompt} with the minimal probe string
-    const args = provider.args_template.map(a => (a === '{prompt}' ? 'OK' : a));
+    // Replace {prompt} with the minimal probe string (canonical fallback when the
+    // provider entry lacks args_template — avoids the opaque `.map` of undefined).
+    const args = (resolveArgsTemplate(provider) || []).map(a => (a === '{prompt}' ? 'OK' : a));
     // Resolve ${VAR} placeholders in provider.env (issue parity with
     // call-quorum-slot.cjs:462 / unified-mcp-server.mjs) — a secret-placeholder
     // slot was previously probed with an UNRESOLVED env and false-failed.

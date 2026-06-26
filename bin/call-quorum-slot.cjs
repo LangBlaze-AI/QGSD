@@ -29,6 +29,7 @@ const path      = require('path');
 const os        = require('os');
 const { resolveCli, resolveSpawnTarget } = require('./resolve-cli.cjs');
 const { loadProviders } = require('./resolve-providers.cjs');
+const { resolveArgsTemplate } = require('./provider-arg-templates.cjs');
 const { acquireSlot, releaseSlot, providerKeyFromUrl } = require('./provider-concurrency.cjs');
 const { resolveEnvPlaceholders, findUnresolvedPlaceholders, isPlaceholder, extractPlaceholderVar, namespacedSecretKey } = require('./resolve-env.cjs');
 const { warnUnknownDispatchFlags } = require('./quorum-dispatch-argv.cjs'); // #202: parent→child argv contract
@@ -420,7 +421,19 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
   // flag (and a stderr warning in runSubprocess) until CCR can accept the prompt
   // over stdin/temp-file without shell re-interpretation.
   const promptMutated = Boolean(isCcr) && safePrompt !== prompt;
-  args = provider.args_template.map(a => (a === '{prompt}' ? safePrompt : a));
+  // ARGS-TEMPLATE-01: providers.json entries from the auto-detect install path can
+  // lack args_template; `.map` on undefined crashed every slot opaquely. Fall back
+  // to the canonical per-family template (by mainTool), and fail LOUD with an
+  // actionable message if the family is unknown — never the bare TypeError.
+  const argsTemplate = resolveArgsTemplate(provider);
+  if (!Array.isArray(argsTemplate)) {
+    throw new Error(
+      `provider ${provider.name || '(unnamed)'} has no args_template and family ` +
+      `'${provider.mainTool || '?'}' has no canonical default — regenerate providers.json ` +
+      `(run install or /nf:mcp-setup), or add an args_template to this slot.`
+    );
+  }
+  args = argsTemplate.map(a => (a === '{prompt}' ? safePrompt : a));
   // Only use stdin for slots that explicitly require it (none currently do)
   useStdinPrompt = false;
 
