@@ -70,11 +70,17 @@ describe('ADVERSARIAL: parseVerdictLine edge cases', () => {
   });
 
   // ─── ADVERSARIAL round 2 ────────────────────────────────────────────────────
-  it('extracts APPROVE from "verdict: APPROVE BUT WITH CONCERNS" (trailing prose after the keyword)', () => {
-    // The keyword sits immediately after `verdict:`; the \b boundary before the
-    // following space lets trailing prose ("BUT WITH CONCERNS") follow without
-    // breaking the capture. Confirms a hedged-but-on-protocol verdict still records.
-    assert.equal(parseVerdictLine('verdict: APPROVE BUT WITH CONCERNS'), 'APPROVE');
+  it('a verdict line with trailing PROSE is NOT a clean sentinel (sentinel-only contract)', () => {
+    // Sentinel-only (CodeRabbit #278): the keyword must end the line modulo
+    // punctuation. Trailing WORDS ("BUT WITH CONCERNS") mean the line is prose, not a
+    // vote — so it must NOT register. This is what stops a reasoning bullet like
+    // `- verdict: REJECT would overstate the issue` from flipping consensus under
+    // last-match-wins. A clean verdict line (even with a trailing period/bold) still parses.
+    assert.equal(parseVerdictLine('verdict: APPROVE BUT WITH CONCERNS'), null);
+    assert.equal(parseVerdictLine('verdict: APPROVE.'), 'APPROVE');
+    assert.equal(parseVerdictLine('verdict: **APPROVE**'), 'APPROVE');
+    // The consensus-flip CodeRabbit flagged: a clean APPROVE wins over a later prose bullet.
+    assert.equal(parseVerdictLine('verdict: APPROVE\n- verdict: REJECT would overstate the issue'), 'APPROVE');
   });
 
   it('does NOT false-match REJECT inside "verdict: REJECTED" — the \\b boundary rejects an off-protocol suffix', () => {

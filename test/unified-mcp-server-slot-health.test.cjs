@@ -101,6 +101,7 @@ function driveServer(env, { afterInit, expectExit, timeoutMs = 25000 } = {}) {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const responses = new Map();
+    const frames = []; // every parsed frame, including id:null error frames
     const waiters = new Map();
     let settled = false;
     const cleanup = () => { try { child.kill(); } catch (_) {} };
@@ -120,6 +121,7 @@ function driveServer(env, { afterInit, expectExit, timeoutMs = 25000 } = {}) {
       const t = line.trim();
       if (!t) return;
       let m; try { m = JSON.parse(t); } catch { return; }
+      frames.push(m);
       if (m.id !== undefined && m.id !== null) {
         responses.set(m.id, m);
         const w = waiters.get(m.id);
@@ -151,7 +153,7 @@ function driveServer(env, { afterInit, expectExit, timeoutMs = 25000 } = {}) {
     sendObj({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 't', version: '1' } } });
     waitForId(1).then(async () => {
       sendObj({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
-      try { finish(await afterInit({ sendRaw, sendObj, waitForId })); }
+      try { finish(await afterInit({ sendRaw, sendObj, waitForId, frames })); }
       catch (e) { fail(e); }
     });
   });
@@ -172,18 +174,23 @@ test('malformed JSON-RPC line does NOT crash the server — next valid request s
   const out = await driveServer(
     { PROVIDER_SLOT: 'probe-1', UNIFIED_PROVIDERS_CONFIG: providersPath },
     {
-      afterInit: async ({ sendRaw, sendObj, waitForId }) => {
+      afterInit: async ({ sendRaw, sendObj, waitForId, frames }) => {
         // Garbage line — must be tolerated (Parse error with id:null), not fatal.
         sendRaw('this is { not ] valid JSON at all ::::');
         sendRaw('');               // blank line — must be skipped
         sendObj({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'ping', arguments: { prompt: 'echo-me' } } });
-        return waitForId(5);
+        const pong = await waitForId(5);
+        return { pong, frames };
       },
     }
   );
-  const text = textOf(out);
-  assert.equal(out.result?.isError ?? false, false, 'ping after malformed line must not error');
+  const text = textOf(out.pong);
+  assert.equal(out.pong.result?.isError ?? false, false, 'ping after malformed line must not error');
   assert.match(text, /echo-me/, `server must process the next valid request, got: ${text}`);
+  // The server must ACTIVELY emit a JSON-RPC Parse error (-32700, id:null) for the
+  // garbage line — not silently swallow it (CodeRabbit #278).
+  const parseErr = out.frames.find(f => f && f.error && f.error.code === -32700 && f.id === null);
+  assert.ok(parseErr, `server must emit a -32700 Parse error frame for malformed input; frames=${JSON.stringify(out.frames)}`);
 });
 
 test('tools/call for an UNKNOWN tool returns a clean isError (no crash, server stays alive)', async () => {

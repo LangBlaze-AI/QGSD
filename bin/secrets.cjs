@@ -129,7 +129,9 @@ async function syncToClaudeJson(_service) {
   let patched = 0;
   for (const serverName of Object.keys(claudeJson.mcpServers)) {
     const server = claudeJson.mcpServers[serverName];
-    if (!server.env || typeof server.env !== 'object') continue;
+    // Guard `server` itself: a null/non-object mcpServers entry in a hand-edited or
+    // malformed ~/.claude.json would otherwise throw on `server.env` and crash the sync.
+    if (!server || typeof server !== 'object' || !server.env || typeof server.env !== 'object') continue;
     for (const envKey of Object.keys(server.env)) {
       // Namespaced secret (`<slot>__<KEY>`) is unambiguous → always apply (mirrors
       // call-quorum-slot / unified-mcp-server, and lets namespaced secrets actually
@@ -186,7 +188,9 @@ function patchClaudeJsonForKey(envKey, value) {
   let patched = 0;
   for (const serverName of Object.keys(claudeJson.mcpServers)) {
     const server = claudeJson.mcpServers[serverName];
-    if (!server.env || typeof server.env !== 'object') continue;
+    // Guard `server` itself: a null/non-object mcpServers entry in a hand-edited or
+    // malformed ~/.claude.json would otherwise throw on `server.env` and crash the sync.
+    if (!server || typeof server !== 'object' || !server.env || typeof server.env !== 'object') continue;
     if (Object.prototype.hasOwnProperty.call(server.env, envKey)) {
       server.env[envKey] = value;
       patched++;

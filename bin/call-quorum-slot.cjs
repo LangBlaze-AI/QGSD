@@ -52,7 +52,12 @@ const VERDICTS = Object.freeze(['APPROVE', 'REJECT', 'FLAG']);
 // and bold around the keyword (`verdict: **APPROVE**`). Still effectively line-
 // anchored — only markdown markers/whitespace may precede `verdict:`, so prose
 // mentions ("I would not APPROVE") don't register.
-const VERDICT_LINE_RE = /^[\s>*#-]*verdict:\s*\**\s*(APPROVE|REJECT|FLAG)\b/im;
+// Sentinel-only: the keyword must END the line (modulo trailing whitespace, bold,
+// and common punctuation). This keeps last-match-wins (parseVerdictLine) safe — a
+// REASONING bullet like `- verdict: REJECT would overstate the issue` has trailing
+// words, so it is NOT a vote and can't flip consensus, while a real `verdict: APPROVE.`
+// / `verdict: **APPROVE**` still parses.
+const VERDICT_LINE_RE = /^[\s>*#-]*verdict:\s*\**\s*(APPROVE|REJECT|FLAG)\b[*\s.,:;!?)\]'"]*$/im;
 
 /**
  * parseVerdictLine — extract the verdict from an anchored `verdict:` line.
