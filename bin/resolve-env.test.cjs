@@ -224,3 +224,63 @@ test('namespacedSecretKey: combines slot and env key', () => {
   assert.equal(namespacedSecretKey('claude-z-ai', 'ANTHROPIC_AUTH_TOKEN'), 'claude-z-ai__ANTHROPIC_AUTH_TOKEN');
   assert.equal(namespacedSecretKey('claude-minimax', 'ANTHROPIC_API_KEY'), 'claude-minimax__ANTHROPIC_API_KEY');
 });
+
+// ===========================================================================
+// ADVERSARIAL SECURITY PROBES — credential-leak / mis-resolution hunting.
+// These are written to FAIL on a real defect.
+// ===========================================================================
+
+// --- isSecretKey / maskSecrets false-negative leak class --------------------
+// SECRET_KEY_RE only matches /_(API_KEY|AUTH_TOKEN|TOKEN)$/. Any secret-bearing
+// env var that does not end in one of those three suffixes is classified as
+// NON-secret, so maskSecrets leaves its plaintext value in place. In the live
+// flow (bin/migrate-plaintext-tokens.cjs) that plaintext value is then written
+// straight back into providers.json on disk — i.e. the migration that is
+// supposed to strip plaintext silently leaves it behind. LEAK.
+
+test('SECURITY: isSecretKey classifies AWS_SECRET_ACCESS_KEY as a secret (false-negative leak)', () => {
+  // AWS_SECRET_ACCESS_KEY ends in _ACCESS_KEY, not _API_KEY → regex miss.
+  assert.equal(
+    isSecretKey('AWS_SECRET_ACCESS_KEY'), true,
+    'AWS_SECRET_ACCESS_KEY holds a credential but is not recognized as a secret key'
+  );
+});
+
+test('SECURITY: maskSecrets masks every credential-bearing key shape (not just *_API_KEY/*_TOKEN)', () => {
+  const env = {
+    AWS_SECRET_ACCESS_KEY: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', // _ACCESS_KEY suffix → missed
+    ANTHROPIC_KEY:         'sk-ant-realsecretvalue000000000000000000', // *_KEY (not *_API_KEY) → missed
+    OPENAI_SECRET:         'sk-proj-anotherrealsecret00000000000000',   // *_SECRET → missed
+    DB_PASSWORD:           'hunter2-super-secret-password',             // *_PASSWORD → missed
+    authToken:             'camelCase-bearer-token-value',              // no underscore suffix → missed
+  };
+  const { masked, secrets } = maskSecrets(env);
+  const leaked = Object.entries(masked).filter(([, v]) => !isPlaceholder(v)).map(([k]) => k);
+  assert.deepEqual(
+    leaked, [],
+    'these credential-bearing keys were left as plaintext in the masked output: ' + leaked.join(', ')
+  );
+  assert.equal(secrets.length, 5, 'all five credential values should have been extracted to the secrets array');
+});
+
+// --- resolveSinglePlaceholder re-expansion / injection guard ----------------
+// If a resolved value itself contains ${OTHER}, it must be returned LITERALLY
+// (no second expansion pass) — otherwise a stored secret value could be used to
+// inject a reference to a different env var. This probe documents the behavior;
+// it is expected to PASS (resolveSinglePlaceholder does a single pass).
+
+test('SECURITY: resolveSinglePlaceholder does NOT re-expand a resolved value containing ${OTHER}', () => {
+  process.env._NF_SEC_OUTER = '${_NF_SEC_INNER}';
+  process.env._NF_SEC_INNER = 'inner-secret-should-not-appear';
+  try {
+    const out = resolveSinglePlaceholder('${_NF_SEC_OUTER}');
+    assert.equal(
+      out, '${_NF_SEC_INNER}',
+      'resolved value must be returned literally, not recursively expanded into the inner secret'
+    );
+    assert.notEqual(out, 'inner-secret-should-not-appear', 'inner secret must never leak via double expansion');
+  } finally {
+    delete process.env._NF_SEC_OUTER;
+    delete process.env._NF_SEC_INNER;
+  }
+});

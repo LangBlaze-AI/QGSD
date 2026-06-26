@@ -562,6 +562,28 @@ function formatDiagnosticForPrompt(diagnosticJson) {
 }
 
 /**
+ * neutralizeArtifactDelimiters — defang quorum section delimiters inside untrusted
+ * artifact content so a hostile/structured file can't inject a fake prompt section
+ * (e.g. `=== APPLICABLE REQUIREMENTS ===` or a second `=== EXECUTION TRACES ===`).
+ *
+ * Only DELIMITER-SHAPED lines are touched: a pure `=` fence, or a line whose trimmed
+ * form opens with a 3+ `=` run. On those lines, runs of 3+ `=` collapse to `==`, which
+ * no longer matches a real section header. Inline code like `a === b` (the literal we
+ * review!) is on a non-delimiter line and is left exactly as-is.
+ *
+ * @param {string} content
+ * @returns {string}
+ */
+function neutralizeArtifactDelimiters(content) {
+  if (typeof content !== 'string') return content;
+  return content.split('\n').map(line => {
+    const t = line.trim();
+    if (/^={3,}$/.test(t) || /^={3,}/.test(t)) return line.replace(/={3,}/g, '==');
+    return line;
+  }).join('\n');
+}
+
+/**
  * buildModeAPrompt — constructs the Mode A question prompt.
  *
  * Matches the EXACT template from agents/nf-quorum-slot-worker.md Step 2 Mode A.
@@ -597,7 +619,7 @@ function buildModeAPrompt({ round, repoDir, question, artifactPath, artifactCont
     lines.push(`Path: ${artifactPath}`);
     if (artifactContent) {
       lines.push('Content:');
-      lines.push(artifactContent);
+      lines.push(neutralizeArtifactDelimiters(artifactContent));
     } else {
       lines.push('(Read this file to obtain its full content before evaluating.)');
     }
@@ -788,7 +810,7 @@ function buildModeBPrompt({ round, repoDir, question, traces, artifactPath, arti
     lines.push(`Path: ${artifactPath}`);
     if (artifactContent) {
       lines.push('Content:');
-      lines.push(artifactContent);
+      lines.push(neutralizeArtifactDelimiters(artifactContent));
     } else {
       lines.push('(Read this file to obtain its full content before evaluating.)');
     }
@@ -910,7 +932,15 @@ function parseVerdict(rawOutput, mode) {
   if (mode === 'A') {
     // Side-channel: in Mode A, verdict is free-form (first 500 chars), never FLAG_TRUNCATED
     parseVerdict.lastTruncationNote = false;
-    return (rawOutput || '').slice(0, 500);
+    // Strip leading dispatch/log-prefix lines (e.g. "[resolve-providers] using ...",
+    // "[call-quorum-slot] ...") so the free-form answer is the model's actual output,
+    // not the wrapper's log noise. Only KNOWN log tags are stripped — a model answer
+    // that happens to start with "[1] ..." is preserved.
+    const cleaned = String(rawOutput || '').replace(
+      /^(?:\s*\[(?:resolve-providers|call-quorum-slot|unified-mcp-server|mcp|nf-[\w.-]+)\][^\n]*\n)+/,
+      ''
+    );
+    return cleaned.slice(0, 500);
   }
   // Mode B: extract APPROVE|REJECT|FLAG from an anchored `verdict:` line
   // (shared with call-quorum-slot.cjs via parseVerdictLine). Anchoring to line

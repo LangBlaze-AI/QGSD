@@ -47,10 +47,12 @@ function sleep(ms) {
 //      (e.g. "I would not APPROVE this" parsed as APPROVE), corrupting the
 //      verdict telemetry that feeds the score-delta calibration (#175).
 const VERDICTS = Object.freeze(['APPROVE', 'REJECT', 'FLAG']);
-// Tolerant of common LLM markdown: leading blockquote/bold (`> `, `**`) and bold
-// around the keyword (`verdict: **APPROVE**`). Still effectively line-anchored —
-// only whitespace/`>`/`*` may precede `verdict:`, so prose mentions don't register.
-const VERDICT_LINE_RE = /^[\s>*]*verdict:\s*\**\s*(APPROVE|REJECT|FLAG)\b/im;
+// Tolerant of common LLM markdown before the keyword: blockquote `>`, bold `*`,
+// heading `#`, list bullet `-` (e.g. `## Verdict: APPROVE`, `- verdict: REJECT`),
+// and bold around the keyword (`verdict: **APPROVE**`). Still effectively line-
+// anchored — only markdown markers/whitespace may precede `verdict:`, so prose
+// mentions ("I would not APPROVE") don't register.
+const VERDICT_LINE_RE = /^[\s>*#-]*verdict:\s*\**\s*(APPROVE|REJECT|FLAG)\b/im;
 
 /**
  * parseVerdictLine — extract the verdict from an anchored `verdict:` line.
@@ -63,8 +65,13 @@ const VERDICT_LINE_RE = /^[\s>*]*verdict:\s*\**\s*(APPROVE|REJECT|FLAG)\b/im;
  * @returns {'APPROVE'|'REJECT'|'FLAG'|null}
  */
 function parseVerdictLine(text) {
-  const m = VERDICT_LINE_RE.exec(String(text || ''));
-  return m ? m[1].toUpperCase() : null;
+  // Take the LAST anchored verdict line — when a worker revises mid-output
+  // (`verdict: FLAG` … then `verdict: APPROVE`), the final position must win, not
+  // a stale earlier one. (Single-verdict outputs are unaffected: last === first.)
+  const re = new RegExp(VERDICT_LINE_RE.source, 'gim');
+  let last = null;
+  for (const m of String(text || '').matchAll(re)) last = m;
+  return last ? last[1].toUpperCase() : null;
 }
 
 // ─── Token sentinel for CLI slots (OBSV-04) ───────────────────────────────────

@@ -776,6 +776,130 @@ test('patchCcrConfigForKey: does not throw when config file absent', () => {
   }
 });
 
+// ===========================================================================
+// ADVERSARIAL SECURITY PROBES — cross-slot credential leak / mis-resolution.
+// Written to FAIL on a real defect. All fs writes stay inside os.tmpdir().
+// ===========================================================================
+
+// PRIME SUSPECT — env-key collision across slots.
+// syncToClaudeJson keys its credMap by the env-var NAME (account). The flat
+// secrets store can therefore hold only ONE value per env-var name. When two
+// different slots both expose `ANTHROPIC_AUTH_TOKEN` in their claude.json env
+// (with DIFFERENT real tokens), sync writes the single stored value into BOTH
+// servers — so one slot dispatches with the OTHER slot's credential. LEAK.
+//
+// The set-secret.cjs flow (set raw KEY → syncToClaudeJson) is exactly this:
+// two `set('nforma','ANTHROPIC_AUTH_TOKEN', …)` calls collapse to one survivor.
+test('SECURITY: syncToClaudeJson must not write one slot\'s token into a different slot sharing the same env key (collision leak)', async () => {
+  const tmpDir = makeTmpDir();
+
+  // Two slots were each provisioned a DIFFERENT real ANTHROPIC_AUTH_TOKEN, but
+  // the flat store keyed by env-var name can only retain the last writer.
+  writeSecrets(tmpDir, { ANTHROPIC_AUTH_TOKEN: 'minimax-REAL-token-zzz' });
+
+  writeClaudeJson(tmpDir, {
+    mcpServers: {
+      'claude-z-ai':   { command: 'claude', env: { ANTHROPIC_AUTH_TOKEN: 'zai-REAL-token-aaa' } },
+      'claude-minimax':{ command: 'claude', env: { ANTHROPIC_AUTH_TOKEN: 'minimax-REAL-token-zzz' } },
+    },
+  });
+
+  const realHomedir = os.homedir.bind(os);
+  const mod = requireSecretsWithTmpHome(tmpDir);
+  try {
+    await mod.syncToClaudeJson('nforma');
+  } finally {
+    restoreHomedir(realHomedir);
+    clearSecretsCache();
+  }
+
+  const written = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude.json'), 'utf8'));
+  const zaiTok     = written.mcpServers['claude-z-ai'].env.ANTHROPIC_AUTH_TOKEN;
+  const minimaxTok = written.mcpServers['claude-minimax'].env.ANTHROPIC_AUTH_TOKEN;
+
+  // The z-ai slot must keep its OWN token, never inherit minimax's.
+  assert.notEqual(
+    zaiTok, minimaxTok,
+    'CREDENTIAL LEAK: claude-z-ai is now dispatching with claude-minimax\'s ANTHROPIC_AUTH_TOKEN'
+  );
+  assert.equal(
+    zaiTok, 'zai-REAL-token-aaa',
+    'claude-z-ai env token was overwritten with another slot\'s credential'
+  );
+});
+
+// Root cause of the collision: a flat store keyed by env-var name cannot hold
+// two distinct per-slot values for the same env key.
+test('SECURITY: two slots\' tokens are retained when stored namespaced (the supported per-slot path)', async () => {
+  // A flat KV store keyed by raw env-var name inherently holds ONE value per key, so
+  // two RAW `set(...,'ANTHROPIC_AUTH_TOKEN',...)` calls collapse to one — by design.
+  // The supported, leak-free way to give two slots DIFFERENT tokens is namespaced
+  // storage (`<slot>__<KEY>`), which the provisioning paths (this session's setup +
+  // migrate-plaintext-tokens.cjs) use and which syncToClaudeJson now resolves
+  // namespaced-first. Both per-slot tokens must survive, distinctly.
+  const tmpDir = makeTmpDir();
+  const realHomedir = os.homedir.bind(os);
+  const mod = requireSecretsWithTmpHome(tmpDir);
+  try {
+    await mod.set('nforma', 'claude-z-ai__ANTHROPIC_AUTH_TOKEN', 'zai-REAL-token-aaa');
+    await mod.set('nforma', 'claude-minimax__ANTHROPIC_AUTH_TOKEN', 'minimax-REAL-token-zzz');
+    const creds = await mod.list('nforma');
+    const byAcct = Object.fromEntries(creds.map(c => [c.account, c.password]));
+    assert.equal(byAcct['claude-z-ai__ANTHROPIC_AUTH_TOKEN'], 'zai-REAL-token-aaa');
+    assert.equal(byAcct['claude-minimax__ANTHROPIC_AUTH_TOKEN'], 'minimax-REAL-token-zzz');
+    assert.notEqual(
+      byAcct['claude-z-ai__ANTHROPIC_AUTH_TOKEN'],
+      byAcct['claude-minimax__ANTHROPIC_AUTH_TOKEN'],
+      'namespaced storage must keep the two slots\' tokens distinct'
+    );
+  } finally {
+    restoreHomedir(realHomedir);
+    clearSecretsCache();
+  }
+});
+
+// Mis-resolution — namespaced store keys are never synced.
+// bin/migrate-plaintext-tokens.cjs stores secrets NAMESPACED as `<slot>__<KEY>`
+// (and call-quorum-slot reads them that way to avoid collisions). But
+// syncToClaudeJson matches credMap[<raw env key>], so a credMap full of
+// `claude-z-ai__ANTHROPIC_AUTH_TOKEN` keys never matches the raw env key
+// `ANTHROPIC_AUTH_TOKEN` → claude.json mcpServers env is NEVER patched and keeps
+// its stale `${…}` placeholder. The two storage formats are mutually incompatible.
+test('SECURITY: syncToClaudeJson resolves namespaced (slot__KEY) secrets — the format migrate-plaintext-tokens actually writes', async () => {
+  const tmpDir = makeTmpDir();
+
+  writeSecrets(tmpDir, {
+    'claude-z-ai__ANTHROPIC_AUTH_TOKEN':    'zai-REAL-token-aaa',
+    'claude-minimax__ANTHROPIC_AUTH_TOKEN': 'minimax-REAL-token-zzz',
+  });
+
+  writeClaudeJson(tmpDir, {
+    mcpServers: {
+      'claude-z-ai':    { command: 'claude', env: { ANTHROPIC_AUTH_TOKEN: '${ANTHROPIC_AUTH_TOKEN}' } },
+      'claude-minimax': { command: 'claude', env: { ANTHROPIC_AUTH_TOKEN: '${ANTHROPIC_AUTH_TOKEN}' } },
+    },
+  });
+
+  const realHomedir = os.homedir.bind(os);
+  const mod = requireSecretsWithTmpHome(tmpDir);
+  try {
+    await mod.syncToClaudeJson('nforma');
+  } finally {
+    restoreHomedir(realHomedir);
+    clearSecretsCache();
+  }
+
+  const written = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude.json'), 'utf8'));
+  assert.equal(
+    written.mcpServers['claude-z-ai'].env.ANTHROPIC_AUTH_TOKEN, 'zai-REAL-token-aaa',
+    'namespaced secret was never synced — claude-z-ai env still holds the unresolved ${…} placeholder'
+  );
+  assert.equal(
+    written.mcpServers['claude-minimax'].env.ANTHROPIC_AUTH_TOKEN, 'minimax-REAL-token-zzz',
+    'namespaced secret was never synced for claude-minimax'
+  );
+});
+
 test('patchCcrConfigForKey: patches all providers with matching name (case-insensitive)', () => {
   const tmpDir = makeTmpDir();
   const ccrDir = path.join(tmpDir, '.claude-code-router');
