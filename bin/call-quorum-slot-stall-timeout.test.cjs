@@ -8,7 +8,7 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { stallTimeoutFor } = require('./call-quorum-slot.cjs');
+const { stallTimeoutFor, parseVerdictLine } = require('./call-quorum-slot.cjs');
 
 describe('stallTimeoutFor — per-slot stall timeout override', () => {
   it('defaults to 30000ms when stall_timeout_ms is absent', () => {
@@ -43,5 +43,29 @@ describe('stallTimeoutFor — per-slot stall timeout override', () => {
     assert.equal(stallTimeoutFor({ stall_timeout_ms: MAX + 1 }), MAX);
     assert.equal(stallTimeoutFor({ stall_timeout_ms: Infinity }), MAX);
     assert.equal(stallTimeoutFor({ stall_timeout_ms: MAX }), MAX); // boundary, unchanged
+  });
+
+  // ─── ADVERSARIAL: type-coercion gap ──────────────────────────────────────────
+  it('falls back to 30000 for a boolean true instead of a 1ms stall timer (type-coercion gap)', () => {
+    // Number(true) === 1, which passes the `v > 0` guard, so a boolean config value
+    // yields a 1ms stall timeout — every slot is instantly false-killed as STALLed.
+    // A non-numeric type like a boolean is not a valid duration and must fall back.
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: true }), 30000);
+  });
+});
+
+// ─── ADVERSARIAL: parseVerdictLine robustness ─────────────────────────────────
+describe('ADVERSARIAL: parseVerdictLine edge cases', () => {
+  it('extracts APPROVE from a markdown-bolded value "verdict: **APPROVE**"', () => {
+    // VERDICT_LINE_RE requires the keyword immediately after `verdict:\s*`, so a
+    // markdown-emphasized value (very common in LLM output) parses as null and the
+    // verdict telemetry the whole VERDICT-01 fix exists to protect silently records
+    // UNKNOWN.
+    assert.equal(parseVerdictLine('verdict: **APPROVE**'), 'APPROVE');
+  });
+
+  it('parses a verdict that appears mid-text on its own line, case-insensitively', () => {
+    // Sanity guard the multiline anchor + case-insensitivity actually work together.
+    assert.equal(parseVerdictLine('here is my reasoning\nVerdict: reject\n(done)'), 'REJECT');
   });
 });

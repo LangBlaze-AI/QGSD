@@ -47,7 +47,10 @@ function sleep(ms) {
 //      (e.g. "I would not APPROVE this" parsed as APPROVE), corrupting the
 //      verdict telemetry that feeds the score-delta calibration (#175).
 const VERDICTS = Object.freeze(['APPROVE', 'REJECT', 'FLAG']);
-const VERDICT_LINE_RE = /^verdict:\s*(APPROVE|REJECT|FLAG)\b/im;
+// Tolerant of common LLM markdown: leading blockquote/bold (`> `, `**`) and bold
+// around the keyword (`verdict: **APPROVE**`). Still effectively line-anchored —
+// only whitespace/`>`/`*` may precede `verdict:`, so prose mentions don't register.
+const VERDICT_LINE_RE = /^[\s>*]*verdict:\s*\**\s*(APPROVE|REJECT|FLAG)\b/im;
 
 /**
  * parseVerdictLine — extract the verdict from an anchored `verdict:` line.
@@ -399,8 +402,12 @@ function readStdin() {
 
 // ─── SHELL-ESCAPE-01: Args builder (extracted for testability) ────────────────
 function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
+  // Match `ccr` as a path SEGMENT/basename, not a raw substring: a plain
+  // `.includes('ccr')` false-matches innocent paths (e.g. /Users/mccray/bin/gemini),
+  // wrongly flagging the slot as CCR and neutralizing $/!/backticks in its prompt.
+  const _cliPath = provider.resolvedCli ?? provider.cli ?? '';
   const isCcr = provider.display_type === 'claude-code-router' ||
-    ((provider.resolvedCli ?? provider.cli) && (provider.resolvedCli ?? provider.cli).includes('ccr'));
+    /(^|\/)ccr([\/-]|$)/.test(_cliPath);
 
   let args;
   let useStdinPrompt = false;
@@ -433,7 +440,12 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
       `(run install or /nf:mcp-setup), or add an args_template to this slot.`
     );
   }
-  args = argsTemplate.map(a => (a === '{prompt}' ? safePrompt : a));
+  // Substitute the {prompt} placeholder. Handle both a bare element (`'{prompt}'`)
+  // AND an embedded form (`'--prompt={prompt}'`), and replace every occurrence —
+  // exact-equality-only substitution silently shipped a literal `{prompt}` to the CLI.
+  args = argsTemplate.map(a =>
+    (typeof a === 'string' && a.includes('{prompt}')) ? a.split('{prompt}').join(safePrompt) : a
+  );
   // Only use stdin for slots that explicitly require it (none currently do)
   useStdinPrompt = false;
 
@@ -462,7 +474,12 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
 // at TIMEOUT_MAX to keep the timer well-formed.
 const TIMEOUT_MAX = 2147483647; // 2^31 - 1
 function stallTimeoutFor(provider) {
-  const v = Number(provider && provider.stall_timeout_ms);
+  const raw = provider && provider.stall_timeout_ms;
+  // Only coerce real numbers / numeric strings. Without this, Number(true) === 1
+  // would pass the `> 0` guard and yield a 1ms stall timer that instantly false-kills
+  // every slot. Booleans/objects/etc. fall back to the default.
+  if (typeof raw !== 'number' && typeof raw !== 'string') return 30000;
+  const v = Number(raw);
   if (!(v > 0)) return 30000;
   return Math.min(v, TIMEOUT_MAX);
 }

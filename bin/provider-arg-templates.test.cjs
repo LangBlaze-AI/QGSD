@@ -84,3 +84,39 @@ describe('buildSpawnArgs: no crash on a provider missing args_template', () => {
     );
   });
 });
+
+// ─── ADVERSARIAL edge cases (added to expose shape-guard / coercion gaps) ──────
+describe('ADVERSARIAL: provider-arg-templates + buildSpawnArgs edge cases', () => {
+  it('argsTemplateFor("__proto__") treats a prototype-chain key as unknown and returns null (no thrown TypeError)', () => {
+    // FAMILY_ARGS_TEMPLATE['__proto__'] resolves to Object.prototype (truthy), so the
+    // `t ? t.slice() : null` guard calls Object.prototype.slice → TypeError instead of
+    // returning null for this unknown "family". A dotted-path/prototype key must be
+    // handled identically to any other unknown family: null, not a crash.
+    assert.equal(argsTemplateFor('__proto__'), null, '__proto__ must be treated as an unknown family');
+  });
+
+  it('buildSpawnArgs does NOT misclassify a non-ccr slot as CCR when the CLI path merely contains the substring "ccr"', () => {
+    // isCcr uses `cli.includes('ccr')` — a loose substring match. A perfectly normal
+    // home-dir path like /Users/mccray/bin/gemini contains "ccr" (m-c-c-r-ay), so the
+    // gemini slot is wrongly treated as CCR and its prompt gets $/!/backtick-neutralized,
+    // corrupting any review that cites those characters.
+    const { isCcr, promptMutated, args } = buildSpawnArgs(
+      { name: 'gemini-1', mainTool: 'gemini', cli: '/Users/mccray/bin/gemini' },
+      'fix the `code` and the $VAR and the bang!'
+    );
+    assert.equal(Boolean(isCcr), false, 'a username substring "ccr" must not flag the slot as CCR');
+    assert.equal(promptMutated, false, 'the prompt must not be mutated for a non-CCR slot');
+    assert.equal(args[1], 'fix the `code` and the $VAR and the bang!', 'prompt passed through verbatim');
+  });
+
+  it('buildSpawnArgs substitutes an embedded {prompt} token (e.g. --prompt={prompt}), not only a bare element', () => {
+    // Substitution is `a === '{prompt}'` (exact element equality). A provider that writes
+    // the placeholder embedded in a flag (--prompt={prompt}) gets the literal token sent
+    // to the CLI instead of the real prompt — a silent, hard-to-debug dispatch failure.
+    const { args } = buildSpawnArgs(
+      { name: 'x-1', mainTool: 'gemini', args_template: ['--prompt={prompt}'] },
+      'HELLO'
+    );
+    assert.equal(args[0], '--prompt=HELLO', 'embedded {prompt} token must be substituted');
+  });
+});
