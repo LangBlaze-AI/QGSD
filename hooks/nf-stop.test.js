@@ -2830,3 +2830,64 @@ test('R2-7: a mixed [APPROVE, REJECT] round at floor=2 blocks with the CONSENSUS
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// ROUND 3 — FINAL convergence confirmation.
+//
+// Round-3 probes (markdown-bolded `**verdict:** BLOCK`, leading-whitespace /
+// blockquote / trailing-text verdict lines, round-walk disagreement between
+// getLastDispatchRoundResults and detectUnavailWithoutFallback, and fail-open on
+// nested/malformed tool_result content) were each traced to ground:
+//   • The slot-dispatch script emits a CANONICAL `verdict: <BARE_WORD>` line
+//     (bin/quorum-slot-dispatch.cjs:1156, extractor :974/:1900 anchored
+//     `verdict:\s*`). Markdown bolding / trailing text on the verdict line cannot
+//     occur in-contract — the script normalizes the verdict to a bare word. The
+//     hook's non-line-anchored `/verdict:\s*(?:BLOCK|REJECT)/i` therefore matches
+//     every reachable verdict line; the only inputs it "misses" are not produced.
+//   • getLastDispatchRoundResults and detectUnavailWithoutFallback define a round
+//     identically (one assistant message bearing ≥1 nf-quorum-slot-worker Task),
+//     so they cannot disagree on the last round. detectUnavailWithoutFallback
+//     handles only UNAVAIL/FLAG_TRUNCATED; BLOCK/REJECT is the backstop's job —
+//     no verdict slips between them.
+//   • Nested/null/non-string tool_result content degrades to '' (a non-vote) and
+//     every parse path is wrapped per-line try/catch inside main()'s fail-open
+//     boundary, so the gate exits 0, never crashes.
+//
+// One invariant lock-in below (no new gap). It encodes the explicitly-requested
+// "lone BLOCK voter, floor permitting" case AND a leading-whitespace stylistic
+// variation, so it FAILS on a real defect: a single in-contract BLOCK that the
+// backstop fails to fire on (gate bypass), or a future `^verdict:` line-anchoring
+// regression that would let a whitespace-prefixed BLOCK slip the scan.
+
+// R3-INV: a lone slot-worker BLOCK (the ONLY voter) at floor=1 must CONSENSUS-block.
+// floor=1 is satisfied by the single BLOCK (it counts as a live voter), so the floor
+// path does NOT pre-empt — the CE-2 backstop must be the blocker. The verdict text
+// carries a leading space (` verdict: BLOCK`) to also assert the scan is not
+// line-start-anchored. EXPECTED: BLOCKS with the CONSENSUS reason.
+test('R3-INV: a single in-contract BLOCK voter (leading whitespace) at floor=1 consensus-blocks (no lone-dissent bypass)', () => {
+  const dir = setupQuorumDir('r3-lone-block', 1);
+  try {
+    const tmpFile = writeTempTranscript(slotWorkerConsensusTranscript([
+      ' verdict: BLOCK\nreasoning: lone dissent — leading whitespace, the only voter this round',
+    ]));
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0, 'hooks always exit 0');
+      assert.ok(stdout.length > 0,
+        'a lone BLOCK voter that meets the floor must not pass silently');
+      const parsed = JSON.parse(stdout);
+      assert.strictEqual(parsed.decision, 'block',
+        'CE-2: a single BLOCK is absolute even as the only voter — must block');
+      assert.ok(/CONSENSUS NOT REACHED/.test(parsed.reason),
+        'the CE-2 backstop (not the floor) must catch the lone BLOCK at floor=1; ' +
+        'a leading-whitespace verdict line must still be scanned. reason was: ' + parsed.reason);
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

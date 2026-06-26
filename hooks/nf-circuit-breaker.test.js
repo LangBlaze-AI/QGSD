@@ -2044,3 +2044,39 @@ test('CB-RND2-05: big one-shot clean rollback (A→B→A) is NOT blocked despite
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });
+
+// ── Round-3 convergence invariant (CB-RND3) ───────────────────────────────────
+// Final round found no missed-loop / false-block / crash across the probed shapes
+// (net-zero substitution between deletion pairs keeps negPairs exact; a multi-file
+// set where one file reverts while another progresses correctly stays unflagged by
+// the file-set-as-unit semantic; submodule/spaced/tab paths parse without misdecide).
+// This invariant pins the ONE real-world property with no prior coverage: the content
+// fingerprint is MODE-INSENSITIVE. fileSetContentFingerprint captures only the blob
+// SHA (`(\S+)\t(.+)`), never the file mode, so a chmod toggle (644→755→644) with
+// byte-identical content must NOT read as an A→B→A content reversion. If the regex
+// regressed to fold mode into the fingerprinted state, this normal permission flip
+// would recur the 644 state and FALSE-BLOCK a chmod-heavy change.
+test('CB-RND3-01: chmod toggle with identical blob is NOT a content reversion (mode-insensitive fingerprint)', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    const f = 'script.sh';
+    fs.writeFileSync(path.join(repoDir, f), 'echo hi\n', 'utf8');
+    spawnSync('git', ['add', f], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'add script (644)'], { cwd: repoDir, encoding: 'utf8' });
+    // Flip executable bit on, then off — content (blob SHA) never changes.
+    spawnSync('git', ['update-index', '--chmod=+x', f], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'chmod +x'], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['update-index', '--chmod=-x', f], { cwd: repoDir, encoding: 'utf8' });
+    spawnSync('git', ['commit', '-m', 'chmod -x'], { cwd: repoDir, encoding: 'utf8' });
+
+    const r = spawnSync('git', ['log', '--format=%H', '-3'], { cwd: repoDir, encoding: 'utf8' });
+    const hashes = r.stdout.trim().split('\n').filter(Boolean);
+
+    assert.strictEqual(
+      hasReversionInHashes(repoDir, hashes, [f]), false,
+      'a 644→755→644 mode toggle with identical content must NOT read as a reversion — the fingerprint is mode-insensitive (CB-RND3-01)'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
