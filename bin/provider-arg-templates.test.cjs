@@ -174,3 +174,39 @@ describe('ADVERSARIAL round 2: silent prompt-drop + template aliasing', () => {
     );
   });
 });
+
+// ─── ADVERSARIAL round 3 (convergence check): EXEC-01 allowedTools splice branch ──
+// The `if (allowedToolsFlag && isCcr)` injection in buildSpawnArgs was entirely
+// untested across rounds 1+2. Round-3 sweep of the source (atomicUpdateJson,
+// findProjectRoot, writeFailureLog, stallTimeoutFor(null), lowercase/anchored
+// verdict parsing, {prompt} substitution) surfaced NO new real defect — the helpers
+// fail-open and the shape guards hold. This test locks in the one genuinely
+// uncovered code path so a future regression in the splice (wrong order, missing
+// value, or accidental duplication) is caught.
+describe('ADVERSARIAL round 3: EXEC-01 --allowedTools injection for review-only CCR slots', () => {
+  it('injects --allowedTools once, ordered before --dangerously-skip-permissions, and ONLY for CCR slots', () => {
+    // Positive: a CCR slot gets the flag/value pair spliced directly before
+    // --dangerously-skip-permissions, exactly once (no order/duplication drift).
+    const ccr = buildSpawnArgs(
+      { name: 'ccr-rev-1', display_type: 'claude-code-router', mainTool: 'claude' },
+      'review this',
+      'Read,Grep,Glob'
+    );
+    assert.equal(ccr.isCcr, true, 'a claude-code-router slot must be classified as CCR');
+    const atIdx = ccr.args.indexOf('--allowedTools');
+    const dspIdx = ccr.args.indexOf('--dangerously-skip-permissions');
+    assert.ok(atIdx !== -1, '--allowedTools must be injected for a review-only CCR slot');
+    assert.equal(ccr.args[atIdx + 1], 'Read,Grep,Glob', 'the tools value must immediately follow the flag');
+    assert.equal(dspIdx - atIdx, 2, 'the flag/value pair must sit directly before --dangerously-skip-permissions');
+    assert.equal(
+      ccr.args.filter(a => a === '--allowedTools').length, 1,
+      'must not duplicate --allowedTools'
+    );
+
+    // Negative guard: the injection is claude-CLI-specific (`&& isCcr`). A plain
+    // gemini slot must never receive --allowedTools (gemini has no such flag).
+    const gem = buildSpawnArgs({ name: 'gemini-1', mainTool: 'gemini' }, 'review this', 'Read,Grep,Glob');
+    assert.equal(gem.isCcr, false);
+    assert.deepEqual(gem.args, ['-p', 'review this'], 'non-CCR argv is unaffected by the allowedTools flag');
+  });
+});
