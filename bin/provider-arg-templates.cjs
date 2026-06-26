@@ -43,7 +43,10 @@ const FAMILY_ARGS_TEMPLATE = {
  */
 function argsTemplateFor(mainTool) {
   const t = FAMILY_ARGS_TEMPLATE[mainTool];
-  return t ? t.slice() : null;
+  // Array.isArray (not a truthy check): a prototype-chain key like '__proto__' or
+  // 'constructor' resolves to a function/Object.prototype here — truthy but not a
+  // template — so guard on the actual shape and treat it as an unknown family.
+  return Array.isArray(t) ? t.slice() : null;
 }
 
 /**
@@ -55,7 +58,9 @@ function argsTemplateFor(mainTool) {
  * @returns {string[]|null}
  */
 function resolveArgsTemplate(provider) {
-  if (provider && Array.isArray(provider.args_template)) return provider.args_template;
+  // Return a defensive COPY (like argsTemplateFor) so a caller mutating the result
+  // can't corrupt the provider's stored args_template for later dispatches.
+  if (provider && Array.isArray(provider.args_template)) return provider.args_template.slice();
   if (provider && provider.mainTool) return argsTemplateFor(provider.mainTool);
   return null;
 }

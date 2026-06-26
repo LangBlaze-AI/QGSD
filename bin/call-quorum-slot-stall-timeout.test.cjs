@@ -8,7 +8,7 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { stallTimeoutFor } = require('./call-quorum-slot.cjs');
+const { stallTimeoutFor, parseVerdictLine } = require('./call-quorum-slot.cjs');
 
 describe('stallTimeoutFor — per-slot stall timeout override', () => {
   it('defaults to 30000ms when stall_timeout_ms is absent', () => {
@@ -43,5 +43,52 @@ describe('stallTimeoutFor — per-slot stall timeout override', () => {
     assert.equal(stallTimeoutFor({ stall_timeout_ms: MAX + 1 }), MAX);
     assert.equal(stallTimeoutFor({ stall_timeout_ms: Infinity }), MAX);
     assert.equal(stallTimeoutFor({ stall_timeout_ms: MAX }), MAX); // boundary, unchanged
+  });
+
+  // ─── ADVERSARIAL: type-coercion gap ──────────────────────────────────────────
+  it('falls back to 30000 for a boolean true instead of a 1ms stall timer (type-coercion gap)', () => {
+    // Number(true) === 1, which passes the `v > 0` guard, so a boolean config value
+    // yields a 1ms stall timeout — every slot is instantly false-killed as STALLed.
+    // A non-numeric type like a boolean is not a valid duration and must fall back.
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: true }), 30000);
+  });
+});
+
+// ─── ADVERSARIAL: parseVerdictLine robustness ─────────────────────────────────
+describe('ADVERSARIAL: parseVerdictLine edge cases', () => {
+  it('extracts APPROVE from a markdown-bolded value "verdict: **APPROVE**"', () => {
+    // VERDICT_LINE_RE requires the keyword immediately after `verdict:\s*`, so a
+    // markdown-emphasized value (very common in LLM output) parses as null and the
+    // verdict telemetry the whole VERDICT-01 fix exists to protect silently records
+    // UNKNOWN.
+    assert.equal(parseVerdictLine('verdict: **APPROVE**'), 'APPROVE');
+  });
+
+  it('parses a verdict that appears mid-text on its own line, case-insensitively', () => {
+    // Sanity guard the multiline anchor + case-insensitivity actually work together.
+    assert.equal(parseVerdictLine('here is my reasoning\nVerdict: reject\n(done)'), 'REJECT');
+  });
+
+  // ─── ADVERSARIAL round 2 ────────────────────────────────────────────────────
+  it('extracts APPROVE from "verdict: APPROVE BUT WITH CONCERNS" (trailing prose after the keyword)', () => {
+    // The keyword sits immediately after `verdict:`; the \b boundary before the
+    // following space lets trailing prose ("BUT WITH CONCERNS") follow without
+    // breaking the capture. Confirms a hedged-but-on-protocol verdict still records.
+    assert.equal(parseVerdictLine('verdict: APPROVE BUT WITH CONCERNS'), 'APPROVE');
+  });
+
+  it('does NOT false-match REJECT inside "verdict: REJECTED" — the \\b boundary rejects an off-protocol suffix', () => {
+    // REJECTED is off the APPROVE|REJECT|FLAG protocol. The trailing \b after REJECT
+    // sees T→E (two word chars, no boundary), so the capture fails and the parser
+    // returns null rather than silently coercing a partial match to REJECT. This
+    // invariant-confirms the boundary anchor isn't leaking longer words into telemetry.
+    assert.equal(parseVerdictLine('verdict: REJECTED'), null);
+  });
+
+  it('extracts a verdict across a CRLF (\\r\\n) line ending without the \\r leaking into the keyword', () => {
+    // LLM output piped through Windows-ish tooling can carry CRLFs. The multiline ^
+    // must re-anchor after \n and a trailing \r must not corrupt the captured keyword
+    // (a \r immediately after APPROVE is non-word, so \b still holds).
+    assert.equal(parseVerdictLine('reasoning here\r\nverdict: APPROVE\r\nnext line'), 'APPROVE');
   });
 });
