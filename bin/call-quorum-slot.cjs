@@ -451,6 +451,22 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
 }
 
 // ─── Subprocess dispatch ───────────────────────────────────────────────────────
+// STALL-TIMEOUT-01: the "header-only stall" timer (used while a slot has produced
+// < 500 bytes) defaults to 30s — fine for fast slots, but slow-bursty models routed
+// via a third-party Anthropic-compatible API (GLM-5.2[1m], MiniMax-M3) emit a short
+// preamble then pause well past 30s while generating. They are slow, not hung. A
+// per-slot `stall_timeout_ms` in providers.json raises the threshold so they are not
+// false-killed. Any value ≤ 0 / NaN / absent falls back to the 30s default.
+// Node's setTimeout clamps delays above 2^31-1 ms and fires them IMMEDIATELY, so a
+// nonsensically large stall_timeout_ms would silently disable the stall timer. Cap
+// at TIMEOUT_MAX to keep the timer well-formed.
+const TIMEOUT_MAX = 2147483647; // 2^31 - 1
+function stallTimeoutFor(provider) {
+  const v = Number(provider && provider.stall_timeout_ms);
+  if (!(v > 0)) return 30000;
+  return Math.min(v, TIMEOUT_MAX);
+}
+
 function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag) {
   const { args, useStdinPrompt, isCcr, promptMutated } = buildSpawnArgs(provider, prompt, allowedToolsFlag);
   if (promptMutated) {
@@ -544,7 +560,13 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     let rateLimitHits = 0;
     const RATE_LIMIT_THRESHOLD = 2; // kill after 2 consecutive rate-limit messages
     let totalBytesReceived = 0;
-    const STALL_TIMEOUT_MS = 30000; // tighter idle timeout when CLI has produced < 500 bytes
+    // Tighter idle timeout when the CLI has produced < STALL_BYTE_THRESHOLD bytes
+    // (header-only → probably hung). Per-slot override via providers.json
+    // `stall_timeout_ms` (see stallTimeoutFor): slow models (e.g. GLM-5.2[1m],
+    // MiniMax-M3) legitimately emit a small preamble then pause >30s mid-generation
+    // — they are slow, not stalled — so they need a longer threshold to avoid being
+    // false-killed.
+    const STALL_TIMEOUT_MS = stallTimeoutFor(provider);
     const STALL_BYTE_THRESHOLD = 500; // below this = "just a header, probably stalled"
 
     child.stdout.on('data', d => {
@@ -1045,4 +1067,4 @@ if (require.main === module) {
 }
 
 // ─── Test exports (SHELL-ESCAPE-01, TRUNC-01, INFRA-367) ───────────────────────
-module.exports = { buildSpawnArgs, recordTelemetry, findProjectRoot, writeFailureLog, atomicUpdateJson, VERDICTS, VERDICT_LINE_RE, parseVerdictLine };
+module.exports = { buildSpawnArgs, stallTimeoutFor, recordTelemetry, findProjectRoot, writeFailureLog, atomicUpdateJson, VERDICTS, VERDICT_LINE_RE, parseVerdictLine };
