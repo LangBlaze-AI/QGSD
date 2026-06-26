@@ -169,15 +169,19 @@ function hasReversionInHashes(gitRoot, hashes, files, pairStatsOut) {
   // If all pairs errored out → fall back to original behavior (treat as oscillation)
   if (errorsOnly) return true;
 
-  const contentReverts = hasContentReversion(gitRoot, hashes, files) === true;
+  const reversion = hasContentReversion(gitRoot, hashes, files); // true | false | null (git error)
+  const contentReverts = reversion === true;
 
   // SUSTAINED MONOTONIC SHRINK is a directional cleanup (e.g. dead-code removal
   // 6→4→2 lines: two-plus deletion-only pairs, no additions anywhere, and the content
   // never returns to a prior state), NOT a loop — do not trip the breaker. This is the
   // false-positive the old `totalNetChange <= 0 && hasNegativePair` proxy produced. A
   // SINGLE deletion pair or any size churn is still judged by the size signal below, so
-  // short patterns keep their established behavior.
-  if (negPairs >= 2 && !hasPositivePair && !contentReverts) return false;
+  // short patterns keep their established behavior. Gate on `reversion === false`
+  // (POSITIVELY confirmed no reversion), not `!contentReverts` — if fingerprinting was
+  // unavailable (reversion === null, a transient git error) we must NOT assume "no
+  // reversion" and silently exempt; fall through to the size heuristic instead.
+  if (negPairs >= 2 && !hasPositivePair && reversion === false) return false;
 
   // Oscillation when EITHER:
   //  - the established size signal: non-positive net change with at least one removal
