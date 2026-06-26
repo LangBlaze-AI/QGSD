@@ -2328,3 +2328,220 @@ test('TC-FORMAL: nf-stop.js carries no formal auto-commit (no commit of .plannin
                     || /\.planning\/formal[\s\S]{0,300}['"]commit['"]/.test(src);
   assert.ok(!formalCommit, 'the Stop hook must not git-commit .planning/formal/');
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// ADVERSARIAL — quorum-consensus gate bypass / false-block probes.
+//
+// These exercise the slot-worker pass path (the inline-dispatch evidence branch)
+// against the CE rules the gate is meant to uphold:
+//   CE-2  BLOCK is absolute — a single REJECT/BLOCK voter must prevent the pass.
+//   CE-3  Unanimity — consensus = 100% of live voters APPROVE. A split must block.
+//   CE-4  min_live_voters floor — below floor "consensus" must block.
+// They also probe a false-block: a *legitimate* all-APPROVE consensus whose
+// reasoning prose merely mentions the word "UNAVAIL".
+//
+// Tests that assert the SECURE expected behaviour will FAIL on a real defect,
+// which is the point — a failing ADV test ⇒ a reachable gate gap.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Project dir with a standard-profile nf.json and a chosen min_live_voters floor.
+function setupQuorumDir(label, minLiveVoters) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `nf-stop-adv-${label}-`));
+  const claudeDir = path.join(dir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(claudeDir, 'nf.json'),
+    JSON.stringify({
+      hook_profile: 'standard',
+      quorum_commands: ['plan-phase'],
+      quorum: { min_live_voters: minLiveVoters },
+    }),
+    'utf8'
+  );
+  return dir;
+}
+
+// One slot-worker dispatch round (single assistant message, parallel Tasks),
+// the matching tool_result verdicts, and a final decision-marker turn so GUARD 5
+// classifies this as a project decision turn.
+function slotWorkerConsensusTranscript(verdicts) {
+  const tasks = verdicts.map((_, i) => slotWorkerTask(`toolu_w${i}`, `slot-${i}`, 1));
+  const lines = [
+    userLine('/nf:plan-phase 1', 'human-adv'),
+    assistantLine(tasks, 'a-dispatch'),
+  ];
+  verdicts.forEach((v, i) => {
+    lines.push(toolResultSuccessLine(`toolu_w${i}`, v, `tr-w${i}`));
+  });
+  lines.push(assistantLine([{ type: 'text', text: 'Quorum complete.\n\n<!-- NF_DECISION -->' }], 'a-final'));
+  return lines;
+}
+
+// ADV-1 (🔴 CE-2): every slot-worker returned BLOCK, yet the gate passes.
+// detectUnavailWithoutFallback ignores BLOCK; countLiveSlotWorkers counts BLOCK
+// as a live voter, so the floor is "met" and main() exits 0 with no decision.
+// A unanimous REJECT must NOT ship the planning output. EXPECTED: this FAILS,
+// exposing the bypass (nf-stop.js:734 counts BLOCK; :1008 exits 0 with no
+// verdict-disagreement check).
+test('ADV-1: unanimous slot-worker BLOCK must block the gate (CE-2 absolute reject)', () => {
+  const dir = setupQuorumDir('ce2', 2);
+  try {
+    const tmpFile = writeTempTranscript(slotWorkerConsensusTranscript([
+      'verdict: BLOCK\nreasoning: this plan is unsafe and must not ship',
+      'verdict: BLOCK\nreasoning: rejecting — missing rollback path',
+    ]));
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0, 'hooks always exit 0');
+      assert.ok(stdout.length > 0,
+        'CE-2: a unanimous BLOCK quorum must emit a block decision, not pass silently');
+      assert.strictEqual(JSON.parse(stdout).decision, 'block',
+        'CE-2: a single BLOCK voter is absolute — output must be blocked');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ADV-2 (🔴 CE-3): split decision — 1 APPROVE + 1 BLOCK. Both count toward the
+// floor (=2), so the gate passes. Unanimity requires 100% APPROVE; one dissenting
+// BLOCK is not consensus. EXPECTED: FAILS — the gate ships a non-unanimous result.
+test('ADV-2: split APPROVE/BLOCK slot-worker quorum must block (CE-3 unanimity)', () => {
+  const dir = setupQuorumDir('ce3', 2);
+  try {
+    const tmpFile = writeTempTranscript(slotWorkerConsensusTranscript([
+      'verdict: APPROVE\nreasoning: looks fine to me',
+      'verdict: BLOCK\nreasoning: I object — this violates the spec',
+    ]));
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0, 'hooks always exit 0');
+      assert.ok(stdout.length > 0,
+        'CE-3: a non-unanimous quorum (1 BLOCK among voters) must not pass silently');
+      assert.strictEqual(JSON.parse(stdout).decision, 'block',
+        'CE-3: consensus requires 100% APPROVE — a dissenting BLOCK must block');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ADV-3 (🔴 false-block): a genuine all-APPROVE consensus whose reasoning text
+// merely mentions the word "UNAVAIL". detectUnavailWithoutFallback uses a broad
+// /\bUNAVAIL\b/ match over the *entire* result text (nf-stop.js:631) — unlike
+// countLiveSlotWorkers, which was deliberately hardened to match only
+// `verdict: APPROVE|BLOCK`. So an APPROVE vote that references a prior slot being
+// UNAVAIL in prose trips the FALLBACK-01 gate and the legitimate decision is
+// wrongly blocked. EXPECTED: FAILS — the all-APPROVE consensus should pass.
+test('ADV-3: APPROVE consensus mentioning "UNAVAIL" in prose must not be false-blocked', () => {
+  const dir = setupQuorumDir('falseblock', 1);
+  try {
+    const tmpFile = writeTempTranscript(slotWorkerConsensusTranscript([
+      'verdict: APPROVE\nreasoning: solid plan, ship it',
+      'verdict: APPROVE\nreasoning: the codex-1 slot was UNAVAIL earlier this session but the remaining live voters all agree',
+    ]));
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0, 'hooks always exit 0');
+      assert.strictEqual(stdout, '',
+        'false-block: two APPROVE verdicts are a valid consensus — the word "UNAVAIL" in ' +
+        'reasoning prose must not trigger a FALLBACK-01 block');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ADV-4 (invariant / positive control): a clean two-APPROVE consensus with no
+// "UNAVAIL" prose passes. Confirms the harness genuinely reaches the slot-worker
+// PASS path, so ADV-1/2/3's contrasting outcomes are meaningful (and not all
+// trivially blocked for some unrelated reason). EXPECTED: PASSES.
+test('ADV-4: clean two-APPROVE slot-worker consensus passes (positive control)', () => {
+  const dir = setupQuorumDir('control', 2);
+  try {
+    const tmpFile = writeTempTranscript(slotWorkerConsensusTranscript([
+      'verdict: APPROVE\nreasoning: solid plan',
+      'verdict: APPROVE\nreasoning: agree, ship it',
+    ]));
+    try {
+      const { stdout, exitCode } = runHookWithCwd(
+        { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+        dir
+      );
+      assert.strictEqual(exitCode, 0, 'hooks always exit 0');
+      assert.strictEqual(stdout, '', 'a genuine 2-APPROVE consensus must pass cleanly');
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ADV-5 (stale/cross-turn reuse): slot-worker APPROVE evidence lives only in a
+// PRIOR turn; the current decision turn re-issues the planning command, commits a
+// PLAN.md artifact, but makes NO quorum calls. getCurrentTurnLines() must scope to
+// the current turn, so the stale evidence cannot satisfy the gate → the
+// available-but-uncalled required model must block. EXPECTED: PASSES (gate
+// correctly refuses to reuse a prior turn's consensus).
+test('ADV-5: prior-turn quorum evidence must not satisfy the current decision turn', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-stop-adv-stale-'));
+  const claudeDir = path.join(dir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(path.join(claudeDir, 'nf.json'), JSON.stringify({
+    hook_profile: 'standard',
+    quorum_commands: ['plan-phase'],
+    quorum_active: [],
+    required_models: { codex: { tool_prefix: 'mcp__codex-1__', required: true } },
+    quorum: { maxSize: 1, min_live_voters: 1 },
+  }), 'utf8');
+
+  const claudeJsonTmp = path.join(dir, 'claude.json');
+  fs.writeFileSync(claudeJsonTmp, JSON.stringify({ mcpServers: { 'codex-1': {} } }), 'utf8');
+
+  const tmpFile = writeTempTranscript([
+    // PRIOR turn: real slot-worker APPROVE consensus (must NOT carry forward)
+    userLine('/nf:plan-phase 1', 'old-human'),
+    assistantLine([slotWorkerTask('toolu_old', 'codex-1', 1)], 'a-old'),
+    toolResultSuccessLine('toolu_old', 'verdict: APPROVE\nreasoning: looked good last turn', 'tr-old'),
+    assistantLine([{ type: 'text', text: 'Prior plan done.' }], 'a-old-final'),
+    // CURRENT turn: command re-issued, artifact committed, NO quorum calls
+    userLine('/nf:plan-phase 1 (revise)', 'new-human'),
+    assistantLine([
+      bashCommitBlock('node /path/nf-tools.cjs commit "feat: plan" --files 04-01-PLAN.md'),
+    ], 'a-commit'),
+    assistantLine([{ type: 'text', text: 'Revised plan.\n\n<!-- NF_DECISION -->' }], 'a-new-final'),
+  ]);
+
+  try {
+    const { stdout, exitCode } = runHookWithEnv(
+      { stop_hook_active: false, hook_event_name: 'Stop', transcript_path: tmpFile },
+      { HOME: dir, NF_CLAUDE_JSON: claudeJsonTmp },
+      dir
+    );
+    assert.strictEqual(exitCode, 0, 'hooks always exit 0');
+    assert.ok(stdout.length > 0,
+      'stale guard: a prior turn\'s APPROVE must not satisfy the current decision turn');
+    const parsed = JSON.parse(stdout);
+    assert.strictEqual(parsed.decision, 'block',
+      'current turn made no quorum calls — must block despite prior-turn consensus');
+  } finally {
+    fs.unlinkSync(tmpFile);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

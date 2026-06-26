@@ -1615,3 +1615,240 @@ test('CB-FP09: min_cycles=0 (disabled) allows single cycle to trigger on depth',
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });
+
+// ── Adversarial probes (CB-ADV series) ───────────────────────────────────────
+// These exercise the breaker through its real stdin→state-file I/O path with the
+// haiku reviewer disabled via project nf.json (deterministic, no live API), at
+// production defaults (depth=3, window=6, min_cycles=2, rollback_detection=true)
+// filled in by config-loader. Each can FAIL on a genuine, reachable defect.
+
+// Writes a project nf.json that disables the live Haiku reviewer so detection is
+// driven purely by the deterministic algorithm. Written AFTER commits so git
+// never captures it in a commit file-set.
+function writeBreakerConfig(repoDir, overrides) {
+  const claudeDir = path.join(repoDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(claudeDir, 'nf.json'),
+    JSON.stringify({
+      circuit_breaker: Object.assign({
+        oscillation_depth: 3,
+        commit_window: 6,
+        haiku_reviewer: false,
+        min_cycles: 2,
+        rollback_detection: true,
+      }, overrides || {}),
+    }),
+    'utf8'
+  );
+  const statePath = path.join(claudeDir, 'circuit-breaker-state.json');
+  if (fs.existsSync(statePath)) fs.unlinkSync(statePath);
+  return statePath;
+}
+
+// CB-ADV01 (MISSED OSCILLATION): an equal-length A→B→A value flip — the canonical
+// "agent toggles a constant back and forth" loop — is NOT detected because the
+// reversion heuristic requires at least one strictly net-negative pair
+// (hasNegativePair). Pure substitutions are net-zero, so a real toggle loop with
+// equal-length states slips through. A correct breaker MUST flag this.
+test('CB-ADV01: equal-length A→B→A value-flip oscillation is MISSED (no negative pair)', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    // app.js: "on" → (filler) → "off" → (filler) → "on"  (3 run-groups for app.js)
+    commitInRepo(repoDir, 'app.js', 'const FLAG = "on";\n', 'feat: flag on');
+    commitInRepo(repoDir, 'filler1.txt', 'f1\n', 'chore: filler 1');
+    commitInRepo(repoDir, 'app.js', 'const FLAG = "off";\n', 'fix: flip flag off');
+    commitInRepo(repoDir, 'filler2.txt', 'f2\n', 'chore: filler 2');
+    commitInRepo(repoDir, 'app.js', 'const FLAG = "on";\n', 'fix: flip flag back on');
+
+    const statePath = writeBreakerConfig(repoDir);
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'stdout must be empty on first detection');
+    // A genuine A→B→A toggle is real oscillation — the breaker SHOULD activate.
+    assert(
+      fs.existsSync(statePath),
+      'state file MUST be written — equal-length A→B→A value flip is a real oscillation loop (CB-ADV01)'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// CB-ADV02 (MISSED OSCILLATION, sustained): even a sustained 4-group equal-length
+// toggle (A→B→A→B, 3 full cycles) — exactly the runaway loop a circuit breaker
+// exists to stop — is missed for the same hasNegativePair reason. Cycle count is
+// not the gate here; the net-zero substitution heuristic is.
+test('CB-ADV02: sustained equal-length toggle (A→B→A→B) is MISSED despite 3 cycles', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    commitInRepo(repoDir, 'app.js', 'x = 1\n', 'feat: x=1');
+    commitInRepo(repoDir, 'f1.txt', 'a\n', 'chore: f1');
+    commitInRepo(repoDir, 'app.js', 'x = 2\n', 'fix: x=2');
+    commitInRepo(repoDir, 'f2.txt', 'a\n', 'chore: f2');
+    commitInRepo(repoDir, 'app.js', 'x = 1\n', 'fix: x=1 again');
+    commitInRepo(repoDir, 'f3.txt', 'a\n', 'chore: f3');
+    commitInRepo(repoDir, 'app.js', 'x = 2\n', 'fix: x=2 again');
+
+    // 7 commits → window must cover all of them to see 4 app.js run-groups.
+    const statePath = writeBreakerConfig(repoDir, { commit_window: 8 });
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'stdout must be empty on first detection');
+    assert(
+      fs.existsSync(statePath),
+      'state file MUST be written — a sustained equal-length toggle is the exact loop the breaker exists to stop (CB-ADV02)'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// CB-ADV03 (FALSE BLOCK): a legitimate incremental dead-code cleanup — the same
+// file is trimmed across several commits (interspersed with edits to other
+// files), content only ever REMOVED, never re-added — is wrongly flagged as
+// oscillation. The reversion heuristic conflates "file shrinking monotonically"
+// (net<0 + a negative pair) with "content added then removed". This false block
+// halts a normal refactor.
+test('CB-ADV03: monotonic incremental deletion (dead-code cleanup) is a FALSE BLOCK', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    // cleanup.js: 6 lines → trim to 4 → trim to 2, with fillers between (3 run-groups).
+    commitInRepo(repoDir, 'cleanup.js', 'a\nb\nc\nd\ne\nf\n', 'feat: add module');
+    commitInRepo(repoDir, 'filler1.txt', 'f1\n', 'chore: filler 1');
+    commitInRepo(repoDir, 'cleanup.js', 'a\nb\nc\nd\n', 'refactor: drop dead code (e,f)');
+    commitInRepo(repoDir, 'filler2.txt', 'f2\n', 'chore: filler 2');
+    commitInRepo(repoDir, 'cleanup.js', 'a\nb\n', 'refactor: drop more dead code (c,d)');
+
+    const statePath = writeBreakerConfig(repoDir);
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'stdout must be empty');
+    // Content is only ever removed, never re-added — this is a cleanup, not a loop.
+    assert(
+      !fs.existsSync(statePath),
+      'state file must NOT be written — incremental deletion is a legitimate cleanup refactor, not oscillation (CB-ADV03)'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// CB-ADV04 (FAIL-OPEN / state corruption): an ACTIVE state whose file_set has the
+// wrong shape (an object, not an array) must not crash the hook. buildBlockReason
+// and makeFileSetHash both call array methods on file_set; a wrong shape throws,
+// and the outer try/catch must keep this fail-OPEN (exit 0, no output). If the
+// guard regressed, the hook would exit non-zero — fail-CLOSED, blocking every
+// tool call.
+test('CB-ADV04: active state with wrong-shape file_set fails open (exit 0, no crash)', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    commitInRepo(repoDir, 'seed.txt', 'seed\n', 'init');
+    const stateDir = path.join(repoDir, '.claude');
+    fs.mkdirSync(stateDir, { recursive: true });
+    const statePath = path.join(stateDir, 'circuit-breaker-state.json');
+    // Valid JSON, active, but file_set is an object instead of an array.
+    fs.writeFileSync(statePath, JSON.stringify({
+      active: true,
+      file_set: { not: 'an-array' },
+      activated_at: new Date().toISOString(),
+      commit_window_snapshot: [['seed.txt']],
+    }), 'utf8');
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0 — corrupt active state must fail OPEN, not crash the hook');
+    // Must not emit a malformed/partial deny decision.
+    assert.ok(
+      stdout === '' || (() => { try { JSON.parse(stdout); return true; } catch { return false; } })(),
+      'stdout must be empty or well-formed JSON, never a partial/corrupt payload'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// CB-ADV05 (RESET SEMANTICS): once an oscillation is marked resolved in the
+// oscillation log, an ACTIVE breaker must stop blocking — otherwise the next
+// legitimate edit is re-blocked forever. The active-state path keys the log as
+// `${makeFileSetHash(file_set)}:legacy`; a resolvedAt on that key must allow the
+// write through (exit 0, no deny).
+test('CB-ADV05: resolved oscillation-log entry releases an active breaker (no re-block)', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    commitInRepo(repoDir, 'seed.txt', 'seed\n', 'init');
+
+    const stateDir = path.join(repoDir, '.claude');
+    fs.mkdirSync(stateDir, { recursive: true });
+    const statePath = path.join(stateDir, 'circuit-breaker-state.json');
+    fs.writeFileSync(statePath, JSON.stringify({
+      active: true,
+      file_set: ['x.js'],
+      activated_at: new Date().toISOString(),
+      commit_window_snapshot: [['x.js']],
+    }), 'utf8');
+
+    // Write a resolved oscillation-log entry under the legacy key the active path reads.
+    const planningDir = path.join(repoDir, '.planning');
+    fs.mkdirSync(planningDir, { recursive: true });
+    const logKey = `${makeFileSetHash(['x.js'])}:legacy`;
+    fs.writeFileSync(
+      path.join(planningDir, 'oscillation-log.json'),
+      JSON.stringify({ [logKey]: { files: ['x.js'], resolvedAt: new Date().toISOString(), resolvedByCommit: 'deadbeef' } }),
+      'utf8'
+    );
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'a resolved oscillation must NOT re-block — stdout must be empty (no deny) (CB-ADV05)');
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
