@@ -678,7 +678,7 @@ function buildModeAPrompt({ round, repoDir, question, artifactPath, artifactCont
     lines.push('Evaluate them as peer AI opinions.');
     lines.push('');
     lines.push('Prior positions:');
-    lines.push(priorPositions);
+    lines.push(neutralizeArtifactDelimiters(priorPositions));
 
     // Review context reminder (Round 2+ only, when reviewContext present)
     if (reviewContext) {
@@ -874,7 +874,7 @@ function buildModeBPrompt({ round, repoDir, question, traces, artifactPath, arti
   if (round >= 2 && priorPositions) {
     lines.push('');
     lines.push('Prior positions:');
-    lines.push(priorPositions);
+    lines.push(neutralizeArtifactDelimiters(priorPositions));
 
     // Review context reminder (Round 2+ only, when reviewContext present)
     if (reviewContext) {

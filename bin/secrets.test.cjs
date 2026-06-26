@@ -1080,3 +1080,46 @@ test('SECURITY/perf: syncToClaudeJson is idempotent — a no-change sync does NO
     clearSecretsCache();
   }
 });
+
+// ROUND 3 — namespaced resolution is EXACT-CONCAT, never a split, so a `__`
+// inside the env-key name cannot mis-attribute or bleed across slots.
+// syncToClaudeJson looks up `serverName + '__' + envKey` as one literal string;
+// it never parses on `__`. The adversarial input: an env KEY that itself
+// contains a double underscore (`X__Y`), shared by two slots, where only slot-A
+// has a namespaced secret. Slot-A must receive its value (proving the `__` key
+// resolves correctly under exact-concat), and sibling slot-B — which has NO
+// namespaced secret and only a concrete own value under the same shared raw key
+// name — must keep its own token (no raw fallback fires for a shared key, no
+// mis-split leaks slot-A's value into slot-B). INVARIANT.
+test('SECURITY: a double-underscore env key resolves per-slot via exact concat and never bleeds into a sibling', async () => {
+  const tmpDir = makeTmpDir();
+
+  // Only slotA is provisioned namespaced. The env key itself contains `__`.
+  writeSecrets(tmpDir, { 'slotA__X__Y': 'slotA-REAL-token' });
+
+  writeClaudeJson(tmpDir, {
+    mcpServers: {
+      'slotA': { command: 'claude', env: { 'X__Y': '${X__Y}' } },
+      'slotB': { command: 'claude', env: { 'X__Y': 'slotB-OWN-concrete' } },
+    },
+  });
+
+  const realHomedir = os.homedir.bind(os);
+  const mod = requireSecretsWithTmpHome(tmpDir);
+  try {
+    await mod.syncToClaudeJson('nforma');
+  } finally {
+    restoreHomedir(realHomedir);
+    clearSecretsCache();
+  }
+
+  const written = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude.json'), 'utf8'));
+  assert.equal(
+    written.mcpServers['slotA'].env['X__Y'], 'slotA-REAL-token',
+    'slotA must receive its namespaced value even though the env key contains `__`'
+  );
+  assert.equal(
+    written.mcpServers['slotB'].env['X__Y'], 'slotB-OWN-concrete',
+    'CROSS-SLOT LEAK: slotB must keep its own concrete token — no raw fallback / mis-split may apply slotA\'s value'
+  );
+});

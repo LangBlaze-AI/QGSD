@@ -345,3 +345,38 @@ test('SECURITY: maskSecrets leaves a config-only env block byte-identical (does 
   assert.deepEqual(masked, env, 'config-only env must be returned unchanged');
   assert.equal(secrets.length, 0, 'no config value should be extracted as a secret');
 });
+
+// --- ROUND 3: partial/embedded placeholders must stay LITERAL (no leak) ------
+// PLACEHOLDER_RE is fully anchored (/^\$\{([^}]+)\}$/) and [^}]+ cannot cross a
+// `}`. So a value that merely CONTAINS a placeholder — `${A}${B}` (two adjacent
+// placeholders) or `prefix-${VAR}-suffix` (one embedded in a larger string) —
+// must NOT match, and resolveSinglePlaceholder must return it byte-for-byte,
+// resolving nothing. The security property: a partial-match must never trigger a
+// resolution that splices a real process.env secret into the middle of a string
+// (which would leak the secret into logs / on-disk providers.json). INVARIANT.
+test('SECURITY: resolveSinglePlaceholder leaves multi/embedded placeholders literal and never splices an env secret into them', () => {
+  process.env._NF_SEC_A = 'AAA-secret';
+  process.env._NF_SEC_B = 'BBB-secret';
+  process.env._NF_SEC_VAR = 'VAR-secret';
+  try {
+    // Two adjacent placeholders — not a single anchored placeholder.
+    const both = resolveSinglePlaceholder('${_NF_SEC_A}${_NF_SEC_B}');
+    assert.equal(both, '${_NF_SEC_A}${_NF_SEC_B}', 'adjacent placeholders must stay literal');
+    assert.equal(both.includes('AAA-secret'), false, 'first env secret must not be spliced in');
+    assert.equal(both.includes('BBB-secret'), false, 'second env secret must not be spliced in');
+
+    // Placeholder embedded in a larger string.
+    const embedded = resolveSinglePlaceholder('prefix-${_NF_SEC_VAR}-suffix');
+    assert.equal(embedded, 'prefix-${_NF_SEC_VAR}-suffix', 'embedded placeholder must stay literal');
+    assert.equal(embedded.includes('VAR-secret'), false, 'embedded env secret must not be spliced in');
+
+    // isPlaceholder must agree these are NOT placeholders (so maskSecrets/sync
+    // treat them as concrete values, never as resolvable slots).
+    assert.equal(isPlaceholder('${_NF_SEC_A}${_NF_SEC_B}'), false);
+    assert.equal(isPlaceholder('prefix-${_NF_SEC_VAR}-suffix'), false);
+  } finally {
+    delete process.env._NF_SEC_A;
+    delete process.env._NF_SEC_B;
+    delete process.env._NF_SEC_VAR;
+  }
+});
