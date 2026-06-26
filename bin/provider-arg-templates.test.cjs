@@ -210,3 +210,60 @@ describe('ADVERSARIAL round 3: EXEC-01 --allowedTools injection for review-only 
     assert.deepEqual(gem.args, ['-p', 'review this'], 'non-CCR argv is unaffected by the allowedTools flag');
   });
 });
+
+// ─── ADVERSARIAL round 4 (final convergence): non-string template elements + ──
+// empty/special-only CCR prompt. Round-4 re-swept the three remaining "last
+// things to consider": (a) an explicit args_template carrying non-string
+// elements alongside a bare {prompt}; (b) safePrompt CCR neutralization on a
+// prompt that is empty or only special chars; (c) the shallow-copy depth of
+// argsTemplateFor (arrays of immutable strings → .slice() suffices). All three
+// are non-defects: the `typeof a === 'string'` gate fronts every `.includes`,
+// neutralization always yields a valid string argv element, and the templates
+// have no nested mutation surface. This single invariant locks in the riskiest
+// of the three — the typeof gate around substitution — so a future regression
+// that drops it (and calls `.includes`/`.split` on a number → TypeError) is
+// caught. CONVERGED — no new real gaps.
+describe('ADVERSARIAL round 4: non-string template elements + empty/special CCR prompt', () => {
+  it('passes non-string args_template elements through untouched while substituting a bare {prompt} (no TypeError on numbers/objects)', () => {
+    // The {prompt}-presence guard and the substitution map both front `.includes`
+    // with `typeof a === 'string'`, so numeric/object elements never hit a string
+    // method. They must survive verbatim and the lone string {prompt} must resolve.
+    const obj = { k: 'v' };
+    const { args } = buildSpawnArgs(
+      { name: 'x-1', mainTool: 'gemini', args_template: [42, obj, '{prompt}', true] },
+      'HELLO'
+    );
+    assert.equal(args.length, 4, 'all four elements preserved');
+    assert.equal(args[0], 42, 'numeric element passes through unchanged');
+    assert.equal(args[1], obj, 'object element passes through by reference, untouched');
+    assert.equal(args[2], 'HELLO', 'the bare string {prompt} is substituted');
+    assert.equal(args[3], true, 'boolean element passes through unchanged');
+  });
+
+  it('a CCR slot with an empty-string prompt yields a valid empty argv element (not undefined, not dropped, promptMutated=false)', () => {
+    // safePrompt on '' is '' (no special chars to neutralize), so the {prompt}
+    // slot must still materialize as an empty string element — a valid argv entry —
+    // and promptMutated must be false (nothing changed).
+    const { args, isCcr, promptMutated } = buildSpawnArgs(
+      { name: 'ccr-1', display_type: 'claude-code-router', mainTool: 'claude' },
+      ''
+    );
+    assert.equal(isCcr, true);
+    assert.equal(promptMutated, false, 'an empty prompt is unchanged by neutralization');
+    const pIdx = args.indexOf('-p');
+    assert.equal(args[pIdx + 1], '', 'the prompt slot is a valid empty string, not undefined/dropped');
+  });
+
+  it('a CCR slot with an only-special-chars prompt neutralizes to a valid string element and flags promptMutated', () => {
+    // '`$!' → backtick→', $→stripped, !→.  → produces "'." — still a non-empty,
+    // valid string argv element, and promptMutated is true (chars were changed).
+    const { args, promptMutated } = buildSpawnArgs(
+      { name: 'ccr-1', display_type: 'claude-code-router', mainTool: 'claude' },
+      '`$!'
+    );
+    assert.equal(promptMutated, true, 'special chars were neutralized');
+    const pIdx = args.indexOf('-p');
+    assert.equal(typeof args[pIdx + 1], 'string', 'neutralized prompt remains a string argv element');
+    assert.equal(args[pIdx + 1], "'.", 'backtick→quote, $ stripped, !→. — deterministic neutralization');
+  });
+});
