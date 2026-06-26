@@ -457,9 +457,14 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
 // preamble then pause well past 30s while generating. They are slow, not hung. A
 // per-slot `stall_timeout_ms` in providers.json raises the threshold so they are not
 // false-killed. Any value ≤ 0 / NaN / absent falls back to the 30s default.
+// Node's setTimeout clamps delays above 2^31-1 ms and fires them IMMEDIATELY, so a
+// nonsensically large stall_timeout_ms would silently disable the stall timer. Cap
+// at TIMEOUT_MAX to keep the timer well-formed.
+const TIMEOUT_MAX = 2147483647; // 2^31 - 1
 function stallTimeoutFor(provider) {
   const v = Number(provider && provider.stall_timeout_ms);
-  return v > 0 ? v : 30000;
+  if (!(v > 0)) return 30000;
+  return Math.min(v, TIMEOUT_MAX);
 }
 
 function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag) {

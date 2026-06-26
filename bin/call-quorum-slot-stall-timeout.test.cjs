@@ -36,4 +36,12 @@ describe('stallTimeoutFor — per-slot stall timeout override', () => {
     // Regression guard: before STALL-TIMEOUT-01 this was hardcoded 30000 regardless.
     assert.notEqual(stallTimeoutFor({ stall_timeout_ms: 120000 }), 30000);
   });
+
+  it('clamps oversized values to TIMEOUT_MAX (Node fires >2^31-1ms timers immediately)', () => {
+    const MAX = 2147483647;
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: 3e9 }), MAX);
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: MAX + 1 }), MAX);
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: Infinity }), MAX);
+    assert.equal(stallTimeoutFor({ stall_timeout_ms: MAX }), MAX); // boundary, unchanged
+  });
 });
