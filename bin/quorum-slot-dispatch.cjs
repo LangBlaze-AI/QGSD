@@ -355,8 +355,11 @@ function matchRequirementsByKeywords(requirements, question, artifactPath) {
   const pathKeywords = artifactPath ? extractPathKeywords(artifactPath) : new Set();
   const pathCategories = artifactPath ? extractPathCategories(artifactPath) : [];
 
-  // Score each requirement
-  const scored = requirements.map(req => {
+  // Score each requirement. Skip non-object entries (a corrupt/hostile
+  // requirements.json can contain `null`/scalars that survive JSON.parse +
+  // Array.isArray) so the dispatch fails OPEN to [] rather than DoS-crashing on
+  // `req.id` — matching loadRequirements' documented fail-open contract.
+  const scored = requirements.filter(req => req && typeof req === 'object').map(req => {
     let score = 0;
 
     // Match on id prefix (e.g. "DISP" from "DISP-01")
@@ -486,6 +489,7 @@ function formatRequirementsSection(requirements) {
   lines.push('');
 
   for (const req of requirements) {
+    if (!req || typeof req !== 'object') continue; // skip corrupt non-object entries (fail-open)
     const category = req.category || 'Unknown';
     // Collapse newlines: these fields come from .planning/formal/requirements.json
     // INSIDE the untrusted repoDir under review, so a newline in req.text could break
