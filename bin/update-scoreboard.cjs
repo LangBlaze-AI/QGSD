@@ -217,19 +217,28 @@ function loadData(scoreboard) {
   }
   try {
     const raw = fs.readFileSync(absPath, 'utf8');
-    const data = JSON.parse(raw);
-    // Backward compat: ensure categories exists
-    if (!data.categories) {
-      data.categories = {};
-    }
-    // Backward compat: ensure slots exists
-    if (!data.slots) {
-      data.slots = {};
-    }
-    // Backward compat: ensure availability exists
-    if (!data.availability) {
-      data.availability = {};
-    }
+    const parsed = JSON.parse(raw);
+    // Normalize against the canonical shape. A valid-JSON but partial / wrong-shape
+    // scoreboard ({}, a missing `models`/`rounds`, a non-array `rounds`, or a null round
+    // entry) must DEGRADE to a usable structure — otherwise the record path crashes on
+    // `data.models[model]` / `findIndex(r => r.task)` (exit 1, vote silently lost, file
+    // left corrupt) and recompute throws. The old backward-compat block only restored 3
+    // of 5 top-level fields and never sanitised individual rounds.
+    const base = emptyData();
+    // A plain object, not an array — `typeof [] === 'object'`, so an array-shaped field
+    // (e.g. `"models": []`) must NOT pass as an object: the record path would then assign
+    // `array.claude = {...}` (a non-index prop) and JSON.stringify drops it → stats
+    // silently lost on write. Exclude arrays for every object-typed field, as for `rounds`.
+    const notObj = (x) => !x || typeof x !== 'object' || Array.isArray(x);
+    const data = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    if (notObj(data.models))         data.models = base.models;
+    if (notObj(data.slots))          data.slots = {};
+    if (notObj(data.categories))     data.categories = {};
+    if (notObj(data.availability))   data.availability = {};
+    if (notObj(data.delivery_stats)) data.delivery_stats = base.delivery_stats;
+    // rounds must be an array of objects — drop null/non-object entries so one corrupt
+    // round can't poison every future findIndex(r => r.task) / recompute.
+    data.rounds = Array.isArray(data.rounds) ? data.rounds.filter(r => r && typeof r === 'object') : [];
     return data;
   } catch (e) {
     process.stderr.write(`[update-scoreboard] WARNING: could not parse ${absPath}: ${e.message}\n`);
@@ -771,6 +780,13 @@ async function setAvailability(argv) {
     process.stdout.write(`[set-availability] ${key}: no availability hint found in message — skipping\n`);
     return;
   }
+  // Guard an Invalid Date — e.g. an absurd "retry in 99999999999 hours" overflows the
+  // representable Date range. available_at.toISOString() would throw RangeError → exit 1,
+  // and the cooldown is never recorded. Treat an unrepresentable window as "no cooldown".
+  if (!(hint.available_at instanceof Date) || !Number.isFinite(hint.available_at.getTime())) {
+    process.stderr.write(`[set-availability] ${key}: availability hint resolved to an invalid time — not recording a cooldown\n`);
+    return;
+  }
 
   const data = loadData(scoreboardPath);
   if (!data.availability) data.availability = {};
@@ -818,14 +834,20 @@ async function getAvailability(argv) {
 
   const result = {};
   for (const [key, avail] of Object.entries(data.availability || {})) {
-    const available_at_ms = new Date(avail.available_at_iso).getTime();
-    const is_available    = available_at_ms <= now;
-    const remaining_ms    = Math.max(0, available_at_ms - now);
+    const a  = (avail && typeof avail === 'object') ? avail : {};
+    const ms = new Date(a.available_at_iso).getTime();
+    const ok = Number.isFinite(ms);
+    // FAIL OPEN on a corrupt entry. A null/non-object avail, or a missing/garbage
+    // available_at_iso, would otherwise make is_available = (NaN <= now) = false → the
+    // slot is stuck in cooldown FOREVER (silently excluded from the quorum) with NaN
+    // remaining. An unparseable window means "available now".
+    const is_available = !ok || ms <= now;
+    const remaining_ms = ok ? Math.max(0, ms - now) : 0;
     result[key] = {
-      available_at_iso:   avail.available_at_iso,
-      available_at_local: avail.available_at_local,
-      reason:             avail.reason,
-      set_at:             avail.set_at,
+      available_at_iso:   a.available_at_iso,
+      available_at_local: a.available_at_local,
+      reason:             a.reason,
+      set_at:             a.set_at,
       is_available,
       remaining_ms,
       remaining_display:  formatDuration(remaining_ms),
@@ -919,13 +941,27 @@ async function mergeWave(argv) {
     if (!data.models[model]) data.models[model] = emptyModelStats();
   }
 
-  const VALID_RESULTS = new Set(['TP', 'TP+', 'TN', 'FP', 'FN', 'UNAVAIL']);
-
   // Apply all votes to data in memory
   for (const { file, vote } of votes) {
+    // Shape-guard: a wave file that is valid JSON but NOT a vote object (null, array,
+    // string, number) must be SKIPPED, not abort the whole atomic merge — one such file
+    // used to throw on `vote.result` and lose every valid sibling vote in the wave.
+    if (!vote || typeof vote !== 'object' || Array.isArray(vote)) {
+      process.stderr.write(`[merge-wave] WARNING: vote file ${file} is not a vote object — skipping\n`);
+      continue;
+    }
     // Normalise UNAVAILABLE → UNAVAIL (typo variant from early rounds)
     let result  = vote.result === 'UNAVAILABLE' ? 'UNAVAIL' : (vote.result || '');
     const verdict = vote.verdict || '';
+    // Enforce the result vocabulary against the canonical VALID_RESULTS. (A local
+    // `new Set([...])` was declared here but never used — the #268 pattern recurring:
+    // a bogus code like "BOGUS" was persisted verbatim, inflating the per-slot
+    // invocation denominator while scoring nothing.) '' is the legitimate Mode-A case,
+    // handled just below.
+    if (result !== '' && !VALID_RESULTS.includes(result)) {
+      process.stderr.write(`[merge-wave] WARNING: invalid result "${result}" in ${file} — skipping\n`);
+      continue;
+    }
 
     // Mode A rounds intentionally have no binary result. Skip writing an empty
     // string — it would corrupt empirical rate calculations by appearing as an
