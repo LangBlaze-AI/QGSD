@@ -1179,3 +1179,55 @@ test('DP-17: overlay must not clobber an existing daintree_preset_name with unde
       `prior daintree_preset_name must not be clobbered with undefined, got: ${JSON.stringify(zai.daintree_preset_name)}`);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ── Iteration 4: path-helper invariants (isUnderInstallDir / mcpArgsNeedMigration) ──
+
+// GUARD-04 (INVARIANT): isUnderInstallDir is the containment test backing mcpArgsNeedMigration
+// (issue #200) and the slot-repointing logic. Its safety rests on `path.relative` + the
+// `!rel.startsWith('..')` guard — NOT on a naive string-prefix match. The classic prefix bug
+// (installDir `/x/nf-bin` falsely "containing" `/x/nf-bin-extra/y.mjs` because the argPath
+// string-starts-with the installDir) would resurface if a future refactor swapped the logic to
+// `argPath.startsWith(installDir)`. This locks down the safe behavior across the prefix family
+// AND the normalization family so the containment contract can't silently regress. Probed live:
+// every case below returns the value asserted here under node's path module.
+test('GUARD-04 (invariant): isUnderInstallDir rejects name-prefixed siblings and survives path normalization', () => {
+  const nfBin = path.join('/x', 'nf-bin');
+
+  // Prefix family — the classic prefix bug. MUST be false: a path whose final segment merely
+  // PREFIXES the installDir's name is NOT inside it.
+  assert.equal(isUnderInstallDir('/x/nf-bin-extra/y.mjs', nfBin), false,
+    'a sibling whose name prefixes nf-bin must not be reported as contained (classic prefix bug)');
+  assert.equal(isUnderInstallDir('/x/nf-bin2/y.mjs', nfBin), false,
+    'nf-bin2 is a sibling, not a child of nf-bin');
+  assert.equal(isUnderInstallDir('/x/nf-bin.mjs', nfBin), false,
+    'a file named nf-bin.mjs (string-prefix of the dir name) is not inside the dir');
+
+  // A real child stays true; the installDir itself stays false (rel === '').
+  assert.equal(isUnderInstallDir(path.join(nfBin, 'unified-mcp-server.mjs'), nfBin), true,
+    'a genuine child must remain contained');
+  assert.equal(isUnderInstallDir(nfBin, nfBin), false,
+    'the installDir itself must not be contained (rel === "")');
+
+  // Normalization family — path.resolve must collapse these before the relative() check.
+  assert.equal(isUnderInstallDir('/x//nf-bin//y.mjs', nfBin), true,
+    'repeated slashes normalize away and must still report containment');
+  assert.equal(isUnderInstallDir('/x/./nf-bin/y.mjs', nfBin), true,
+    'a "." segment normalizes away and must still report containment');
+  assert.equal(isUnderInstallDir(path.join(nfBin, 'y.mjs'), '/x/nf-bin/'), true,
+    'a trailing slash on installDir must not break containment of a real child');
+
+  // Parent-escape family — must stay false (the security boundary isUnderInstallDir enforces).
+  assert.equal(isUnderInstallDir('/x/nf-bin/../bin/x.mjs', nfBin), false,
+    'a .. escape must not be contained');
+  assert.equal(isUnderInstallDir('/x/nf-bin/../nf-bin-extra/y.mjs', nfBin), false,
+    'a .. escape INTO a prefixed sibling must not be contained');
+
+  // COROLLARY on mcpArgsNeedMigration: an args[0] that resolves UNDER nfBin but is written
+  // with redundant .. segments must NOT be falsely flagged for migration every install
+  // (false positive → unnecessary rewrite). This is the down-stream consumer of isUnderInstallDir.
+  assert.equal(
+    mcpArgsNeedMigration('/home/u/.claude/nf-bin/../nf-bin/unified-mcp-server.mjs', '/home/u/.claude/nf-bin'),
+    false,
+    'an args[0] that normalizes to under nf-bin must not be flagged for migration (false positive)'
+  );
+});
