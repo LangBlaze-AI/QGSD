@@ -602,11 +602,27 @@ process.stdin.on('end', () => {
         authType: (agentCfg[slot] && agentCfg[slot].auth_type) || 'api',
       }));
 
-      // Guard: empty roster — no external agents configured at all
-      if (orderedSlots.length === 0) {
-        // Fail-open to solo mode: Claude is the only quorum participant
-        process.stderr.write('[nf-dispatch] WARNING: no external agents in roster — falling back to solo quorum\n');
-        instructions = `<!-- NF_SOLO_MODE -->\nSOLO MODE ACTIVE (empty roster): No external agents configured in providers.json or quorum_active. Claude's vote is the quorum. Write <!-- GSD_DECISION --> in your final output. The Stop hook is informed.\n\nTo add agents, run /nf:mcp-setup or edit ~/.claude/nf.json quorum_active.\n`;
+      // externalSlotCap = fanOutCount - 1 (Claude accounts for the +1 in total
+      // participants). fanOutCount === 1 ⇒ externalSlotCap === 0 ⇒ Claude is the
+      // entire quorum and ZERO external slots should be dispatched.
+      const externalSlotCap = fanOutCount - 1;
+
+      // Guard: solo quorum. Either no external agents are configured at all, OR the
+      // fan-out budget (risk_level / max_quorum_size=1 / a low --n) caps the quorum at
+      // Claude only. Both dispatch ZERO external slots. Routing the 0-external case here
+      // prevents the SC-4 fallback below from force-restoring a slot and contradicting
+      // the "0 external" header — the over-dispatch bug where the header announced
+      // --n 1 / "→ 0 external slots" yet the body still listed a slot-worker Task (and
+      // at max_quorum_size=1 dispatched Claude + 1 = 2 > the cap of 1).
+      if (orderedSlots.length === 0 || externalSlotCap <= 0) {
+        if (orderedSlots.length === 0) {
+          // Fail-open to solo mode: Claude is the only quorum participant
+          process.stderr.write('[nf-dispatch] WARNING: no external agents in roster — falling back to solo quorum\n');
+          instructions = `<!-- NF_SOLO_MODE -->\nSOLO MODE ACTIVE (empty roster): No external agents configured in providers.json or quorum_active. Claude's vote is the quorum. Write <!-- GSD_DECISION --> in your final output. The Stop hook is informed.\n\nTo add agents, run /nf:mcp-setup or edit ~/.claude/nf.json quorum_active.\n`;
+        } else {
+          process.stderr.write('[nf-dispatch] solo quorum — fan-out budget is 1 (Claude only), dispatching 0 external slots\n');
+          instructions = `<!-- NF_SOLO_MODE -->\nSOLO MODE ACTIVE (fan-out budget = 1): the quorum fan-out for this task resolved to 1 participant — from the risk_level, the configured quorum size (quorum.maxSize), and/or the --n cap — so Claude is the entire quorum. Skip ALL external slot-worker Task dispatches. Claude's vote is the quorum. Write <!-- GSD_DECISION --> in your final output. The Stop hook is informed.\n\n`;
+        }
       } else {
         if (preferSub) {
           orderedSlots.sort((a, b) => {
@@ -616,8 +632,6 @@ process.stdin.on('end', () => {
           });
         }
 
-        // externalSlotCap = fanOutCount - 1 (Claude accounts for the +1 in total participants)
-        const externalSlotCap = fanOutCount - 1;
         let cappedSlots = orderedSlots.slice(0, externalSlotCap);
 
       // DISP-01: Preflight filter — probe CLI-backed slots using quorum-preflight.cjs --all.
@@ -726,8 +740,11 @@ process.stdin.on('end', () => {
         } catch { /* fail-open */ }
       }
 
-      // SC-4: Graceful fallback — ensure at least one slot in dispatch list
-      if (cappedSlots.length === 0 && orderedSlots.length > 0) {
+      // SC-4: Graceful fallback — restore one slot when an intended external budget
+      // (externalSlotCap > 0, guaranteed in this branch) was filtered to empty by
+      // preflight/dedup. The `externalSlotCap > 0` term is defensive: it must NEVER
+      // restore a slot when the budget was intentionally 0 (that path is solo-mode above).
+      if (externalSlotCap > 0 && cappedSlots.length === 0 && orderedSlots.length > 0) {
         const relaxedSlots = orderedSlots.filter(s => !skipSet.has(s.slot));
         if (relaxedSlots.length > 0) {
           cappedSlots = [relaxedSlots[0]];
