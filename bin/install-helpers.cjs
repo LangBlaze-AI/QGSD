@@ -117,8 +117,15 @@ function mergeProvidersJson(repoPath, userPath, opts = {}) {
     userData = JSON.parse(fs.readFileSync(userPath, 'utf8'));
   } catch (e) {
     log(`providers.json: user copy unreadable (${e.message}); replacing with repo source`);
-    fs.copyFileSync(repoPath, userPath);
-    return { status: 'fallback-copy', preservedCount: 0, preservedNames: [] };
+    try {
+      fs.copyFileSync(repoPath, userPath);
+      return { status: 'fallback-copy', preservedCount: 0, preservedNames: [] };
+    } catch (e2) {
+      // The recovery copy itself can throw (e.g. userPath is a directory → EISDIR).
+      // Fail open rather than wedge the installer from the corruption-recovery path.
+      log(`providers.json: could not overwrite user copy (${e2.message}); skipping`);
+      return { status: 'error', preservedCount: 0, preservedNames: [] };
+    }
   }
 
   const repoProviders = Array.isArray(repoData.providers) ? repoData.providers : [];
@@ -134,12 +141,20 @@ function mergeProvidersJson(repoPath, userPath, opts = {}) {
     providers: [...repoProviders, ...userExtras],
   };
 
-  // Atomic write (avoid leaving a half-written file if power-cuts mid-merge)
-  const tmpPath = userPath + '.merge.tmp';
-  fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2) + '\n', 'utf8');
-  fs.renameSync(tmpPath, userPath);
-
   const preservedNames = userExtras.map(p => p.name);
+
+  // Atomic write with cleanup-on-failure: never leave a half-written .merge.tmp behind,
+  // and never let a rename failure (EXDEV cross-device, EACCES) wedge the install.
+  const tmpPath = userPath + '.merge.tmp';
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2) + '\n', 'utf8');
+    fs.renameSync(tmpPath, userPath);
+  } catch (e) {
+    try { fs.unlinkSync(tmpPath); } catch (_) { /* tmp may not have been created */ }
+    log(`providers.json: could not persist merged file (${e.message}); skipping`);
+    return { status: 'error', preservedCount: preservedNames.length, preservedNames };
+  }
+
   if (preservedNames.length > 0) {
     log(`providers.json: merged repo defaults; preserved ${preservedNames.length} user-added slot(s): ${preservedNames.join(', ')}`);
   }
@@ -190,7 +205,9 @@ function restoreDaintreePresets(providers, presetsStorePath) {
         if (preset.display_provider) existing.display_provider = preset.display_provider;
         restoredNames.push(slotName);
       }
-    } else {
+    } else if (preset.daintree_preset_id) {
+      // Mirror the overlay branch's truthiness guard: a preset with no real id can't be
+      // tracked idempotently, so don't reconstruct a half-baked slot for it.
       const vanilla = preset.vanilla_slot_name ? byName.get(preset.vanilla_slot_name) : null;
       if (vanilla) {
         const reconstructed = JSON.parse(JSON.stringify(vanilla));
@@ -202,7 +219,10 @@ function restoreDaintreePresets(providers, presetsStorePath) {
         reconstructed.env = { ...(vanilla.env || {}), ...(preset.env || {}) };
         if (preset.model) reconstructed.model = preset.model;
         if (preset.display_provider) reconstructed.display_provider = preset.display_provider;
-        reconstructed.description = (vanilla.description || '') + ' — Daintree preset: ' + preset.daintree_preset_name;
+        const descBase = vanilla.description || '';
+        reconstructed.description = preset.daintree_preset_name
+          ? `${descBase} — Daintree preset: ${preset.daintree_preset_name}`
+          : descBase;
         providers.push(reconstructed);
         byName.set(slotName, reconstructed);
         restoredNames.push(slotName);

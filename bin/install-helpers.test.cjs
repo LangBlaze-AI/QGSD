@@ -920,3 +920,151 @@ test('DP-13: providers array with null/undefined entries does not crash restoreD
     }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ── Iteration 2: NEW edge cases in the reconstruction branch & atomic write ──
+
+// DP-14: Asymmetry between the overlay branch (guarded by `preset.daintree_preset_id`
+// truthiness, line 184) and the reconstruction branch (NO such guard, lines 193-209).
+// A preset-store entry with a falsy daintree_preset_id (empty string / null) but a
+// valid vanilla_slot_name makes the reconstruction branch run anyway, emitting a slot
+// with `daintree_preset_id: ''` (or undefined). That is a malformed slot restored
+// WITHOUT a real preset id — it can never be idempotent on re-import and pollutes
+// providers.json with a half-baked entry. The overlay branch correctly skips this
+// case; the reconstruction branch should too.
+test('DP-14: reconstruction branch must skip a preset with falsy daintree_preset_id (overlay/restore asymmetry)', () => {
+  const dir = tmpDir('dp14');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-empty-preset': {
+          daintree_preset_id: '',            // falsy — no real preset id
+          daintree_preset_name: 'Empty',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://example.com' },
+          model: 'glm-5.1',
+        },
+        'claude-null-preset': {
+          daintree_preset_id: null,          // falsy — no real preset id
+          daintree_preset_name: 'Null',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+        },
+      },
+    });
+
+    const providers = [{ name: 'claude-1', mainTool: 'claude', description: 'Claude' }];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    // SAFE behavior: a preset with no real daintree_preset_id must NOT be reconstructed
+    // (mirrors the overlay branch's `preset.daintree_preset_id` guard). Today the
+    // reconstruction branch runs unconditionally and emits slots with empty/null ids.
+    assert.equal(result.restoredCount, 0,
+      'preset with falsy daintree_preset_id must not be reconstructed');
+    const empty = providers.find(p => p && p.name === 'claude-empty-preset');
+    const nulled = providers.find(p => p && p.name === 'claude-null-preset');
+    assert.equal(empty, undefined, 'no slot should be reconstructed for an empty preset_id');
+    assert.equal(nulled, undefined, 'no slot should be reconstructed for a null preset_id');
+    assert.equal(providers.length, 1, 'vanilla slot count must be unchanged');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-15: The reconstruction branch builds the description via string concatenation:
+//   `(vanilla.description || '') + ' — Daintree preset: ' + preset.daintree_preset_name`
+// When `daintree_preset_name` is missing/undefined (a corrupt or hand-edited preset
+// store), JS coerces it to the literal string "undefined", producing a user-visible
+// description like "Claude — Daintree preset: undefined". This is a latent data-quality
+// bug — the slot ships with garbage in its description text. The safe behavior is to
+// omit the suffix (or skip the entry) when the name is absent.
+test('DP-15: reconstruction must not emit the literal string "undefined" in description when daintree_preset_name is missing', () => {
+  const dir = tmpDir('dp15');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-noname': {
+          daintree_preset_id: 'preset-noname',
+          // daintree_preset_name intentionally MISSING
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://example.com' },
+        },
+      },
+    });
+
+    const providers = [
+      { name: 'claude-1', mainTool: 'claude', description: 'Claude Opus' },
+    ];
+
+    restoreDaintreePresets(providers, presetsPath);
+
+    const slot = providers.find(p => p && p.name === 'claude-noname');
+    assert.ok(slot, 'reconstructed slot should exist (preset_id is truthy)');
+    // SAFE behavior: no literal "undefined" in the rendered description.
+    // Today this produces "... — Daintree preset: undefined".
+    assert.ok(!String(slot.description).includes('undefined'),
+      `description must not contain literal "undefined", got: ${JSON.stringify(slot.description)}`);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// MERGE-17: When the user file exists but is unreadable (e.g. it is a directory, or a
+// read-only file the parse step fails on), the catch block falls back to
+// `fs.copyFileSync(repoPath, userPath)`. That copy is NOT wrapped in try/catch. If the
+// copy throws (userPath is a directory → EISDIR; or readonly target → EACCES), the throw
+// is uncaught and wedges the installer — exactly the fail-open gap the rest of the
+// function tries to prevent. This makes the corruption-recovery path itself a crash site.
+test('MERGE-17: corrupt user file whose fallback copyFileSync throws must fail open, not wedge the installer (uncaught throw)', () => {
+  const dir = tmpDir('m17');
+  try {
+    const repoPath = path.join(dir, 'repo.json');
+    writeJson(repoPath, { providers: [{ name: 'claude-1' }] });
+
+    // Make userPath a DIRECTORY. readFileSync(dir) throws EISDIR → caught → fallback
+    // copyFileSync(repoPath, dirPath) throws EISDIR/EACCES UNCAUGHT today.
+    const userPath = path.join(dir, 'user.json');
+    fs.mkdirSync(userPath);
+    assert.ok(fs.statSync(userPath).isDirectory(), 'precondition: userPath is a directory');
+
+    // SAFE behavior: fail open with a defined status, never an uncaught throw.
+    // Today this throws inside the catch block, crashing the calling installer.
+    const result = mergeProvidersJson(repoPath, userPath, { log: () => {} });
+    assert.ok(result && ['error', 'fallback-copy'].includes(result.status),
+      `expected fail-open status, got ${result && result.status}`);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// MERGE-18 (INVARIANT): The Array.isArray coercion of providers is symmetric for repo
+// and user (lines 124-125). Confirm a repo source whose `providers` is a non-array
+// object (e.g. `{providers: {'claude-1': {...}}}` — a hand-corrupted or schema-drift
+// repo file) is coerced to [] on BOTH sides and the merge still completes, preserving
+// legitimate user extras. This locks in the symmetry so a future refactor can't
+// accidentally drop one guard.
+test('MERGE-18 (invariant): repo.providers as a non-array object is coerced to [] symmetrically with user side', () => {
+  const dir = tmpDir('m18');
+  try {
+    const repoPath = path.join(dir, 'repo.json');
+    const userPath = path.join(dir, 'user.json');
+    // Repo shipped a corrupt shape: providers is an object map, not an array.
+    writeJson(repoPath, { providers: { 'claude-1': { model: 'opus' } } });
+    writeJson(userPath, {
+      providers: [
+        { name: 'claude-1' },
+        { name: 'legit-user-extra' },
+      ],
+    });
+
+    const result = mergeProvidersJson(repoPath, userPath);
+
+    assert.equal(result.status, 'merged');
+    // repoProviders coerced to [] → no repo names → both user entries treated as extras
+    assert.equal(result.preservedCount, 2);
+    assert.deepEqual(result.preservedNames.sort(), ['claude-1', 'legit-user-extra']);
+    const merged = readJson(userPath).providers;
+    assert.ok(Array.isArray(merged), 'merged providers must be an array even when repo shape is wrong');
+    assert.deepEqual(merged.map(p => p.name).sort(), ['claude-1', 'legit-user-extra']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
