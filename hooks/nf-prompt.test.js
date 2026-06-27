@@ -1753,6 +1753,249 @@ test('ADV-RISK-CLAMP-INVARIANT: mapRiskLevelToCount stays within [1..maxSize] an
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ── ADVERSARIAL ROUND 2: SOLO-BOUNDARY / FAN-OUT MATRIX (post-SC-4-fix) ────────
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Round 1 routed a 0-external budget (externalSlotCap <= 0) to SOLO MODE. These
+// probes verify the fix did NOT over-reach: a cap of EXACTLY 1 external must still
+// dispatch 1 slot-worker (not get swallowed by the `<= 0` guard), the whole
+// (maxSize × risk × --n) matrix dispatches max(0, fanOutCount-1) externals, and the
+// non-solo SC-4 restore + corrupt-state fail-open paths stay coherent.
+
+// Helper: write a project nf.json roster, run the hook, return the injected context.
+function _fanoutCtx(slots, quorumCfg, prompt, contextYaml, extra) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-adv-fo-'));
+  spawnSync('git', ['init'], { cwd: tempDir, encoding: 'utf8', timeout: 5000 });
+  const claudeDir = path.join(tempDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  const agent_config = {};
+  for (const s of slots) agent_config[s] = { auth_type: 'api' }; // no model → never model-dedup
+  fs.writeFileSync(
+    path.join(claudeDir, 'nf.json'),
+    JSON.stringify(Object.assign({ quorum_active: slots, quorum: quorumCfg, agent_config }, extra || {})),
+    'utf8'
+  );
+  try {
+    const payload = { prompt, cwd: tempDir };
+    if (contextYaml) payload.context_yaml = contextYaml;
+    const { stdout, exitCode } = runHook(payload);
+    assert.strictEqual(exitCode, 0, 'hook must exit 0');
+    const parsed = JSON.parse(stdout);
+    return parsed.hookSpecificOutput.additionalContext;
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+function _countTaskLines(ctx) {
+  return (ctx.match(/\d+\. Task\(subagent_type="nf-quorum-slot-worker"/g) || []).length;
+}
+
+// ADV-FANOUT-CAP1-NOT-SWALLOWED (CRITICAL REGRESSION on the solo boundary):
+// externalSlotCap === 1 (fanOutCount === 2) sits one step above the `<= 0` solo
+// guard. It MUST still dispatch exactly 1 external slot-worker — NOT be swallowed
+// into solo mode and NOT escalate to 0/2. maxSize=2 + risk medium → ceil(4/3)=2 →
+// cap 1. Contrast: maxSize=2 + routine → ceil(2/3)=1 → solo (0). If the `<= 0`
+// guard ever became `< 1`-on-fanOut or `<= 1`, the 1-external case would vanish.
+test('ADV-FANOUT-CAP1-NOT-SWALLOWED: externalSlotCap===1 dispatches exactly 1 external (not solo, not 0/2)', () => {
+  // medium → fanOutCount 2 → 1 external. Must be a real QUORUM block, not solo.
+  const medium = _fanoutCtx(['codex-1', 'gemini-1'], { maxSize: 2 }, '/qnf:plan-phase', 'risk_level: medium\n');
+  assert.ok(!/NF_SOLO_MODE|SOLO MODE/.test(medium), 'cap===1 must NOT degrade to solo mode');
+  assert.ok(/QUORUM REQUIRED/.test(medium), 'cap===1 must emit a QUORUM REQUIRED block');
+  assert.strictEqual(
+    _countTaskLines(medium), 1,
+    'maxSize=2 + medium (cap===1) must dispatch EXACTLY 1 external slot-worker (the `<= 0` guard must not swallow the 1-external case)'
+  );
+  // routine → fanOutCount 1 → solo (the contrast boundary).
+  const routine = _fanoutCtx(['codex-1', 'gemini-1'], { maxSize: 2 }, '/qnf:plan-phase', 'risk_level: routine\n');
+  assert.match(routine, /NF_SOLO_MODE|SOLO MODE/, 'maxSize=2 + routine (fanOut 1) must be solo');
+  assert.strictEqual(_countTaskLines(routine), 0, 'maxSize=2 + routine must dispatch 0 externals');
+});
+
+// ADV-FANOUT-MATRIX-INVARIANT: across maxSize × risk × --n, dispatched external
+// Task lines == max(0, fanOutCount-1), solo-mode iff fanOutCount===1, and the count
+// never exceeds maxSize-1 nor the roster size. model_routing_enabled:false isolates
+// pure fan-out math from tier-based slot filtering. A single off-by-one in the
+// externalSlotCap slice, the `<= 0` guard, or mapRiskLevelToCount fails a cell here.
+test('ADV-FANOUT-MATRIX-INVARIANT: dispatched externals == max(0, fanOutCount-1), solo iff fanOut===1', () => {
+  const ROSTER = ['codex-1', 'gemini-1', 'opencode-1', 'copilot-1', 'claude-1']; // 5 distinct
+  const ceil = Math.ceil;
+  const riskCount = (risk, n) => {
+    if (risk === 'routine' || risk === 'low') return Math.max(1, ceil(n / 3));
+    if (risk === 'medium') return Math.max(1, ceil(2 * n / 3));
+    return n; // high / absent → full pool
+  };
+  // [maxSize, risk(null=absent), nOverride(null=none)]
+  const cells = [
+    [1, null, null],   // fanOut 1 → solo
+    [2, 'routine', null], // 1 → solo
+    [2, 'medium', null],  // 2 → 1 ext
+    [2, 'high', null],    // 2 → 1 ext
+    [3, 'routine', null], // 1 → solo
+    [3, 'medium', null],  // 2 → 1 ext
+    [3, 'high', null],    // 3 → 2 ext
+    [3, null, null],      // absent → 3 → 2 ext
+    [5, 'routine', null], // ceil(5/3)=2 → 1 ext
+    [5, 'medium', null],  // ceil(10/3)=4 → 3 ext
+    [5, 'high', null],    // 5 → 4 ext
+    [3, 'high', 99],      // min(3,99)=3 → 2 ext (override is a cap, not a floor)
+    [5, 'high', 2],       // min(5,2)=2 → 1 ext (override caps below risk)
+  ];
+  for (const [maxSize, risk, nOverride] of cells) {
+    const riskDriven = riskCount(risk, maxSize);
+    const fanOut = nOverride !== null ? Math.min(riskDriven, nOverride) : riskDriven;
+    const expectedExt = Math.max(0, fanOut - 1);
+    const prompt = nOverride !== null ? `/qnf:plan-phase --n ${nOverride}` : '/qnf:plan-phase';
+    const ctx = _fanoutCtx(
+      ROSTER, { maxSize },
+      prompt,
+      risk ? `risk_level: ${risk}\n` : null,
+      { model_routing_enabled: false }
+    );
+    const got = _countTaskLines(ctx);
+    const label = `maxSize=${maxSize} risk=${risk || 'absent'} --n=${nOverride || 'none'} (fanOut=${fanOut})`;
+    assert.strictEqual(got, expectedExt, `${label}: expected ${expectedExt} external Task lines, got ${got}`);
+    assert.ok(got <= maxSize - 1, `${label}: dispatched ${got} exceeds maxSize-1=${maxSize - 1}`);
+    assert.ok(got <= ROSTER.length, `${label}: dispatched ${got} exceeds roster size`);
+    if (fanOut === 1) {
+      assert.match(ctx, /NF_SOLO_MODE|SOLO MODE/, `${label}: fanOut===1 must be solo mode`);
+    } else {
+      assert.ok(!/NF_SOLO_MODE|SOLO MODE/.test(ctx), `${label}: fanOut>1 must NOT be solo mode`);
+      assert.ok(/QUORUM REQUIRED/.test(ctx), `${label}: fanOut>1 must emit QUORUM REQUIRED`);
+    }
+  }
+});
+
+// ADV-FANOUT-N-OVERRIDE-INTERACTION: --n interacts with risk as a MAX cap.
+//   --n 1 on a high-risk task → still solo (the cap wins; early --n 1 branch).
+//   --n 5 with maxSize=3 high → capped at maxSize → 2 externals (NOT 4), and the
+//   announced "Claude + N external" count equals the dispatched Task lines.
+test('ADV-FANOUT-N-OVERRIDE-INTERACTION: --n caps but never inflates; header count matches body', () => {
+  // --n 1 beats a high-risk escalation → solo, 0 externals.
+  const solo = _fanoutCtx(['codex-1', 'gemini-1', 'opencode-1'], { maxSize: 3 },
+    '/qnf:plan-phase --n 1', 'risk_level: high\n', { model_routing_enabled: false });
+  assert.match(solo, /NF_SOLO_MODE|SOLO MODE/, '--n 1 must force solo even on high risk (cap wins)');
+  assert.strictEqual(_countTaskLines(solo), 0, '--n 1 must dispatch 0 externals regardless of risk');
+
+  // --n 5 with maxSize=3 high → min(3,5)=3 → 2 externals, capped at maxSize, not 4.
+  const capped = _fanoutCtx(['codex-1', 'gemini-1', 'opencode-1', 'copilot-1', 'claude-1'], { maxSize: 3 },
+    '/qnf:plan-phase --n 5', 'risk_level: high\n', { model_routing_enabled: false });
+  assert.ok(!/NF_SOLO_MODE|SOLO MODE/.test(capped), '--n 5 high must not be solo');
+  assert.strictEqual(
+    _countTaskLines(capped), 2,
+    '--n 5 with maxSize=3 must cap at maxSize → 2 externals (NOT 4 from --n 5)'
+  );
+  // Header count must equal body count (no over/under announcement).
+  const announced = capped.match(/(\d+)\s+external\s+slot/);
+  assert.ok(announced, 'header must announce an external slot count');
+  assert.strictEqual(parseInt(announced[1], 10), 2, `header announces ${announced && announced[1]} but body dispatches 2`);
+});
+
+// ADV-FANOUT-SC4-RESTORE-CONSISTENCY: on the NON-solo path (externalSlotCap > 0),
+// when the recently-failed filter empties cappedSlots, SC-4 restores exactly 1 slot.
+// The round-1 change kept SC-4 gated behind `externalSlotCap > 0`, so it must STILL
+// restore here — and the announced "N external slot" header must equal the 1
+// dispatched Task line (no NEW header/body contradiction introduced by the fix).
+// maxSize=3 + medium → fanOut 2 → cap 1 → header advertises "1 external slot".
+test('ADV-FANOUT-SC4-RESTORE-CONSISTENCY: cap>0 all-filtered → SC-4 restores 1, header matches body', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-adv-sc4-'));
+  try {
+    spawnSync('git', ['init'], { cwd: tempDir, encoding: 'utf8', timeout: 5000 });
+    const claudeDir = path.join(tempDir, '.claude');
+    fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(claudeDir, 'nf.json'),
+      JSON.stringify({
+        quorum_active: ['codex-1', 'gemini-1'],
+        quorum: { maxSize: 3 },
+        model_routing_enabled: false,
+        agent_config: { 'codex-1': { auth_type: 'api' }, 'gemini-1': { auth_type: 'api' } },
+      }),
+      'utf8'
+    );
+    // Mark BOTH slots as failed < 5min ago so the recent-failure filter empties cappedSlots.
+    const planningDir = path.join(tempDir, '.planning');
+    fs.mkdirSync(planningDir, { recursive: true });
+    const nowIso = new Date().toISOString();
+    fs.writeFileSync(
+      path.join(planningDir, 'quorum-failures.json'),
+      JSON.stringify([
+        { slot: 'codex-1', error_type: 'TIMEOUT', pattern: 'x', last_seen: nowIso },
+        { slot: 'gemini-1', error_type: 'AUTH', pattern: 'y', last_seen: nowIso },
+      ]),
+      'utf8'
+    );
+    const { stdout, exitCode } = runHook({ prompt: '/qnf:plan-phase', cwd: tempDir, context_yaml: 'risk_level: medium\n' });
+    assert.strictEqual(exitCode, 0, 'exit 0');
+    const ctx = JSON.parse(stdout).hookSpecificOutput.additionalContext;
+    // externalSlotCap=1 > 0 → solo guard must NOT engage; SC-4 restores 1.
+    assert.ok(!/NF_SOLO_MODE|SOLO MODE/.test(ctx), 'cap>0 must not degrade to solo even when all slots are filtered');
+    const taskLines = _countTaskLines(ctx);
+    assert.strictEqual(taskLines, 1, 'SC-4 must restore exactly 1 slot when cap>0 and all slots filtered');
+    const announced = ctx.match(/(\d+)\s+external\s+slot/);
+    assert.ok(announced, 'medium fan-out header must announce an external slot count');
+    assert.strictEqual(
+      parseInt(announced[1], 10), taskLines,
+      `header advertises ${announced && announced[1]} external slot(s) but body dispatches ${taskLines} (round-1 fix must not introduce a contradiction)`
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// ADV-FANOUT-CORRUPT-STATE-FAILOPEN: corrupt scoreboard + corrupt failures file must
+// never crash dispatch. On the now-reachable SOLO path (maxSize=1) the hook still
+// injects NF_SOLO_MODE; on the NON-solo cap===1 path it still dispatches exactly 1
+// external. Both must yield exit 0 and pure JSON (fail-open contract).
+test('ADV-FANOUT-CORRUPT-STATE-FAILOPEN: corrupt scoreboard/failures → no crash, solo+non-solo both coherent', () => {
+  const mk = (maxSize) => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-adv-corrupt-'));
+    spawnSync('git', ['init'], { cwd: tempDir, encoding: 'utf8', timeout: 5000 });
+    const claudeDir = path.join(tempDir, '.claude');
+    fs.mkdirSync(claudeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(claudeDir, 'nf.json'),
+      JSON.stringify({
+        quorum_active: ['codex-1', 'gemini-1'],
+        quorum: { maxSize },
+        model_routing_enabled: false,
+        agent_config: { 'codex-1': { auth_type: 'api' }, 'gemini-1': { auth_type: 'api' } },
+      }),
+      'utf8'
+    );
+    const planningDir = path.join(tempDir, '.planning');
+    fs.mkdirSync(planningDir, { recursive: true });
+    fs.writeFileSync(path.join(planningDir, 'quorum-scoreboard.json'), '{{{ not json', 'utf8');
+    fs.writeFileSync(path.join(planningDir, 'quorum-failures.json'), 'NOPE not json either', 'utf8');
+    return tempDir;
+  };
+
+  // Solo path: maxSize=1 → externalSlotCap=0 → solo, despite corrupt state.
+  const soloDir = mk(1);
+  try {
+    const { stdout, exitCode } = runHook({ prompt: '/qnf:plan-phase', cwd: soloDir });
+    assert.strictEqual(exitCode, 0, 'solo path: corrupt state must fail open (exit 0)');
+    const parsed = JSON.parse(stdout); // must be pure JSON — no crash spew on stdout
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    assert.match(ctx, /NF_SOLO_MODE|SOLO MODE/, 'solo path must still inject solo marker under corrupt state');
+    assert.strictEqual(_countTaskLines(ctx), 0, 'solo path dispatches 0 externals under corrupt state');
+  } finally {
+    fs.rmSync(soloDir, { recursive: true, force: true });
+  }
+
+  // Non-solo path: maxSize=2 + medium → cap 1 → 1 external, despite corrupt state.
+  const dispatchDir = mk(2);
+  try {
+    const { stdout, exitCode } = runHook({ prompt: '/qnf:plan-phase', cwd: dispatchDir, context_yaml: 'risk_level: medium\n' });
+    assert.strictEqual(exitCode, 0, 'non-solo path: corrupt state must fail open (exit 0)');
+    const ctx = JSON.parse(stdout).hookSpecificOutput.additionalContext;
+    assert.ok(!/NF_SOLO_MODE|SOLO MODE/.test(ctx), 'non-solo cap=1 must dispatch, not degrade to solo, under corrupt state');
+    assert.strictEqual(_countTaskLines(ctx), 1, 'non-solo cap=1 must still dispatch exactly 1 external under corrupt state');
+  } finally {
+    fs.rmSync(dispatchDir, { recursive: true, force: true });
+  }
+});
+
 // ADV-NO-FALSE-INJECTION: a NON-command prompt that merely MENTIONS a planning
 // command mid-sentence (prose / not at start) must be a silent pass — exit 0, no
 // stdout — even with quorum_active configured. The anchored allowlist requires the
