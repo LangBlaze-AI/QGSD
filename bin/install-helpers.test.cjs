@@ -1293,3 +1293,80 @@ test('DP-18: null / non-object preset entry must not crash restoreDaintreePreset
     assert.equal(zai.daintree_preset_id, 'preset-good');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ── Iteration 6: final convergence probe ──
+
+// DP-19: The DP-16 test hardened the OVERLAY branch's env spread (line 204 guards
+// `preset.env && typeof preset.env === 'object' && !Array.isArray(preset.env)`). But the
+// RECONSTRUCTION branch (line 222) spreads env with only a falsy-fallback guard:
+//   `reconstructed.env = { ...(vanilla.env || {}), ...(preset.env || {}) };`
+// The DP-16 comment (lines 1081-1083) explicitly flags this asymmetry — "the reconstruction
+// branch ... is equally exposed" — yet no test forces the reconstruction path with a non-object
+// env, because DP-16 deliberately OMITS vanilla_slot_name to keep slots on the overlay branch.
+//
+// A truthy non-object `preset.env` (string or array) in a preset whose target slot is MISSING
+// (so the reconstruction branch fires) is spread BY INDEX, producing the identical numeric-key
+// data-quality corruption DP-16 fixed on the overlay side: reconstructed.env gains keys like
+// {"0":"K","1":"E",...} alongside the legitimate inherited keys. That corrupted env is then
+// serialized into providers.json and read by unified-mcp-server at slot spawn.
+//
+// Reach conditions for the reconstruction branch: preset is an object (passes line 197),
+// preset.daintree_preset_id is truthy (line 211), the target slotName is NOT in providers
+// (byName.get → undefined → else-if), and preset.vanilla_slot_name resolves to an existing
+// vanilla slot (so `vanilla` is non-null, line 215). Realistic: a fan-out preset whose slot
+// was dropped during a partial mcpServers reconstruction, but whose durable-store entry was
+// hand-edited / written by a buggy importer that serialized env as a flat string.
+// SAFE behavior: mirror the overlay guard — ignore a non-object preset.env, never spread by index.
+test('DP-19: reconstruction branch must not spread a non-object preset.env (string/array) into numeric env keys', () => {
+  const dir = tmpDir('dp19');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        // env as a string — truthy, iterable by index. Target slot is MISSING → reconstruction fires.
+        'claude-str-env': {
+          daintree_preset_id: 'preset-str',
+          daintree_preset_name: 'StrEnv',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: 'KEY=VAL',
+        },
+        // env as an array of pairs — truthy, iterable by index.
+        'claude-arr-env': {
+          daintree_preset_id: 'preset-arr',
+          daintree_preset_name: 'ArrEnv',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: [['ANTHROPIC_AUTH_TOKEN', 'tok-pair']],
+        },
+      },
+    });
+
+    // Only the vanilla slot exists — both target slots are MISSING, forcing reconstruction.
+    const providers = [
+      { name: 'claude-1', mainTool: 'claude', description: 'Claude', env: { ANTHROPIC_BASE_URL: 'https://old.com' } },
+    ];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    assert.equal(result.restoredCount, 2, 'both missing slots must be reconstructed');
+    const strSlot = providers.find(p => p && p.name === 'claude-str-env');
+    const arrSlot = providers.find(p => p && p.name === 'claude-arr-env');
+    assert.ok(strSlot, 'reconstructed string-env slot must exist');
+    assert.ok(arrSlot, 'reconstructed array-env slot must exist');
+
+    // SAFE behavior: env must contain ONLY string-valued, non-numeric keys. A non-object
+    // preset.env must not leak indexed character/element keys. Today the reconstruction
+    // spread `{ ...(preset.env || {}) }` produces {"0":"K","1":"E",...} / {"0":[...]}.
+    const numericKeys = env => Object.keys(env).filter(k => /^\d+$/.test(k));
+    assert.deepEqual(numericKeys(strSlot.env), [],
+      `string preset.env must not spread into numeric keys (reconstruction), got: ${JSON.stringify(strSlot.env)}`);
+    assert.deepEqual(numericKeys(arrSlot.env), [],
+      `array preset.env must not spread into numeric keys (reconstruction), got: ${JSON.stringify(arrSlot.env)}`);
+
+    // The inherited vanilla env key must survive the reconstruction (not wiped by corruption).
+    assert.equal(strSlot.env.ANTHROPIC_BASE_URL, 'https://old.com',
+      'inherited vanilla env keys must survive a non-object preset.env reconstruction');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

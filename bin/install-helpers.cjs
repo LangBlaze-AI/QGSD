@@ -17,6 +17,13 @@ const path = require('path');
 // filter is the generic `*.cjs` match; these are the non-.cjs runtime files).
 const NF_BIN_RUNTIME_MJS = new Set(['unified-mcp-server.mjs']);
 
+// True for a plain object (excludes null, arrays, and primitives). Shared guard so the
+// "deref a non-object" crash class (providers entries, preset entries, preset.env) is
+// closed in ONE place rather than pasted per call-site.
+function isPlainObject(v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
 // Decide whether a top-level bin/ entry should be copied into nf-bin/.
 // providers.json is handled separately (merge semantics) and is NOT returned here.
 function shouldCopyToNfBin(entry) {
@@ -189,19 +196,19 @@ function restoreDaintreePresets(providers, presetsStorePath) {
   if (!presetsStore || !presetsStore.presets) return { restoredCount: 0, restoredNames: [] };
 
   const byName = new Map(
-    providers.filter(p => p && typeof p === 'object').map(p => [p.name, p])
+    providers.filter(isPlainObject).map(p => [p.name, p])
   );
   const restoredNames = [];
 
   for (const [slotName, preset] of Object.entries(presetsStore.presets)) {
-    if (!preset || typeof preset !== 'object') continue; // skip null/non-object preset entries
+    if (!isPlainObject(preset)) continue; // skip null/non-object preset entries
     const existing = byName.get(slotName);
     if (existing) {
       if (!existing.daintree_preset_id && preset.daintree_preset_id) {
         existing.daintree_preset_id = preset.daintree_preset_id;
         if (preset.daintree_preset_name) existing.daintree_preset_name = preset.daintree_preset_name;
         if (preset.daintree_preset_family) existing.daintree_preset_family = preset.daintree_preset_family;
-        if (preset.env && typeof preset.env === 'object' && !Array.isArray(preset.env)) {
+        if (isPlainObject(preset.env)) {
           existing.env = { ...(existing.env || {}), ...preset.env };
         }
         if (preset.model) existing.model = preset.model;
@@ -219,7 +226,8 @@ function restoreDaintreePresets(providers, presetsStorePath) {
         reconstructed.daintree_preset_id = preset.daintree_preset_id;
         reconstructed.daintree_preset_name = preset.daintree_preset_name;
         if (preset.daintree_preset_family) reconstructed.daintree_preset_family = preset.daintree_preset_family;
-        reconstructed.env = { ...(vanilla.env || {}), ...(preset.env || {}) };
+        const presetEnv = isPlainObject(preset.env) ? preset.env : {};
+        reconstructed.env = { ...(vanilla.env || {}), ...presetEnv };
         if (preset.model) reconstructed.model = preset.model;
         if (preset.display_provider) reconstructed.display_provider = preset.display_provider;
         const descBase = vanilla.description || '';
@@ -245,4 +253,5 @@ module.exports = {
   isUnderInstallDir,
   mcpArgsNeedMigration,
   synthesizeMcpEntry,
+  isPlainObject,
 };
