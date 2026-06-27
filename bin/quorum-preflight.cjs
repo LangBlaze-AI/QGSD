@@ -81,6 +81,18 @@ function readConfig() {
   for (const f of [globalCfg, projCfg]) {
     try { Object.assign(cfg, JSON.parse(fs.readFileSync(f, 'utf8'))); } catch (_) {}
   }
+  // Normalize the roster-shaping fields so every consumer below sees valid values even
+  // when nf.json was hand-edited. This path does a raw Object.assign and bypasses
+  // config-loader's validateConfig, so without this:
+  //   - a non-array quorum_active ("codex-1") was echoed raw by --quorum-active (breaking
+  //     `jq '.[]'`) and let buildTeam's `active.includes()` substring-match wrong slots;
+  //   - a non-positive-integer max_quorum_size (0/-2/1.5/"abc") silently excluded every
+  //     slot (blocked quorum) or emitted a non-integer that breaks quorum.md's shell compare.
+  cfg.quorum_active = Array.isArray(cfg.quorum_active)
+    ? cfg.quorum_active.filter(s => typeof s === 'string' && s.length > 0)
+    : [];
+  const mqs = Number(cfg.max_quorum_size);
+  cfg.max_quorum_size = Number.isInteger(mqs) && mqs >= 1 ? mqs : 3;
   return cfg;
 }
 
@@ -89,13 +101,19 @@ function readConfig() {
 // Canonical installed path: ~/.claude/nf-bin/providers.json
 // (`'.claude', 'nf-bin', 'providers.json'`). Returns [] when no populated file is found.
 function findProviders() {
-  return loadProviders({ baseDir: __dirname }) || [];
+  // Filter null/non-object/nameless entries at the single source — a hand-edited
+  // providers.json with a `null` entry (Array.isArray stays true, so loadProviders
+  // passes it through) otherwise made buildTeam/dedup/probe deref `p.name` and throw
+  // `TypeError`, which surfaced as exit 1 / empty stdout — the WHOLE quorum failing to
+  // form on one corrupt entry. Skipping it degrades gracefully (fail-open).
+  return (loadProviders({ baseDir: __dirname }) || []).filter(p => p && typeof p === 'object' && p.name);
 }
 
 // ─── Build team JSON from providers + config ────────────────────────────────
 function buildTeam(providers, active) {
   const team = {};
   for (const p of providers) {
+    if (!p || typeof p !== 'object' || !p.name) continue; // skip corrupt/null entries (defense-in-depth)
     if (active.length > 0 && !active.includes(p.name)) continue;
     team[p.name] = {
       model: p.model,
@@ -146,6 +164,12 @@ function normalizeBaseUrl(urlStr) {
     // Strip trailing slash from pathname
     u.pathname = u.pathname.replace(/\/+$/, '') || '/';
     if (u.pathname === '/') u.pathname = '';
+    // NOTE: a URL object re-normalizes `pathname = ''` back to '/', so for a path-less
+    // baseUrl this returns `origin + '/'` (with a trailing slash), NOT the bare origin.
+    // That's safe here because the SAME function normalizes both the cache WRITE and READ
+    // keys (and the dedup comparison), so they always agree. But an external cache
+    // producer/consumer that keys by the bare origin would miss every entry — treat the
+    // canonical key as `origin + '/'`, not `origin`.
     return u.origin + u.pathname;
   } catch {
     return urlStr;
