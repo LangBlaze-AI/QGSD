@@ -621,7 +621,7 @@ process.stdin.on('end', () => {
           instructions = `<!-- NF_SOLO_MODE -->\nSOLO MODE ACTIVE (empty roster): No external agents configured in providers.json or quorum_active. Claude's vote is the quorum. Write <!-- GSD_DECISION --> in your final output. The Stop hook is informed.\n\nTo add agents, run /nf:mcp-setup or edit ~/.claude/nf.json quorum_active.\n`;
         } else {
           process.stderr.write('[nf-dispatch] solo quorum — fan-out budget is 1 (Claude only), dispatching 0 external slots\n');
-          instructions = `<!-- NF_SOLO_MODE -->\nSOLO MODE ACTIVE (fan-out budget = 1): For this task the quorum size is 1 (from risk_level / max_quorum_size), so Claude is the entire quorum. Skip ALL external slot-worker Task dispatches. Claude's vote is the quorum. Write <!-- GSD_DECISION --> in your final output. The Stop hook is informed.\n\n`;
+          instructions = `<!-- NF_SOLO_MODE -->\nSOLO MODE ACTIVE (fan-out budget = 1): the quorum fan-out for this task resolved to 1 participant — from the risk_level, the configured quorum size (quorum.maxSize), and/or the --n cap — so Claude is the entire quorum. Skip ALL external slot-worker Task dispatches. Claude's vote is the quorum. Write <!-- GSD_DECISION --> in your final output. The Stop hook is informed.\n\n`;
         }
       } else {
         if (preferSub) {
