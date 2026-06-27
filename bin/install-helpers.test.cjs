@@ -1231,3 +1231,65 @@ test('GUARD-04 (invariant): isUnderInstallDir rejects name-prefixed siblings and
     'an args[0] that normalizes to under nf-bin must not be flagged for migration (false positive)'
   );
 });
+
+// ── Iteration 5: final convergence probe ──
+
+// DP-18: restoreDaintreePresets iterates `for (const [slotName, preset] of Object.entries(presetsStore.presets))`
+// and immediately dereferences `preset.daintree_preset_id` (line 199 overlay branch, line 210 reconstruction
+// branch) WITHOUT guarding that `preset` itself is an object. A preset store (~/.claude/daintree-presets.json)
+// that has been hand-edited, partially written, or produced by a buggy importer can carry a `null` (or
+// non-object) value for an entry — e.g. `{"presets": {"claude-z-ai": null}}` (a common shape when an entry
+// is "deleted" by nulling, or when a merge writes `null` for a removed preset). Both branches then throw an
+// uncaught TypeError on `null.daintree_preset_id`, which propagates out of restoreDaintreePresets and wedges
+// the installer — exactly the fail-open contract the rest of the function tries to uphold.
+// Note the asymmetry: the function DOES guard `providers` entries for object-ness (DP-13, line 192
+// `providers.filter(p => p && typeof p === 'object')`), and guards `presetsStore.presets` existence (line
+// 189), but has NO symmetric guard on each `preset` value. This probe fires on BOTH branches.
+// SAFE behavior: skip null/non-object preset entries and continue restoring the rest, returning a defined
+// result — never an uncaught throw.
+test('DP-18: null / non-object preset entry must not crash restoreDaintreePresets (fail-open on bad preset value)', () => {
+  const dir = tmpDir('dp18');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        // A null preset entry — realistic "deleted"/partially-written shape.
+        'claude-null-preset': null,
+        // A non-object truthy preset entry (string) — also dereferences to undefined, no throw,
+        // but included to lock in that it doesn't crash either branch.
+        'claude-str-preset': 'not-an-object',
+        // A LEGITIMATE preset that must still restore despite the bad siblings.
+        'claude-z-ai': {
+          daintree_preset_id: 'preset-good',
+          daintree_preset_name: 'Z.AI',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://api.z.ai' },
+          model: 'glm-5.1',
+          display_provider: 'Z.AI',
+        },
+      },
+    });
+
+    const providers = [
+      { name: 'claude-1', mainTool: 'claude', description: 'Claude' },
+      // claude-null-preset target slot exists → overlay branch dereferences null.preset_id → throws today.
+      { name: 'claude-null-preset', mainTool: 'claude' },
+    ];
+
+    // SAFE behavior: skip the bad entries, restore the good one, return a defined result.
+    // Today this throws TypeError on the null entry before reaching the good one.
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    assert.ok(result && typeof result.restoredCount === 'number',
+      'must return a defined result, not throw');
+    // The legitimate preset must be restored (reconstruction from claude-1) even though bad
+    // siblings preceded it.
+    assert.ok(result.restoredNames.includes('claude-z-ai'),
+      'legitimate preset must still be restored after skipping bad siblings');
+    const zai = providers.find(p => p && p.name === 'claude-z-ai');
+    assert.ok(zai, 'reconstructed claude-z-ai slot must exist');
+    assert.equal(zai.daintree_preset_id, 'preset-good');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

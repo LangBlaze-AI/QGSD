@@ -194,6 +194,7 @@ function restoreDaintreePresets(providers, presetsStorePath) {
   const restoredNames = [];
 
   for (const [slotName, preset] of Object.entries(presetsStore.presets)) {
+    if (!preset || typeof preset !== 'object') continue; // skip null/non-object preset entries
     const existing = byName.get(slotName);
     if (existing) {
       if (!existing.daintree_preset_id && preset.daintree_preset_id) {
