@@ -9,7 +9,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { mergeProvidersJson, restoreDaintreePresets } = require('./install-helpers.cjs');
+const {
+  mergeProvidersJson,
+  restoreDaintreePresets,
+  shouldCopyToNfBin,
+  synthesizeMcpEntry,
+  installedUnifiedMcpPath,
+  isUnderInstallDir,
+  mcpArgsNeedMigration,
+} = require('./install-helpers.cjs');
 
 function tmpDir(suffix) {
   const d = path.join(os.tmpdir(), `nf-merge-${process.pid}-${Date.now()}-${suffix}`);
@@ -750,5 +758,165 @@ test('MERGE-14: repo and user with same name results in single entry (repo wins)
     assert.equal(merged[0].name, 'claude-1', 'first entry should be claude-1');
     assert.equal(merged[0].model, 'opus-4-7', 'repo model should win');
     assert.equal(merged[1].name, 'custom-slot', 'second entry should be custom');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ── GUARD tests: type/shape crashes on the path helpers ──
+// These target the helpers also exercised by test/install-mcp-nfbin.test.cjs, but
+// attack with type-coerced / boundary inputs the happy-path suite never sends.
+
+// GUARD-01: shouldCopyToNfBin crashes on non-string entry (undefined/null/number/object)
+// because it calls entry.endsWith('.cjs') unguarded. A non-string from a malformed
+// readdir or a hand-rolled caller would throw TypeError instead of returning false.
+test('GUARD-01: shouldCopyToNfBin should return false (not throw) for non-string entry', () => {
+  // The SAFE behavior is to return false for any non-string. Today entry.endsWith
+  // throws TypeError on undefined/null/number — this test documents that gap.
+  for (const bad of [undefined, null, 123, {}, [], true]) {
+    assert.equal(
+      shouldCopyToNfBin(bad),
+      false,
+      `shouldCopyToNfBin(${JSON.stringify(bad)}) must be false, not a throw`
+    );
+  }
+});
+
+// GUARD-03: mcpArgsNeedMigration — a bare relative filename resolves under CWD, not
+// nf-bin, so it MUST be flagged for migration. Also: a path that merely CONTAINS the
+// filename as a substring but does not END with it (e.g. a .bak sibling) must NOT be
+// flagged. This guards both false-negatives and false-positives in the endsWith check.
+test('GUARD-03: mcpArgsNeedMigration flags bare relative filename, ignores non-suffix substrings', () => {
+  const nfBin = path.join('/home', 'u', '.claude', 'nf-bin');
+  // Bare filename resolves CWD-relative → NOT under nf-bin → must migrate
+  assert.equal(
+    mcpArgsNeedMigration('unified-mcp-server.mjs', nfBin),
+    true,
+    'bare relative filename is not under nf-bin, must be flagged for migration'
+  );
+  // Sibling that contains the name but does not END with the exact filename → must NOT migrate
+  assert.equal(
+    mcpArgsNeedMigration('/repo/unified-mcp-server.mjs.bak', nfBin),
+    false,
+    'a .bak sibling must not match the endsWith suffix'
+  );
+});
+
+// ── MERGE tests: filesystem & prototype-pollution edge cases ──
+
+// MERGE-15: Fresh-copy path calls fs.copyFileSync(repoPath, userPath) when the user
+// file does not exist. If the user file's PARENT DIRECTORY also does not exist,
+// copyFileSync throws ENOENT uncaught — install wedges instead of failing open.
+test('MERGE-15: fresh-copy to a user path whose parent dir is missing fails open (no uncaught throw)', () => {
+  const dir = tmpDir('m15');
+  try {
+    const repoPath = path.join(dir, 'repo.json');
+    // userPath sits under a directory that was never created
+    const missingParent = path.join(dir, 'no-such-subdir');
+    const userPath = path.join(missingParent, 'user.json');
+    assert.ok(!fs.existsSync(missingParent), 'precondition: parent dir absent');
+    writeJson(repoPath, { providers: [{ name: 'claude-1' }] });
+
+    // The SAFE behavior: fail open (status 'error' or 'fresh-copy' that creates the
+    // dir), NOT an uncaught ENOENT that crashes the installer. Asserting no-throw +
+    // a defined status here; today this throws.
+    const result = mergeProvidersJson(repoPath, userPath);
+    assert.ok(['error', 'fresh-copy', 'fallback-copy'].includes(result.status),
+      `expected fail-open status, got ${result && result.status}`);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// MERGE-16: prototype-pollution-shaped keys in user providers JSON. JSON.parse
+// neutralizes __proto__ as a key, but `constructor`/`prototype` survive as own
+// enumerable keys. A malicious or corrupt user file with {providers:[{name:'constructor'}]}
+// or top-level {constructor: {...}} must not let the merge or the re-stringified
+// output pollute Object.prototype. Verify Object.prototype is clean after merge.
+test('MERGE-16: prototype-pollution keys in user providers do not poison Object.prototype', () => {
+  const dir = tmpDir('m16');
+  try {
+    const repoPath = path.join(dir, 'repo.json');
+    const userPath = path.join(dir, 'user.json');
+    writeJson(repoPath, { providers: [{ name: 'claude-1' }] });
+    // Hand-construct a user file with pollution-shaped keys at both levels.
+    // Using a raw string lets us inject keys JSON.parse would otherwise coerce.
+    const malicious =
+      '{"providers":[' +
+      '  {"name":"claude-1"},' +
+      '  {"name":"__proto__","payload":"x"},' +
+      '  {"name":"constructor","payload":"y"},' +
+      '  {"name":"prototype","payload":"z"},' +
+      '  {"name":"real-custom"}' +
+      '],' +
+      '"__proto__":{"polluted_top":true},' +
+      '"constructor":{"prototype":{"polluted_ctor":true}}' +
+      '}';
+    fs.writeFileSync(userPath, malicious);
+
+    const result = mergeProvidersJson(repoPath, userPath);
+
+    // Object.prototype must NOT gain any of these properties via the merge or
+    // re-stringification round-trip.
+    assert.equal({}.polluted_top, undefined, 'Object.prototype must not be polluted via __proto__ top-level');
+    assert.equal({}.polluted_ctor, undefined, 'Object.prototype must not be polluted via constructor.prototype');
+    assert.equal({}.payload, undefined, 'Object.prototype must not be polluted via a providers[].name of __proto__');
+
+    // The merge must still complete and the legitimate custom slot must survive.
+    assert.ok(['merged', 'fresh-copy', 'fallback-copy', 'error'].includes(result.status));
+    const merged = readJson(userPath);
+    const names = (merged.providers || []).map(p => p && p.name);
+    assert.ok(names.includes('real-custom'), 'legitimate custom slot must be preserved');
+  } finally {
+    // Defensive cleanup of any prototype pollution that DID occur, so it can't leak
+    // into sibling tests in the same process.
+    delete Object.prototype.polluted_top;
+    delete Object.prototype.polluted_ctor;
+    delete Object.prototype.payload;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── DP tests: crash-on-bad-input in restoreDaintreePresets ──
+
+// DP-13: providers array containing null/undefined/non-object entries. The function
+// does `providers.map(p => [p.name, p])` to build byName — that throws TypeError on
+// null/undefined entries (Cannot read properties of null). A reconstructed providers
+// array from a corrupt ~/.claude.json can contain nulls.
+test('DP-13: providers array with null/undefined entries does not crash restoreDaintreePresets', () => {
+  const dir = tmpDir('dp13');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-z-ai': {
+          daintree_preset_id: 'preset-123',
+          daintree_preset_name: 'Z.AI',
+          agent_name: 'claude',
+          vanilla_slot_name: 'claude-1',
+          env: { ANTHROPIC_BASE_URL: 'https://api.z.ai' },
+        },
+      },
+    });
+
+    // A providers array with holes / nulls / non-objects — the kind of shape a
+    // corrupt mcpServers reconstruction could produce.
+    const providers = [
+      { name: 'claude-1', mainTool: 'claude' },
+      null,                  // crashes null.name in the .map
+      undefined,             // crashes undefined.name in the .map
+      'not-an-object',       // crashes 'not-an-object'.name → undefined, but no throw
+      42,                    // crashes (42).name → undefined
+    ];
+
+    // SAFE behavior: skip nullish/non-object entries, restore what it can, return a
+    // defined result. Today this throws TypeError on the .map building byName.
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    assert.ok(result && typeof result.restoredCount === 'number',
+      'must return a defined result, not throw');
+    // claude-z-ai is missing → would be reconstructed from claude-1 if the function
+    // survived the null entries. Either way: no throw.
+    const zai = providers.find(p => p && typeof p === 'object' && p.name === 'claude-z-ai');
+    if (result.restoredCount > 0) {
+      assert.ok(zai, 'if restored, the reconstructed slot must exist');
+    }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

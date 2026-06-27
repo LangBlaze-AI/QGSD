@@ -20,6 +20,7 @@ const NF_BIN_RUNTIME_MJS = new Set(['unified-mcp-server.mjs']);
 // Decide whether a top-level bin/ entry should be copied into nf-bin/.
 // providers.json is handled separately (merge semantics) and is NOT returned here.
 function shouldCopyToNfBin(entry) {
+  if (typeof entry !== 'string') return false;
   if (entry === 'providers.json') return false;
   if (entry.endsWith('.cjs')) return true;
   if (NF_BIN_RUNTIME_MJS.has(entry)) return true;
@@ -99,10 +100,16 @@ function mergeProvidersJson(repoPath, userPath, opts = {}) {
     return { status: 'error', preservedCount: 0, preservedNames: [] };
   }
 
-  // First-time install or user file missing → straight copy
+  // First-time install or user file missing → straight copy.
+  // Fail open if the copy can't land (e.g. missing parent dir) — never wedge the install.
   if (!fs.existsSync(userPath)) {
-    fs.copyFileSync(repoPath, userPath);
-    return { status: 'fresh-copy', preservedCount: 0, preservedNames: [] };
+    try {
+      fs.copyFileSync(repoPath, userPath);
+      return { status: 'fresh-copy', preservedCount: 0, preservedNames: [] };
+    } catch (e) {
+      log(`providers.json: could not write user copy (${e.message}); skipping`);
+      return { status: 'error', preservedCount: 0, preservedNames: [] };
+    }
   }
 
   let userData;
@@ -166,7 +173,9 @@ function restoreDaintreePresets(providers, presetsStorePath) {
   }
   if (!presetsStore || !presetsStore.presets) return { restoredCount: 0, restoredNames: [] };
 
-  const byName = new Map(providers.map(p => [p.name, p]));
+  const byName = new Map(
+    providers.filter(p => p && typeof p === 'object').map(p => [p.name, p])
+  );
   const restoredNames = [];
 
   for (const [slotName, preset] of Object.entries(presetsStore.presets)) {
