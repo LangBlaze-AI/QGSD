@@ -181,4 +181,19 @@ Processes killed. Claude Code is reconnecting to $AGENT.
 Check status in a few seconds: /nf:mcp-status
 ```
 
+## Step 7 — Refresh the statusline slot-health cache
+
+After the restart, refresh the cache the statusline reads so it reflects the restarted
+slot's current health immediately. The statusline does NOT query slots live — it is a
+pure cache read of `~/.claude/nf/slot-health.json` with a 5-minute freshness window, so
+without this it keeps showing the pre-restart status (e.g. a red `⊘` and a
+`/nf:mcp-restart` call-to-action on the slot you just restarted) for up to 5 minutes.
+Re-run the slot-health probe to rewrite the cache now:
+
+```bash
+PROBE="$HOME/.claude/hooks/nf-slot-health-probe.js"
+[ -f "$PROBE" ] || PROBE="hooks/nf-slot-health-probe.js"
+node "$PROBE" --print 2>/dev/null || true
+```
+
 </process>
