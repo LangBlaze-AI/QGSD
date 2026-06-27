@@ -225,12 +225,17 @@ function loadData(scoreboard) {
     // left corrupt) and recompute throws. The old backward-compat block only restored 3
     // of 5 top-level fields and never sanitised individual rounds.
     const base = emptyData();
+    // A plain object, not an array — `typeof [] === 'object'`, so an array-shaped field
+    // (e.g. `"models": []`) must NOT pass as an object: the record path would then assign
+    // `array.claude = {...}` (a non-index prop) and JSON.stringify drops it → stats
+    // silently lost on write. Exclude arrays for every object-typed field, as for `rounds`.
+    const notObj = (x) => !x || typeof x !== 'object' || Array.isArray(x);
     const data = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
-    if (!data.models || typeof data.models !== 'object')         data.models = base.models;
-    if (!data.slots || typeof data.slots !== 'object')           data.slots = {};
-    if (!data.categories || typeof data.categories !== 'object') data.categories = {};
-    if (!data.availability || typeof data.availability !== 'object') data.availability = {};
-    if (!data.delivery_stats || typeof data.delivery_stats !== 'object') data.delivery_stats = base.delivery_stats;
+    if (notObj(data.models))         data.models = base.models;
+    if (notObj(data.slots))          data.slots = {};
+    if (notObj(data.categories))     data.categories = {};
+    if (notObj(data.availability))   data.availability = {};
+    if (notObj(data.delivery_stats)) data.delivery_stats = base.delivery_stats;
     // rounds must be an array of objects — drop null/non-object entries so one corrupt
     // round can't poison every future findIndex(r => r.task) / recompute.
     data.rounds = Array.isArray(data.rounds) ? data.rounds.filter(r => r && typeof r === 'object') : [];
