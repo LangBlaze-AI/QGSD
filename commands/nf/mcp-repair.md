@@ -367,6 +367,25 @@ Store as `$AFTER_STATE`.
 
 If no repairs were attempted, skip this step.
 
+## Step 6.5 — Refresh the statusline slot-health cache
+
+Always run this (whether or not repairs were attempted) so the statusline reflects the
+just-diagnosed reality immediately. The statusline does NOT query slots live — it is a
+pure cache read of `~/.claude/nf/slot-health.json` with a 5-minute freshness window. If
+the cache is not refreshed, a slot you just repaired keeps rendering its stale pre-repair
+status (e.g. a red `⊘` with a `/nf:mcp-restart <slot>` call-to-action) for up to 5
+minutes. Re-run the slot-health probe to rewrite the cache now:
+
+```bash
+PROBE="$HOME/.claude/hooks/nf-slot-health-probe.js"
+[ -f "$PROBE" ] || PROBE="hooks/nf-slot-health-probe.js"
+node "$PROBE" --print 2>/dev/null || true
+```
+
+This rewrites the cache with a fresh `checked_at` and the current per-slot health, so the
+next statusline render shows the post-repair state (green `●` for now-healthy slots)
+instead of the stale failure.
+
 ## Step 7 — Before/after summary
 
 **If repairs were attempted:**
