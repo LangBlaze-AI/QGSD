@@ -1,6 +1,6 @@
 {
   "name": "@nforma.ai/nforma",
-  "version": "0.44.0",
+  "version": "0.44.0-rc.1",
   "description": "nForma — Multi-agent coding orchestrator with quorum consensus and formal verification (TLA+, Alloy, PRISM). Consensus before code, proof before production.",
   "bin": {
     "nforma": "bin/nforma-cli.js",
