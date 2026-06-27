@@ -193,9 +193,12 @@ test('AVAIL-ADV-3: set-availability with an absurdly-large duration must not cra
       '--scoreboard', sb,
     ]);
 
-    assert.notStrictEqual(
-      exitCode, 1,
-      `set-availability must not FATAL-crash on an absurd duration; stderr was: ${stderr}`
+    // Require genuine success (exit 0), not merely "not 1" — `notStrictEqual(1)` would
+    // also pass on a timeout or a signal kill (exitCode null). The fix makes
+    // set-availability return gracefully (exit 0) and simply not record the bad window.
+    assert.strictEqual(
+      exitCode, 0,
+      `set-availability must exit 0 (graceful) on an absurd duration, not FATAL-crash; stderr was: ${stderr}`
     );
     assert.ok(
       !/Invalid time value/.test(stderr),
