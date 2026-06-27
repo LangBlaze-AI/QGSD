@@ -198,9 +198,11 @@ function restoreDaintreePresets(providers, presetsStorePath) {
     if (existing) {
       if (!existing.daintree_preset_id && preset.daintree_preset_id) {
         existing.daintree_preset_id = preset.daintree_preset_id;
-        existing.daintree_preset_name = preset.daintree_preset_name;
+        if (preset.daintree_preset_name) existing.daintree_preset_name = preset.daintree_preset_name;
         if (preset.daintree_preset_family) existing.daintree_preset_family = preset.daintree_preset_family;
-        if (preset.env) existing.env = { ...(existing.env || {}), ...preset.env };
+        if (preset.env && typeof preset.env === 'object' && !Array.isArray(preset.env)) {
+          existing.env = { ...(existing.env || {}), ...preset.env };
+        }
         if (preset.model) existing.model = preset.model;
         if (preset.display_provider) existing.display_provider = preset.display_provider;
         restoredNames.push(slotName);

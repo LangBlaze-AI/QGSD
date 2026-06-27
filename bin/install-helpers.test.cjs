@@ -1068,3 +1068,114 @@ test('MERGE-18 (invariant): repo.providers as a non-array object is coerced to [
     assert.deepEqual(merged.map(p => p.name).sort(), ['claude-1', 'legit-user-extra']);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ── Iteration 3: shape-corruption gaps in the overlay branch ──
+
+// DP-16: The overlay branch (line 203) does `if (preset.env) existing.env = { ...(existing.env||{}), ...preset.env }`.
+// The guard checks TRUTHINESS, not object-ness. A durable preset store (~/.claude/daintree-presets.json)
+// that has been hand-edited, schema-drifted, or written by a buggy importer can carry `env` as a
+// non-object truthy value — e.g. a string `"KEY=VAL"` or an array `[["KEY","val"]]`. Spreading a
+// string/array iterates its INDEXED elements, so the merged `existing.env` ends up with numeric keys
+// like `{"0":"K","1":"E",...}` merged alongside the legitimate `ANTHROPIC_BASE_URL`. That corrupted
+// env is then serialized into providers.json and read by unified-mcp-server at slot spawn — a genuine
+// data-quality corruption, not a crash. Note the asymmetry: the reconstruction branch (line 219)
+// spreads `(preset.env || {})` and so is equally exposed, but the overlay is the more realistic
+// entry point because the preset store survives installs.
+// SAFE behavior: a non-object `preset.env` must be ignored (or coerced to {}), never spread by index.
+test('DP-16: overlay branch must not spread a non-object preset.env (string/array) into numeric env keys', () => {
+  const dir = tmpDir('dp16');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        // env as a string — truthy, iterable by index
+        'claude-str-env': {
+          daintree_preset_id: 'preset-str',
+          daintree_preset_name: 'StrEnv',
+          // NOTE: no vanilla_slot_name → forces the OVERLAY branch (slot exists), not reconstruction
+          env: 'KEY=VAL',
+        },
+        // env as an array of pairs — truthy, iterable by index
+        'claude-arr-env': {
+          daintree_preset_id: 'preset-arr',
+          daintree_preset_name: 'ArrEnv',
+          env: [['ANTHROPIC_AUTH_TOKEN', 'tok-pair']],
+        },
+      },
+    });
+
+    // Both target slots EXIST and are stripped (no daintree_preset_id) → overlay branch fires.
+    const providers = [
+      { name: 'claude-1', mainTool: 'claude', env: { ANTHROPIC_BASE_URL: 'https://old.com' } },
+      { name: 'claude-str-env', mainTool: 'claude', env: { ANTHROPIC_BASE_URL: 'https://old.com' } },
+      { name: 'claude-arr-env', mainTool: 'claude', env: { ANTHROPIC_BASE_URL: 'https://old.com' } },
+    ];
+
+    const result = restoreDaintreePresets(providers, presetsPath);
+
+    assert.equal(result.restoredCount, 2, 'both stripped slots should be restored');
+    const strSlot = providers.find(p => p && p.name === 'claude-str-env');
+    const arrSlot = providers.find(p => p && p.name === 'claude-arr-env');
+
+    // SAFE behavior: env must contain ONLY string-valued, non-numeric keys. A non-object env must
+    // not leak indexed character/element keys. Today the spread produces {"0":"K","1":"E",...}.
+    const numericKeys = env => Object.keys(env).filter(k => /^\d+$/.test(k));
+    assert.deepEqual(numericKeys(strSlot.env), [],
+      `string preset.env must not spread into numeric keys, got: ${JSON.stringify(strSlot.env)}`);
+    assert.deepEqual(numericKeys(arrSlot.env), [],
+      `array preset.env must not spread into numeric keys, got: ${JSON.stringify(arrSlot.env)}`);
+
+    // The legitimate pre-existing env key must survive (not be wiped by the corruption).
+    assert.equal(strSlot.env.ANTHROPIC_BASE_URL, 'https://old.com',
+      'pre-existing env keys must survive a non-object preset.env overlay');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// DP-17: The overlay branch sets `existing.daintree_preset_name = preset.daintree_preset_name`
+// UNCONDITIONALLY once the truthy-id guard passes (line 200). If the preset store entry has a
+// truthy `daintree_preset_id` but a MISSING/falsy `daintree_preset_name` (a corrupt or
+// partially-written durable store entry), the overlay writes `daintree_preset_name: undefined`
+// onto the existing slot. In-process that clobbers any prior name to undefined; on JSON
+// serialization the key is dropped entirely. The reconstruction branch has the SAME unconditional
+// assignment (line 217) but on a fresh object it is benign. On the overlay path it is a real
+// (if narrow) data-quality regression: a slot that previously tracked its preset name loses it.
+// SAFE behavior: only overwrite daintree_preset_name when the preset actually carries one.
+test('DP-17: overlay must not clobber an existing daintree_preset_name with undefined when the preset entry omits it', () => {
+  const dir = tmpDir('dp17');
+  try {
+    const presetsPath = path.join(dir, 'daintree-presets.json');
+    writeJson(presetsPath, {
+      version: 1,
+      presets: {
+        'claude-z-ai': {
+          daintree_preset_id: 'preset-123',
+          // daintree_preset_name intentionally MISSING — corrupt / partially-written store entry
+          agent_name: 'claude',
+          env: { ANTHROPIC_BASE_URL: 'https://api.z.ai' },
+        },
+      },
+    });
+
+    // Existing slot is stripped of id but RETAINS a name from a prior, complete preset entry.
+    const providers = [
+      { name: 'claude-1', mainTool: 'claude' },
+      {
+        name: 'claude-z-ai',
+        mainTool: 'claude',
+        // stripped of daintree_preset_id (so overlay fires) but name still present
+        daintree_preset_name: 'Z.AI',
+        env: { ANTHROPIC_BASE_URL: 'https://old.com' },
+      },
+    ];
+
+    restoreDaintreePresets(providers, presetsPath);
+
+    const zai = providers.find(p => p && p.name === 'claude-z-ai');
+    assert.equal(zai.daintree_preset_id, 'preset-123', 'preset_id must be overlaid');
+    // SAFE behavior: the prior name must survive when the preset entry omits its own.
+    // Today this becomes undefined (clobbered by the unconditional assignment on line 200).
+    assert.equal(zai.daintree_preset_name, 'Z.AI',
+      `prior daintree_preset_name must not be clobbered with undefined, got: ${JSON.stringify(zai.daintree_preset_name)}`);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
