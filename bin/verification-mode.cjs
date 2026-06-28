@@ -34,7 +34,7 @@ const MODES = {
  * @throws {Error} If verification_mode is an invalid non-null value
  */
 function createVerificationEnvelope(options) {
-  options = options || {};
+  options = (options && typeof options === 'object' && !Array.isArray(options)) ? options : {};
 
   const mode = options.verification_mode || 'validation';
 
@@ -66,6 +66,9 @@ function createVerificationEnvelope(options) {
  * @throws {Error} If verification_mode is unknown
  */
 function interpretGateResult(hasViolation, verification_mode) {
+  if (typeof hasViolation !== 'boolean') {
+    throw new Error(`hasViolation must be a boolean, got: ${typeof hasViolation}`);
+  }
   if (verification_mode === MODES.DIAGNOSTIC) {
     return hasViolation ? 'REPRODUCED' : 'INCOMPLETE';
   } else if (verification_mode === MODES.VALIDATION) {

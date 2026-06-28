@@ -322,3 +322,45 @@ test('batchSweepAsync streams results via onResult callback', async () => {
   assert.ok(results.every(r => r.ok), 'all results should be ok');
   assert.ok(results.every(r => typeof r.residual === 'number'), 'all should have numeric residual');
 });
+
+// ─── Adversarial Hardening Tests ─────────────────────────────────────────────
+
+test('sweep rejects inherited Object.prototype members as function names', async () => {
+  const w = spawnWorker(10000);
+  try {
+    await w.waitReady();
+    const resp = await w.sendAndWait({ cmd: 'sweep', fnName: 'constructor', id: 11 });
+    assert.equal(resp.ok, false, 'inherited constructor must not be treated as a sweep fn');
+    assert.ok(resp.error.includes('not found'), 'should report not found, not invoke Object()');
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('batchSweep rejects inherited Object.prototype members', async () => {
+  const w = spawnWorker(10000);
+  try {
+    await w.waitReady();
+    const { results, done } = await w.sendBatchAndCollect({ cmd: 'batchSweep', fnNames: ['toString', 'sweepCtoR'], id: 12 });
+    assert.equal(results.length, 2);
+    assert.equal(results[0].ok, false, 'inherited toString must fail, not return ok:true');
+    assert.ok(results[0].error.includes('not found'));
+    assert.equal(results[1].ok, true, 'real sweep still works');
+    assert.equal(done.cmd, 'batchDone');
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('batchSweep treats a non-array fnNames as empty, not per-character', async () => {
+  const w = spawnWorker(10000);
+  try {
+    await w.waitReady();
+    const { results, done } = await w.sendBatchAndCollect({ cmd: 'batchSweep', fnNames: 'sweepCtoR', id: 13 });
+    assert.ok(results.length <= 1, `expected no per-character results, got ${results.length}`);
+    assert.equal(done.cmd, 'batchDone');
+    assert.equal(done.ok, true);
+  } finally {
+    w.cleanup();
+  }
+});

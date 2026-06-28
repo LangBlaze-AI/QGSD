@@ -71,6 +71,30 @@ test('checkSchemaDrift with schema + emitter only => fail, schema-drift-detected
   assert.strictEqual(result.emitter_updated, true);
 });
 
+test('checkSchemaDrift(undefined) => pass, no-schema-change (no crash)', () => {
+  const result = checkSchemaDrift(undefined);
+  assert.strictEqual(result.status, 'pass');
+  assert.strictEqual(result.reason, 'no-schema-change');
+});
+
+test('checkSchemaDrift(null) does not throw', () => {
+  assert.doesNotThrow(() => checkSchemaDrift(null));
+  const result = checkSchemaDrift(null);
+  assert.strictEqual(result.status, 'pass');
+  assert.strictEqual(result.reason, 'no-schema-change');
+});
+
+test('checkSchemaDrift with non-string entries does not throw and still detects drift', () => {
+  let result;
+  assert.doesNotThrow(() => {
+    result = checkSchemaDrift([null, 42, '.planning/formal/trace/trace.schema.json']);
+  });
+  assert.strictEqual(result.status, 'fail');
+  assert.strictEqual(result.reason, 'schema-drift-detected');
+  assert.strictEqual(result.validator_updated, false);
+  assert.strictEqual(result.emitter_updated, false);
+});
+
 // ── Integration test ──────────────────────────────────────────────────────────
 
 test('integration: node bin/check-trace-schema-drift.cjs exits 0 or 1 and writes NDJSON', () => {

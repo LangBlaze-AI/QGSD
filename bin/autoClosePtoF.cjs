@@ -44,8 +44,9 @@ function autoClosePtoF(residual, options = {}) {
   const ledger = ledgerPath ? readDebtLedger(ledgerPath) : { debt_entries: [] };
 
   for (const div of divergent) {
+    if (!div || typeof div !== 'object') continue;
     // Find actual entry in ledger
-    const entryIdx = (ledger.debt_entries || []).findIndex(e => e.id === div.id);
+    const entryIdx = (ledger.debt_entries || []).findIndex(e => e && e.id === div.id);
     if (entryIdx === -1) continue;
 
     let entry = ledger.debt_entries[entryIdx];

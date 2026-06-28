@@ -19,6 +19,13 @@ function normalizeFixIntent(intentText, context = {}) {
     return { mutations: [], confidence: 0, ambiguities: [] };
   }
 
+  // Fail-open: a null / non-object context must behave like no context.
+  // The `context = {}` default only fires for `undefined`, so an explicit
+  // `null` would otherwise crash on `context.bugDescription` below.
+  if (!context || typeof context !== 'object') {
+    context = {};
+  }
+
   const mutations = [];
   const ambiguities = [];
 

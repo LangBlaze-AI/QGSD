@@ -23,6 +23,7 @@ function extractFrontmatter(content) {
     let value = line.slice(colonIdx + 1).trim();
 
     if (!key) continue;
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
 
     // Handle array values: [a, b, c]
     if (value.startsWith('[') && value.endsWith(']')) {

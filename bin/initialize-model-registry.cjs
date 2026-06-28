@@ -78,7 +78,15 @@ for (const { dir, exts } of SCAN_DIRS) {
       continue;
     }
 
-    const mtime = fs.statSync(absPath).mtime.toISOString();
+    let st;
+    try {
+      st = fs.statSync(absPath);
+    } catch (err) {
+      process.stderr.write('[initialize-model-registry] WARNING: cannot stat ' + absPath + ': ' + err.message + '\n');
+      continue;
+    }
+    if (!st.isFile()) continue;
+    const mtime = st.mtime.toISOString();
 
     // Detect generated files (xstate-derived)
     const isGenerated = filename.includes('xstate');

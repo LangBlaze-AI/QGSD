@@ -34,9 +34,9 @@ function classifyTlcFailure(entry) {
   }
 
   // Extract fields safely
-  const summary = (entry.summary || '').toLowerCase();
+  const summary = (typeof entry.summary === 'string' ? entry.summary : '').toLowerCase();
   const result = entry.result || '';
-  const property = (entry.property || '').toLowerCase();
+  const property = (typeof entry.property === 'string' ? entry.property : '').toLowerCase();
   const metadata = (entry.metadata && typeof entry.metadata === 'object') ? entry.metadata : {};
 
   // 1. deadlock

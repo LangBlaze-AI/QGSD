@@ -116,3 +116,24 @@ test('warnUnknownDispatchFlags flags unrecognized --flags and ignores known ones
   assert.ok(unknown.includes('--persist-sessions'), 'must report a dropped legacy flag');
   assert.ok(unknown.includes('--bogus'), 'must report an unknown flag');
 });
+
+test('buildDispatchArgv tolerates a null/non-object opts object', () => {
+  assert.doesNotThrow(() => spec.buildDispatchArgv('/abs/cqs.cjs', null));
+  assert.deepStrictEqual(spec.buildDispatchArgv('/abs/cqs.cjs', null), ['/abs/cqs.cjs']);
+  assert.deepStrictEqual(spec.buildDispatchArgv('/abs/cqs.cjs', 'oops'), ['/abs/cqs.cjs']);
+});
+
+test('warnUnknownDispatchFlags fails open on non-array argv', () => {
+  assert.deepStrictEqual(spec.warnUnknownDispatchFlags(null), []);
+  assert.deepStrictEqual(spec.warnUnknownDispatchFlags(undefined), []);
+  assert.deepStrictEqual(spec.warnUnknownDispatchFlags(42), []);
+});
+
+test('buildDispatchArgv omits a NaN round instead of emitting "--round NaN"', () => {
+  const argv = spec.buildDispatchArgv('/abs/cqs.cjs', {
+    slot: 'claude', timeout: 1000, round: NaN, cwd: '/r',
+  });
+  const i = argv.indexOf('--round');
+  assert.ok(i === -1 || argv[i + 1] !== 'NaN',
+    'a NaN round must not be emitted as the literal string "NaN" (telemetry corruption — the #202/#175 bug)');
+});

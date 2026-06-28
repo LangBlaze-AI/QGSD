@@ -124,3 +124,17 @@ test('validateDebate returns invalid for no frontmatter', () => {
   assert.equal(result.valid, false);
   assert.ok(result.errors.some(e => e.includes('frontmatter')));
 });
+
+// Test 9: extractFrontmatter does not corrupt prototype via __proto__ key
+test('extractFrontmatter ignores dangerous keys and keeps a clean prototype', () => {
+  const content = `---\ndate: 2026-01-01\nquestion: hi\n__proto__: [polluted]\n---`;
+  const fm = extractFrontmatter(content);
+  assert.ok(fm);
+  // returned object's prototype must remain Object.prototype (not the injected array)
+  assert.equal(Object.getPrototypeOf(fm), Object.prototype);
+  // global prototype must not be polluted
+  assert.equal({}.polluted, undefined);
+  // legitimate fields still parse
+  assert.equal(fm.date, '2026-01-01');
+  assert.equal(fm.question, 'hi');
+});

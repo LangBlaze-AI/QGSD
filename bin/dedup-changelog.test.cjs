@@ -113,4 +113,28 @@ describe('dedup()', () => {
     // Should not throw — NaN comparison fails the window check, so entry is kept
     assert.doesNotThrow(() => dedup(changelog));
   });
+
+  it('does not crash on null / non-object entries in the array', () => {
+    const changelog = [
+      null,
+      makeEntry('model.als', 'ADVISORY', 'SOFT_GATE', BASE_TIME),
+      42,
+    ];
+    assert.doesNotThrow(() => dedup(changelog));
+    const result = dedup(changelog);
+    // the real entry must survive the garbage neighbours
+    assert.ok(result.some((e) => e && e.model === 'model.als'),
+      'valid entry should be preserved alongside skipped garbage');
+  });
+
+  it('keeps an entry with an unparseable timestamp instead of deduping it against an old entry', () => {
+    const changelog = [
+      makeEntry('model.als', 'ADVISORY', 'SOFT_GATE', BASE_TIME),
+      // same transition but NO/garbage timestamp -> NaN time; must not be window-bypassed
+      { model: 'model.als', from_level: 'ADVISORY', to_level: 'SOFT_GATE' },
+    ];
+    const result = dedup(changelog);
+    assert.strictEqual(result.length, 2,
+      'NaN-timestamp entry must not bypass the window check and be silently removed');
+  });
 });

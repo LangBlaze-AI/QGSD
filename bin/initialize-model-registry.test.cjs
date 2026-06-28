@@ -131,3 +131,44 @@ test('scans petri directory for .dot files', async () => {
   const entry = registry.models[petriKeys[0]];
   assert.strictEqual(entry.update_source, 'manual', 'petri entry should have update_source: manual');
 });
+
+test('skips broken symlinks with spec extension instead of crashing', async () => {
+  const tmpDir = createTempFormalDir({
+    tla: {
+      'Real.tla': '---- MODULE Real ----\n===='
+    }
+  });
+
+  // Dangling symlink with a .tla extension inside the scanned tla dir
+  const tlaDir = path.join(tmpDir, '.planning', 'formal', 'tla');
+  fs.symlinkSync(path.join(tmpDir, 'does-not-exist.tla'), path.join(tlaDir, 'Broken.tla'));
+
+  const result = runInitializeTool(tmpDir);
+  assert.strictEqual(result.status, 0, 'must exit 0 despite broken symlink: ' + result.stderr);
+
+  const registryPath = path.join(tmpDir, '.planning', 'formal', 'model-registry.json');
+  assert.ok(fs.existsSync(registryPath), 'registry should still be created');
+
+  const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+  const keys = Object.keys(registry.models);
+  assert.ok(keys.some(k => k.endsWith('Real.tla')), 'valid sibling spec should be registered: ' + keys.join(', '));
+  assert.ok(!keys.some(k => k.endsWith('Broken.tla')), 'broken symlink must be skipped');
+});
+
+test('does not register a directory that carries a spec extension', async () => {
+  const tmpDir = createTempFormalDir({
+    tla: { 'Real.tla': '---- MODULE Real ----\n====' }
+  });
+
+  // A directory named like a spec file
+  fs.mkdirSync(path.join(tmpDir, '.planning', 'formal', 'tla', 'NotASpec.tla'));
+
+  const result = runInitializeTool(tmpDir);
+  assert.strictEqual(result.status, 0, result.stderr);
+
+  const registryPath = path.join(tmpDir, '.planning', 'formal', 'model-registry.json');
+  const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+  const keys = Object.keys(registry.models);
+  assert.ok(!keys.some(k => k.endsWith('NotASpec.tla')), 'directory must not be registered as a model: ' + keys.join(', '));
+  assert.ok(keys.some(k => k.endsWith('Real.tla')), 'real spec should still be registered');
+});

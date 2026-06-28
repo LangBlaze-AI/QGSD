@@ -76,4 +76,27 @@ describe('F14 — requirements staleness reporter', () => {
       fs.rmSync(clean, { recursive: true, force: true });
     }
   });
+
+  it('returns a clean empty result when requirements.json is JSON null (no crash)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-stale-'));
+    fs.mkdirSync(path.join(dir, '.planning', 'formal'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.planning', 'formal', 'requirements.json'), 'null');
+    try {
+      const r = scan(dir); // currently THROWS TypeError before returning
+      assert.equal(r.total_requirements, 0);
+      assert.deepEqual(r.findings, []);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('does not crash when "requirements" is a non-array object', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-stale-'));
+    fs.mkdirSync(path.join(dir, '.planning', 'formal'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.planning', 'formal', 'requirements.json'),
+      JSON.stringify({ content_hash: 'sha256:x', requirements: { 'CONF-01': { text: 'qgsd.json' } } }));
+    try {
+      const r = scan(dir); // currently THROWS "reqs is not iterable"
+      assert.equal(r.total_requirements, 0);
+      assert.deepEqual(r.findings, []);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
 });

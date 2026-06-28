@@ -135,6 +135,29 @@ test('Consumer test: interpretGateResult semantics match four-cell truth table',
   assert.strictEqual(interpretGateResult(false, 'validation'), 'PASSED');
 });
 
+// Test: createVerificationEnvelope does not leak char-index keys from a non-object options arg
+test('createVerificationEnvelope ignores non-object options instead of spreading chars', () => {
+  const envelope = createVerificationEnvelope('diagnostic');
+  // must not contain character-index keys from spreading the string
+  assert.strictEqual(envelope['0'], undefined);
+  assert.strictEqual(envelope['1'], undefined);
+  assert.strictEqual(envelope.verification_mode, 'validation');
+  assert.deepStrictEqual(Object.keys(envelope), ['verification_mode']);
+});
+
+// Test: interpretGateResult rejects non-boolean hasViolation (no silent truthiness coercion)
+test('interpretGateResult throws on non-boolean hasViolation', () => {
+  assert.throws(() => {
+    interpretGateResult('false', 'diagnostic');
+  }, /hasViolation must be a boolean/);
+  assert.throws(() => {
+    interpretGateResult([], 'validation');
+  }, /hasViolation must be a boolean/);
+  // strict booleans still work
+  assert.strictEqual(interpretGateResult(true, 'diagnostic'), 'REPRODUCED');
+  assert.strictEqual(interpretGateResult(false, 'validation'), 'PASSED');
+});
+
 // Test: createVerificationEnvelope preserves other options
 test('createVerificationEnvelope preserves other options', () => {
   const envelope = createVerificationEnvelope({

@@ -31,7 +31,9 @@ function dedup(changelog) {
   if (!Array.isArray(changelog)) return [];
   const kept = [];
   for (const entry of changelog) {
+    if (!entry || typeof entry !== 'object') continue;
     const entryTime = new Date(entry.timestamp).getTime();
+    if (Number.isNaN(entryTime)) { kept.push(entry); continue; }
     let isDuplicate = false;
     // Scan kept entries in reverse for efficiency
     for (let i = kept.length - 1; i >= 0; i--) {

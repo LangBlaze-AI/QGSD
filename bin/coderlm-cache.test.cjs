@@ -149,3 +149,21 @@ test('default capacity is 100 and default TTL is 300000ms', () => {
   assert.strictEqual(cache.get('key0'), undefined); // evicted
   assert.strictEqual(cache.get('key100'), 100); // exists
 });
+
+// Test 11: NaN capacity falls back to default and stays bounded
+test('NaN capacity falls back to default and stays bounded (no unbounded growth)', () => {
+  const cache = createLRUCache(NaN, 60000);
+  for (let i = 0; i < 250; i++) {
+    cache.set('key' + i, i);
+  }
+  // Should be bounded by the default capacity (100), not grow unbounded.
+  assert.ok(cache.stats().size <= 100, `expected size <= 100, got ${cache.stats().size}`);
+});
+
+// Test 12: capacity 0 stores no entries (boundary)
+test('capacity 0 stores no entries (boundary)', () => {
+  const cache = createLRUCache(0, 60000);
+  cache.set('a', 1);
+  assert.strictEqual(cache.stats().size, 0);
+  assert.strictEqual(cache.get('a'), undefined);
+});

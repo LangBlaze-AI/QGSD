@@ -221,6 +221,50 @@ test('extractFinalStates correctly uses loopPoint boundary', (t) => {
   }
 });
 
+// Test: extractFinalStates treats boolean loop:false as no loop (returns last state only)
+test('extractFinalStates treats boolean loop:false as no loop', (t) => {
+  const fixture = {
+    states: [
+      { pc: 'Init', x: 0 },
+      { pc: 'Step', x: 1 },
+      { pc: 'Step', x: 2 },
+      { pc: 'Done', x: 3 }
+    ],
+    loop: false  // boolean 'has-loop' flag, NOT a cycle index
+  };
+
+  const tmpFile = createTempFixture(fixture);
+  try {
+    const result = extractFinalStates(tmpFile);
+    assert.equal(result.length, 1, 'Boolean loop:false must not be treated as a cycle start');
+    assert.deepEqual(result[0], { pc: 'Done', x: 3 }, 'Should return only the last state');
+  } finally {
+    cleanupTempFile(tmpFile);
+  }
+});
+
+// Test: extractFinalStates ignores a fractional (non-integer) loop value
+test('extractFinalStates ignores fractional loop index', (t) => {
+  const fixture = {
+    states: [
+      { iteration: 1 },
+      { iteration: 2 },
+      { iteration: 3 },
+      { iteration: 4 }
+    ],
+    loop: 1.5  // non-integer index is invalid
+  };
+
+  const tmpFile = createTempFixture(fixture);
+  try {
+    const result = extractFinalStates(tmpFile);
+    assert.equal(result.length, 1, 'Fractional loop must fall through to last-state behavior');
+    assert.deepEqual(result[0], { iteration: 4 });
+  } finally {
+    cleanupTempFile(tmpFile);
+  }
+});
+
 // Test: Verify import chain by checking exports exist
 test('module exports extractFinalStates and analyzeStateSpace', (t) => {
   assert.ok(typeof extractFinalStates === 'function', 'extractFinalStates should be exported');

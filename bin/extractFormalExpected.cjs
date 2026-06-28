@@ -59,8 +59,13 @@ function extractFormalExpected(formalRef, options = {}) {
   // Spec without param key — invariant reference, no extractable value
   if (parsed.type === 'spec' && !parsed.param) return null;
 
-  const specDir = options.specDir || path.resolve(process.cwd(), '.planning/formal/spec');
+  const specDir = (options && options.specDir) || path.resolve(process.cwd(), '.planning/formal/spec');
   const filePath = path.join(specDir, parsed.path);
+  const resolvedDir = path.resolve(specDir);
+  const resolvedFile = path.resolve(filePath);
+  if (resolvedFile !== resolvedDir && !resolvedFile.startsWith(resolvedDir + path.sep)) {
+    return null; // refuse paths that escape the spec directory
+  }
 
   try {
     const content = fs.readFileSync(filePath, 'utf8');
@@ -68,6 +73,8 @@ function extractFormalExpected(formalRef, options = {}) {
     // JSON files
     if (filePath.endsWith('.json')) {
       const data = JSON.parse(content);
+      if (data === null || typeof data !== 'object') return null;
+      if (!Object.prototype.hasOwnProperty.call(data, parsed.param)) return null;
       const val = data[parsed.param];
       return val !== undefined ? val : null;
     }
