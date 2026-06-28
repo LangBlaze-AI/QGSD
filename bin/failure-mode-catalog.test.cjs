@@ -196,3 +196,51 @@ describe('integration: real L2/L3 data', () => {
     }
   });
 });
+
+// ── Adversarial: malformed observed-fsm.json artifacts ──────────────────────
+
+describe('malformed observed_transitions (adversarial)', () => {
+  it('does not crash when observed_transitions is missing', () => {
+    const fsm = { model_comparison: { missing_in_model: [] } };
+    const result = enumerateFailureModes(fsm, miniHazard, []);
+    assert.strictEqual(result.summary.total, 0);
+    assert.strictEqual(result.failure_modes.length, 0);
+  });
+});
+
+describe('null transition data (adversarial)', () => {
+  it('does not crash when a transition value is null', () => {
+    const fsm = {
+      observed_transitions: { IDLE: { DECIDE: null, QUORUM_START: { to_state: 'COLLECTING_VOTES', count: 1 } } },
+      model_comparison: { missing_in_model: [] },
+    };
+    const result = enumerateFailureModes(fsm, miniHazard, []);
+    assert.ok(Array.isArray(result.failure_modes));
+    // the null DECIDE entry is skipped; the valid QUORUM_START still yields an omission
+    const omissions = result.failure_modes.filter(fm => fm.failure_mode === 'omission');
+    assert.strictEqual(omissions.length, 1);
+    assert.strictEqual(omissions[0].event, 'QUORUM_START');
+  });
+
+  it('does not crash when a state bucket is null', () => {
+    const fsm = {
+      observed_transitions: { IDLE: null },
+      model_comparison: { missing_in_model: [] },
+    };
+    const result = enumerateFailureModes(fsm, miniHazard, []);
+    assert.strictEqual(result.summary.total, 0);
+  });
+});
+
+describe('null entry in missing_in_model (adversarial)', () => {
+  it('does not crash when missing_in_model contains a null entry', () => {
+    const fsm = {
+      observed_transitions: { IDLE: { DECIDE: { to_state: 'IDLE', count: 1 } } },
+      model_comparison: { missing_in_model: [null, { from: 'IDLE', event: 'DECIDE', to: 'IDLE' }] },
+    };
+    const result = enumerateFailureModes(fsm, miniHazard, []);
+    const commissions = result.failure_modes.filter(fm => fm.failure_mode === 'commission');
+    assert.strictEqual(commissions.length, 1);
+    assert.strictEqual(commissions[0].event, 'DECIDE');
+  });
+});

@@ -150,6 +150,33 @@ test('CycleDetector: stateHashes recorded correctly', () => {
   assert.equal(typeof cd.getStateHashes()[0], 'string');
 });
 
+test('CycleDetector: record tolerates prototype-polluting layer keys', () => {
+  const cd = new CycleDetector();
+  const poisoned = JSON.parse('{"__proto__": 5, "r_to_f": 3}');
+  assert.doesNotThrow(() => cd.record(1, poisoned));
+  // real layer still recorded; pollution key handled as an own property, not a crash
+  assert.deepStrictEqual(cd.getHistory().r_to_f, [3]);
+  assert.equal(cd.getStateHashes().length, 1);
+});
+
+test('CycleDetector: tolerates null/non-object opts', () => {
+  assert.doesNotThrow(() => new CycleDetector(null));
+  const cd = new CycleDetector(null);
+  assert.equal(cd.bounceThreshold, 2);
+  assert.equal(cd.getStateHashes().length, 0);
+});
+
+test('CycleDetector: bounce_threshold of 0 is honored, not coerced to default', () => {
+  const cd = new CycleDetector({ bounce_threshold: 0 });
+  assert.equal(cd.bounceThreshold, 0);
+  cd.record(1, { r_to_f: 5 });
+  cd.record(2, { r_to_f: 3 });
+  cd.record(3, { r_to_f: 6 }); // one bounce (down then up)
+  const blocked = cd.getBlockedLayers();
+  assert.equal(blocked.length, 1);
+  assert.equal(blocked[0].layer, 'r_to_f');
+});
+
 // modified by benchmark
 // modified by benchmark
 // modified by benchmark

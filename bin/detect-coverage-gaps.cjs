@@ -55,7 +55,7 @@ const ACTION_TO_STATE = {
  * @returns {{ specName: string, states: Set<string>, variable: string } | null}
  */
 function parseTlcStates(specName) {
-  const map = STATE_MAPS[specName];
+  const map = Object.prototype.hasOwnProperty.call(STATE_MAPS, specName) ? STATE_MAPS[specName] : null;
   if (!map) return null;
   return {
     specName,
@@ -102,6 +102,7 @@ function parseTraceStates(logPath) {
  * @returns {{ status: string, gaps?: string[], outputPath?: string, reason?: string }}
  */
 function detectCoverageGaps(options = {}) {
+  if (!options || typeof options !== 'object') options = {};
   const specName   = options.specName || 'NFQuorum';
   const pp2 = require('./planning-paths.cjs');
   const logPath    = options.logPath || pp2.resolveWithFallback(process.cwd(), 'conformance-events');

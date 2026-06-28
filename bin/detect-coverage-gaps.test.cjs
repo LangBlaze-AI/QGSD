@@ -141,3 +141,33 @@ test('coverage-gaps.md contains correct coverage percentage', () => {
   assert.ok(content.includes('Trace observed: 2 states'), 'Should show 2 observed states');
   assert.ok(content.includes('Gaps: 1 states'), 'Should show 1 gap');
 });
+
+// ── adversarial hardening tests ──────────────────────────────────────────────
+
+test('parseTlcStates returns null for prototype-pollution spec names', () => {
+  assert.strictEqual(parseTlcStates('__proto__'), null);
+  assert.strictEqual(parseTlcStates('prototype'), null);
+});
+
+test('detectCoverageGaps returns unknown-spec for __proto__ instead of throwing', () => {
+  const result = detectCoverageGaps({ specName: '__proto__' });
+  assert.strictEqual(result.status, 'unknown-spec');
+});
+
+test('parseTlcStates returns null for inherited Object keys (constructor)', () => {
+  assert.strictEqual(parseTlcStates('constructor'), null);
+  assert.strictEqual(parseTlcStates('hasOwnProperty'), null);
+});
+
+test('detectCoverageGaps does not report full-coverage for non-existent constructor spec', () => {
+  const result = detectCoverageGaps({ specName: 'constructor' });
+  assert.strictEqual(result.status, 'unknown-spec');
+});
+
+test('detectCoverageGaps(null) falls back to defaults without throwing', () => {
+  // null log path resolution will find no conformance log under a temp cwd
+  const result = detectCoverageGaps(null);
+  assert.ok(result && typeof result === 'object', 'returns a result object');
+  assert.ok(['no-traces', 'full-coverage', 'gaps-found'].includes(result.status),
+    'should resolve to a normal status, not throw');
+});

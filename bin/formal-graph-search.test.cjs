@@ -59,6 +59,19 @@ describe('reachFiltered', () => {
     assert.strictEqual(result.length, 1);
     assert.strictEqual(result[0].key, 'formal_module::D');
   });
+
+  it('does not crash when a reachable node lacks an edges array (leaf node)', () => {
+    const idx = {
+      nodes: {
+        'a::1': { type: 'a', edges: [{ to: 'b::2', rel: 'owns' }] },
+        'b::2': { type: 'b' } // no edges property — terminal node
+      }
+    };
+    let result;
+    assert.doesNotThrow(() => { result = reachFiltered(idx, 'a::1', 3, ['b']); });
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].key, 'b::2');
+  });
 });
 
 // ── proximityScore tests ──────────────────────────────────────────────────────
@@ -104,6 +117,18 @@ describe('proximityScore', () => {
 
   it('handles null/missing nodes gracefully', () => {
     const result = proximityScore(mockIndex, 'node::A', 'nonexistent::Y');
+    assert.strictEqual(result, 0);
+  });
+
+  it('does not crash when a queued node lacks an edges array', () => {
+    const idx = {
+      nodes: {
+        'node::A': { type: 'node', edges: [{ to: 'node::B', rel: 'owns' }] },
+        'node::B': { type: 'node' } // no edges property
+      }
+    };
+    let result;
+    assert.doesNotThrow(() => { result = proximityScore(idx, 'node::A', 'node::C'); });
     assert.strictEqual(result, 0);
   });
 });
@@ -276,5 +301,11 @@ describe('graphDiscoverModules', () => {
     assert.strictEqual(result.length, 2);
     assert.strictEqual(result[0].module, 'apple-mod', 'expected apple-mod first (alphabetically)');
     assert.strictEqual(result[1].module, 'zebra-mod', 'expected zebra-mod second (alphabetically)');
+  });
+
+  it('skips non-string tokens without crashing', () => {
+    let result;
+    assert.doesNotThrow(() => { result = graphDiscoverModules(mockIndex, [42, 'breaker'], ''); });
+    assert.ok(result.some(r => r.module === 'breaker-mod'), 'expected valid string token to still discover breaker-mod');
   });
 });

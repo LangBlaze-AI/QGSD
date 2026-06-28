@@ -700,3 +700,41 @@ test('v0.27-03: formal_ref_source validation', async (t) => {
     assert.strictEqual(result, true);
   });
 });
+
+// ── VDE-1: prototype-pollution / null-proto hardening ──────────────────────
+
+test('VDE adversarial: own hasOwnProperty key and null-proto entry do not crash', async (t) => {
+  const base = {
+    id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    fingerprint: 'abc123def456789012345',
+    title: 'Test',
+    occurrences: 1,
+    first_seen: '2026-03-04T12:00:00Z',
+    last_seen: '2026-03-04T12:00:00Z',
+    environments: ['production'],
+    status: 'open',
+    source_entries: [{ source_type: 'github', source_id: 'gh-1', observed_at: '2026-03-04T12:00:00Z' }]
+  };
+
+  await t.test('own hasOwnProperty string property does not throw', () => {
+    const entry = { ...base, formal_ref: 'r', hasOwnProperty: 'x' };
+    let result;
+    assert.doesNotThrow(() => { result = validateDebtEntry(entry); }, 'must not throw on shadowed hasOwnProperty');
+    assert.ok(Array.isArray(result), 'poisoned entry should return an error array');
+    assert.ok(result.some(e => e.includes('hasOwnProperty')), 'extra hasOwnProperty key should be reported');
+  });
+
+  await t.test('null-prototype entry does not throw', () => {
+    const entry = Object.assign(Object.create(null), base, { formal_ref: 'r' });
+    let result;
+    assert.doesNotThrow(() => { result = validateDebtEntry(entry); }, 'must not throw on null-proto object');
+    assert.strictEqual(result, true, 'an otherwise-valid null-proto entry should validate');
+  });
+
+  await t.test('ledger with a hasOwnProperty-poisoned entry does not throw', () => {
+    const ledger = { schema_version: '1', debt_entries: [{ ...base, formal_ref: 'r', hasOwnProperty: 'x' }] };
+    let result;
+    assert.doesNotThrow(() => { result = validateDebtLedger(ledger); }, 'ledger validation must not throw');
+    assert.ok(Array.isArray(result), 'poisoned entry should surface as ledger error');
+  });
+});

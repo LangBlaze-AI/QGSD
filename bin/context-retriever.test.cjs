@@ -96,6 +96,16 @@ describe('analyzeContextNeeds', () => {
     assert.ok(!needs.some(n => n.domain === 'test'));
     assert.ok(needs.some(n => n.domain === 'formal'));
   });
+
+  it('does not throw when question is a non-string', () => {
+    let needs;
+    assert.doesNotThrow(() => { needs = analyzeContextNeeds(42, null, ''); });
+    assert.ok(Array.isArray(needs));
+  });
+
+  it('does not throw when existingContext is a non-string', () => {
+    assert.doesNotThrow(() => analyzeContextNeeds('run the test', null, ['--- test ---']));
+  });
 });
 
 // --- fetchContext tests ---
@@ -173,6 +183,22 @@ describe('fetchContext', () => {
 
     const result = fetchContext(tmpDir, [{ domain: 'formal', query: '' }], 10000);
     assert.ok(result.includes('MyModel'));
+  });
+
+  it('fails open on null/non-object element in needs array', () => {
+    assert.doesNotThrow(() => fetchContext(tmpDir, [null], 1000));
+    assert.equal(fetchContext(tmpDir, [null], 1000), '');
+    // a valid need alongside a bad one still resolves
+    const dir = path.join(tmpDir, '.planning');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'STATE.md'), 'hello world');
+    const result = fetchContext(tmpDir, [null, { domain: 'architecture', query: '' }], 5000);
+    assert.ok(result.includes('STATE.md'));
+  });
+
+  it('returns empty string for non-array needs', () => {
+    assert.equal(fetchContext(tmpDir, {}, 1000), '');
+    assert.doesNotThrow(() => fetchContext(tmpDir, { domain: 'test' }, 1000));
   });
 });
 

@@ -43,8 +43,10 @@ function inferSessions(events, sessionGapMs) {
   };
 
   for (let i = 1; i < events.length; i++) {
-    const prevTs = new Date(events[i - 1].ts || events[i - 1].timestamp).getTime();
-    const currTs = new Date(events[i].ts || events[i].timestamp).getTime();
+    const prev = events[i - 1] || {};
+    const curr = events[i] || {};
+    const prevTs = new Date(prev.ts || prev.timestamp).getTime();
+    const currTs = new Date(curr.ts || curr.timestamp).getTime();
     const gap = currTs - prevTs;
 
     if (gap > sessionGapMs) {
@@ -67,14 +69,14 @@ function inferSessions(events, sessionGapMs) {
  * Build session summary from raw session with events.
  */
 function summarizeSession(session) {
-  const events = session.events;
-  const timestamps = events.map(e => new Date(e.ts || e.timestamp).getTime()).filter(t => !isNaN(t));
+  const events = (session && Array.isArray(session.events)) ? session.events : [];
+  const timestamps = events.map(e => new Date((e && (e.ts || e.timestamp))).getTime()).filter(t => !isNaN(t));
   const start = timestamps.length > 0 ? new Date(Math.min(...timestamps)).toISOString() : null;
   const end = timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null;
 
   const actions = {};
   for (const e of events) {
-    const action = e.action || 'undefined';
+    const action = (e && e.action) || 'undefined';
     actions[action] = (actions[action] || 0) + 1;
   }
 

@@ -32,13 +32,14 @@ function isMethodologySkip(event) {
  * Generate a mismatch entry from a conformance event comparison.
  */
 function buildMismatchEntry(id, event, eventIndex, expectedState, actualState, divergenceType, resolution, notes, classification) {
+  const ev = (event && typeof event === 'object') ? event : {};
   return {
     id: 'MISMATCH-' + String(id).padStart(3, '0'),
-    timestamp: event.ts || new Date().toISOString(),
+    timestamp: ev.ts || new Date().toISOString(),
     l2_source: 'nf-workflow.machine.ts',
     l1_trace_ref: {
       event_index: eventIndex,
-      session: event.session_id || event.round_id || 'standalone',
+      session: ev.session_id || ev.round_id || 'standalone',
     },
     expected_state: expectedState,
     actual_state: actualState,
@@ -70,8 +71,9 @@ function buildMismatchRegister(conformanceEvents, vocabulary, divergences) {
   const stats = { total_events: 0, mapped: 0, unmapped: 0, methodology_skip: 0, state_mismatch: 0 };
 
   // Process conformance events
-  for (let i = 0; i < conformanceEvents.length; i++) {
-    const event = conformanceEvents[i];
+  const events = Array.isArray(conformanceEvents) ? conformanceEvents : [];
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
     stats.total_events++;
 
     // Map to XState event
@@ -124,6 +126,7 @@ function buildMismatchRegister(conformanceEvents, vocabulary, divergences) {
   // Incorporate existing .divergences.json entries
   if (Array.isArray(divergences)) {
     for (const div of divergences) {
+      if (!div || typeof div !== 'object') continue; // skip malformed entries (fail-open)
       mismatchCounter++;
       const divEvent = div.event || {};
 

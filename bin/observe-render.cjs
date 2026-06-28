@@ -51,6 +51,9 @@ function renderObserveOutput(results) {
   // A non-array `results` (null / wrong-shape) must not crash the render `.filter`
   // (dogfood F48) — treat it as no results.
   if (!Array.isArray(results)) results = [];
+  // A null / non-object element (e.g. a handler that resolved to null) must not
+  // crash the success/error `.filter` deref — drop non-object entries.
+  results = results.filter(r => r && typeof r === 'object');
   const lines = [];
 
   // Separate successes and errors
@@ -61,7 +64,8 @@ function renderObserveOutput(results) {
   // Collect all issues
   const allItems = [];
   for (const r of successes) {
-    for (const issue of (r.issues || [])) {
+    for (const issue of (Array.isArray(r.issues) ? r.issues : [])) {
+      if (!issue || typeof issue !== 'object') continue;
       allItems.push({ ...issue, source_label: issue.source_label || r.source_label });
     }
   }

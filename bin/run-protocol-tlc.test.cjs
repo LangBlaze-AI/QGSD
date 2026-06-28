@@ -93,3 +93,54 @@ test('run-protocol-tlc.cjs has inconclusive writeCheckResult call in source', ()
   assert.match(src, /result\s*:\s*['"]inconclusive['"]/,
     'run-protocol-tlc.cjs must have result=inconclusive in writeCheckResult call');
 });
+
+test('writes a clean error record for prototype-pollution config names (__proto__) instead of dropping it', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const ndjsonPath = path.join(os.tmpdir(), 'rpt-proto-' + process.pid + '-' + Date.now() + '.ndjson');
+  try {
+    const result = spawnSync(process.execPath, [RUN_PROTOCOL_TLC, '--config=__proto__'], {
+      encoding: 'utf8',
+      env: { ...process.env, CHECK_RESULTS_PATH: ndjsonPath },
+    });
+    assert.strictEqual(result.status, 1);
+    assert.match(result.stderr, /Unknown config/i);
+    // BUG: CHECK_ID_MAP['__proto__'] === Object.prototype (truthy non-string) makes
+    // writeCheckResult throw, so the error audit record is silently dropped.
+    assert.doesNotMatch(result.stderr, /failed to write check result/i,
+      'error record for __proto__ config must be written, not dropped');
+    assert.ok(fs.existsSync(ndjsonPath), 'check-result ndjson must be written for __proto__ config');
+    const line = fs.readFileSync(ndjsonPath, 'utf8').trim().split('\n').filter(Boolean).pop();
+    const rec = JSON.parse(line);
+    assert.strictEqual(rec.result, 'error');
+    assert.strictEqual(rec.check_id, 'tla:__proto__');
+    assert.strictEqual(typeof rec.property, 'string');
+  } finally {
+    try { fs.unlinkSync(ndjsonPath); } catch (_) {}
+  }
+});
+
+test('writes a clean error record for an empty --config= value instead of dropping it', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const ndjsonPath = path.join(os.tmpdir(), 'rpt-empty-' + process.pid + '-' + Date.now() + '.ndjson');
+  try {
+    const result = spawnSync(process.execPath, [RUN_PROTOCOL_TLC, '--config='], {
+      encoding: 'utf8',
+      env: { ...process.env, CHECK_RESULTS_PATH: ndjsonPath },
+    });
+    assert.strictEqual(result.status, 1);
+    assert.match(result.stderr, /Unknown config/i);
+    // BUG: empty property string makes writeCheckResult throw -> record dropped.
+    assert.doesNotMatch(result.stderr, /failed to write check result/i,
+      'error record for empty config must be written, not dropped');
+    assert.ok(fs.existsSync(ndjsonPath), 'check-result ndjson must be written for empty config');
+    const line = fs.readFileSync(ndjsonPath, 'utf8').trim().split('\n').filter(Boolean).pop();
+    const rec = JSON.parse(line);
+    assert.strictEqual(rec.result, 'error');
+    assert.ok(typeof rec.property === 'string' && rec.property.length > 0,
+      'property must be a non-empty string');
+  } finally {
+    try { fs.unlinkSync(ndjsonPath); } catch (_) {}
+  }
+});

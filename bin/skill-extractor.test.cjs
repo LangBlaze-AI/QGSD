@@ -54,6 +54,33 @@ describe('skill-extractor', () => {
       assert.ok(clusters.length >= 2);
       assert.ok(clusters[0].entries.length >= clusters[1].entries.length);
     });
+
+    it('should skip null/non-object entries instead of throwing', () => {
+      const entries = [
+        { tags: ['hooks', 'async'], type: 'error_resolution', symptom: 'e1' },
+        { tags: ['hooks', 'async'], type: 'error_resolution', symptom: 'e2' },
+        null,
+        { tags: ['hooks', 'async'], type: 'error_resolution', symptom: 'e3' },
+      ];
+      let clusters;
+      assert.doesNotThrow(() => { clusters = clusterByTags(entries); });
+      const hookCluster = clusters.find(c => c.tags.includes('hooks') && c.tags.includes('async'));
+      assert.ok(hookCluster);
+      assert.strictEqual(hookCluster.entries.length, 3);
+    });
+
+    it('should ignore non-array tags instead of iterating characters', () => {
+      const entries = [
+        { tags: 'hooks', type: 'error_resolution', symptom: 'e1' },
+        { tags: 'hooks', type: 'error_resolution', symptom: 'e2' },
+      ];
+      let clusters;
+      assert.doesNotThrow(() => { clusters = clusterByTags(entries); });
+      // 'hooks' is a string, not an array — must NOT be split into char-tags h/o/k/s.
+      assert.strictEqual(clusters.length, 0);
+      // numeric tags must also be tolerated, not throw
+      assert.doesNotThrow(() => clusterByTags([{ tags: 42 }, { tags: 42 }]));
+    });
   });
 
   describe('generateCandidates', () => {

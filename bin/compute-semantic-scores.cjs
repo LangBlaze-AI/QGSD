@@ -47,18 +47,18 @@ const GATE_LABELS = {
  * @returns {{ semantic_score: number, semantic_metadata: object }}
  */
 function computeGateSemanticScore(candidates, perModelGates, gateKey, maybeWeight) {
-  if (maybeWeight == null) maybeWeight = 0.5;
+  if (maybeWeight == null || Number.isNaN(maybeWeight)) maybeWeight = 0.5;
 
   // Identify models that pass this gate
   const passingModels = new Set();
   for (const [modelPath, info] of Object.entries(perModelGates)) {
-    if (info[gateKey] && info[gateKey].pass) {
+    if (info && info[gateKey] && info[gateKey].pass) {
       passingModels.add(modelPath);
     }
   }
 
   // Filter candidates whose model passes this gate
-  const gateCandidates = candidates.filter(c => passingModels.has(c.model));
+  const gateCandidates = candidates.filter(c => c && passingModels.has(c.model));
 
   const totalCount = gateCandidates.length;
   if (totalCount === 0) {

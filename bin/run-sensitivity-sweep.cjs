@@ -182,22 +182,18 @@ function main() {
   for (const param of SWEEP_PARAMS) {
     process.stderr.write(TAG + ' Sweeping ' + param.name + ': ' + param.values.join(', ') + '\n');
 
-    // Run baseline first (if it's in the values list) to set baseline_result
-    let baselineResult = null;
+    // Evaluate the baseline once up front so deltas are meaningful regardless of
+    // value ordering AND when the baseline isn't itself a swept value
+    // (e.g. prism baseline 0.85 is not in [0.5, 0.75, 0.95]).
+    const baselineOutcome = param.run(param.baseline);
+    const baselineResult = baselineOutcome.result;
 
     for (const value of param.values) {
-      const outcome = param.run(value);
+      const outcome = value === param.baseline ? baselineOutcome : param.run(value);
 
-      // Set baseline_result when we hit the baseline value
-      if (value === param.baseline) {
-        baselineResult = outcome.result;
-      }
-
-      const delta = baselineResult === null
-        ? 'unknown'
-        : outcome.result === baselineResult
-          ? 'stable'
-          : 'flip-to-' + outcome.result;
+      const delta = outcome.result === baselineResult
+        ? 'stable'
+        : 'flip-to-' + outcome.result;
 
       const record = {
         tool: 'run-sensitivity-sweep',
@@ -229,4 +225,9 @@ function main() {
   process.stderr.write(TAG + ' Sweep complete. Written to: ' + REPORT_PATH + '\n');
 }
 
-main();
+try {
+  main();
+} catch (err) {
+  process.stderr.write(TAG + ' WARN sweep aborted: ' + (err && err.message ? err.message : String(err)) + '\n');
+  process.exit(0);
+}

@@ -55,7 +55,11 @@ if (!VALID_CONFIGS.includes(configName)) {
   );
   const _startMs = Date.now();
   const _runtimeMs = 0;
-  try { writeCheckResult({ tool: 'run-oscillation-tlc', formalism: 'tla', result: 'error', check_id: CHECK_ID_MAP[configName] || ('tla:' + configName.toLowerCase()), surface: 'tla', property: PROPERTY_MAP[configName] || configName, runtime_ms: _runtimeMs, summary: 'error: unknown config in ' + _runtimeMs + 'ms', requirement_ids: getRequirementIds(CHECK_ID_MAP[configName] || ('tla:' + configName.toLowerCase())), metadata: { config: configName } }); } catch (e) { process.stderr.write('[run-oscillation-tlc] Warning: failed to write check result: ' + e.message + '\n'); }
+  // configName is a genuinely-unknown key here (failed VALID_CONFIGS); never index the
+  // maps with it — a prototype-chain key (__proto__/constructor/prototype) would resolve
+  // to an inherited member and poison check_id/property, silently dropping the error record.
+  const _unknownCheckId = 'tla:' + (configName.toLowerCase() || 'unknown');
+  try { writeCheckResult({ tool: 'run-oscillation-tlc', formalism: 'tla', result: 'error', check_id: _unknownCheckId, surface: 'tla', property: configName || 'unknown config', runtime_ms: _runtimeMs, summary: 'error: unknown config in ' + _runtimeMs + 'ms', requirement_ids: getRequirementIds(_unknownCheckId), metadata: { config: configName } }); } catch (e) { process.stderr.write('[run-oscillation-tlc] Warning: failed to write check result: ' + e.message + '\n'); }
   process.exit(1);
 }
 

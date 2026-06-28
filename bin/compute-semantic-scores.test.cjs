@@ -121,6 +121,61 @@ describe('compute-semantic-scores', () => {
       assert.equal(resultB.semantic_score, 1.0); // only m1, which is yes
     });
 
+    it('should skip null / non-object model entries in perModelGates without throwing', () => {
+      const candidates = [
+        makeCandidate('m1.als', 'REQ-01', 'yes'),
+        makeCandidate('m2.als', 'REQ-02', 'yes'),
+      ];
+      // m1.als entry is null (corrupt per-model-gates.json); m2.als is well-formed
+      const perModelGates = {
+        'm1.als': null,
+        'm2.als': { gate_a: { pass: true }, gate_b: { pass: true }, gate_c: { pass: true } },
+      };
+
+      let result;
+      assert.doesNotThrow(() => {
+        result = computeGateSemanticScore(candidates, perModelGates, 'gate_a', 0.5);
+      });
+      // Only m2.als is a valid passing model
+      assert.equal(result.semantic_metadata.evaluated_candidates, 1);
+      assert.equal(result.semantic_score, 1.0);
+    });
+
+    it('should ignore null / non-object candidate entries without throwing', () => {
+      const candidates = [
+        makeCandidate('m1.als', 'REQ-01', 'yes'),
+        null,
+        makeCandidate('m1.als', 'REQ-02', 'no'),
+      ];
+      const perModelGates = makePerModelGates({ 'm1.als': { a: true } });
+
+      let result;
+      assert.doesNotThrow(() => {
+        result = computeGateSemanticScore(candidates, perModelGates, 'gate_a', 0.5);
+      });
+      // null entry dropped; 1 yes + 1 no = 0.5
+      assert.equal(result.semantic_metadata.evaluated_candidates, 2);
+      assert.equal(result.semantic_score, 0.5);
+    });
+
+    it('should fall back to default weight when maybeWeight is NaN (no NaN score)', () => {
+      const candidates = [
+        makeCandidate('m1.als', 'REQ-01', 'yes'),
+        makeCandidate('m2.als', 'REQ-02', 'no'),
+      ];
+      const perModelGates = makePerModelGates({
+        'm1.als': { a: true },
+        'm2.als': { a: true },
+      });
+
+      // e.g. CLI `--maybe-weight abc` -> parseFloat('abc') -> NaN
+      const result = computeGateSemanticScore(candidates, perModelGates, 'gate_a', NaN);
+      assert.ok(!isNaN(result.semantic_score), `score should not be NaN, got ${result.semantic_score}`);
+      assert.ok(isFinite(result.semantic_score), 'score should be finite');
+      // 1 yes + 0 maybe over 2 total -> 0.5 with the default weight
+      assert.equal(result.semantic_score, 0.5);
+    });
+
   });
 
   describe('enrichGateFile', () => {

@@ -192,12 +192,17 @@ if (!fs.existsSync(registryPath)) {
     registry = null;
   }
 
+  if (registry && (typeof registry !== 'object' || Array.isArray(registry))) {
+    process.stderr.write('[promote-model] Warning: registry is not an object — skipping update\n');
+    registry = null;
+  }
+
   if (registry) {
-    if (!registry.models) registry.models = {};
+    if (!registry.models || typeof registry.models !== 'object' || Array.isArray(registry.models)) registry.models = {};
     const key = path.relative(projectRoot, resolvedTarget).replace(/\\/g, '/');
     const now = new Date().toISOString();
     const existing = registry.models[key] || {};
-    newVersion = (existing.version || 0) + 1;
+    newVersion = (Number(existing.version) || 0) + 1;
 
     registry.models[key] = {
       version: newVersion,

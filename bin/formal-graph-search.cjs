@@ -23,7 +23,8 @@ function reachFiltered(index, startKey, maxDepth, typeFilter) {
       if (depth >= maxDepth) continue;
       const node = index.nodes[key];
       if (!node) continue;
-      for (const edge of node.edges) {
+      const edges = Array.isArray(node.edges) ? node.edges : [];
+      for (const edge of edges) {
         if (visited.has(edge.to)) continue;
         visited.add(edge.to);
         const target = index.nodes[edge.to];
@@ -78,7 +79,8 @@ function proximityScore(index, fromKey, toKey) {
     const node = index.nodes[key];
     if (!node) continue;
 
-    for (const edge of node.edges) {
+    const edges = Array.isArray(node.edges) ? node.edges : [];
+    for (const edge of edges) {
       if (visited.has(edge.to)) continue;
       visited.add(edge.to);
       const edgeWeight = EDGE_WEIGHTS[edge.rel] || 0.3;
@@ -165,6 +167,7 @@ function graphDiscoverModules(index, tokens, description) {
   const discovered = new Map(); // module -> { discoveredVia, depth }
 
   for (const token of tokens) {
+    if (typeof token !== 'string') continue;
     const tokenLower = token.toLowerCase();
 
     // Exact match: concept::{token}
