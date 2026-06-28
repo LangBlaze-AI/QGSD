@@ -562,6 +562,7 @@ function formatDiagnosticForPrompt(diagnosticJson) {
 
   for (let i = 0; i < correction_proposals.length; i++) {
     const p = correction_proposals[i];
+    if (!p || typeof p !== 'object') continue; // fail-open: skip non-object proposal entries (mirrors formatRequirementsSection)
     section += `${i + 1}. **[${p.type}]** ${p.target}: ${p.reasoning}\n`;
     section += `   Example: \`${p.example}\`\n`;
   }
@@ -571,7 +572,7 @@ function formatDiagnosticForPrompt(diagnosticJson) {
     section += `- Model states: ${trace_alignment.model_state_count || '?'}\n`;
     section += `- Bug trace states: ${trace_alignment.bug_state_count || '?'}\n`;
     section += `- First divergence: state ${trace_alignment.first_divergence_index ?? '?'}\n`;
-    section += `- Diverged fields: ${(trace_alignment.diverged_fields || []).join(', ')}\n`;
+    section += `- Diverged fields: ${(Array.isArray(trace_alignment.diverged_fields) ? trace_alignment.diverged_fields : []).join(', ')}\n`;
   }
   section += '\nUse these proposals to guide your model refinement. Address high-priority proposals first.';
 

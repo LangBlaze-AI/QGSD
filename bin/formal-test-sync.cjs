@@ -229,6 +229,7 @@ function parseTLACfgConstants(content) {
  */
 function parseAlloyDefaults(content) {
   const result = {};
+  if (typeof content !== 'string') return result;
   // Find Defaults sig constraint block: { defaultX = value, ... }
   const match = content.match(/one\s+sig\s+Defaults\s*\{[^}]*\}\s*\{([^}]*)\}/);
   if (!match) return result;
@@ -570,7 +571,7 @@ function findSourceFiles(requirementId, requirementText) {
  * Returns 'structural', 'behavioral', or 'constant'.
  */
 function classifyTestStrategy(requirementText) {
-  const text = (requirementText || '').toLowerCase();
+  const text = (typeof requirementText === 'string' ? requirementText : '').toLowerCase();
   if (/(?:returns|outputs|produces|result|calculates)/.test(text)) return 'behavioral';
   if (/(?:constant|value|equals|match|threshold)/.test(text)) return 'constant';
   // Default and explicit structural keywords

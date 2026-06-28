@@ -378,7 +378,7 @@ function extractChurnRanking(root, since, maxCommits) {
 
   const logOutput = gitExec(logArgs, root);
 
-  const fileStats = {};
+  const fileStats = Object.create(null);
   let currentCommit = null;
 
   for (const line of logOutput.split('\n')) {
@@ -432,13 +432,13 @@ function buildUncoveredHotZones(numericalAdj, bugfixHotspots, churnRanking, cove
   for (const ch of churnRanking) allFiles.add(ch.file);
 
   // Build lookup maps
-  const churnMap = {};
+  const churnMap = Object.create(null);
   for (const ch of churnRanking) churnMap[ch.file] = ch.total_churn;
 
-  const fixMap = {};
+  const fixMap = Object.create(null);
   for (const bf of bugfixHotspots) fixMap[bf.file] = bf.fix_count;
 
-  const adjMap = {};
+  const adjMap = Object.create(null);
   for (const adj of numericalAdj) {
     adjMap[adj.file] = (adjMap[adj.file] || 0) + adj.touch_count;
   }

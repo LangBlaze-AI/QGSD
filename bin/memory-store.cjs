@@ -78,7 +78,8 @@ function isDuplicate(cwd, category, field, value, checkLast = 10) {
   const recent = readLastN(cwd, category, checkLast);
   const needle = value.toLowerCase();
   return recent.some(e => {
-    const hay = ((e[field]) || '').toLowerCase();
+    const hay = (typeof e[field] === 'string' ? e[field] : '').toLowerCase();
+    if (!hay) return false;
     return hay.includes(needle) || needle.includes(hay);
   });
 }
@@ -210,10 +211,14 @@ function pruneOlderThan(cwd, category, days = 90) {
  * Returns stored confidence minus 0.05 per week since last_confirmed, floor 0.1.
  */
 function computeCurrentConfidence(entry) {
-  if (!entry.confidence || !entry.last_confirmed) {
+  if (!entry || !entry.confidence || !entry.last_confirmed) {
+    return (entry && entry.confidence) || 0.7;
+  }
+  const lastMs = new Date(entry.last_confirmed).getTime();
+  if (Number.isNaN(lastMs)) {
     return entry.confidence || 0.7;
   }
-  const daysSinceConfirmed = (Date.now() - new Date(entry.last_confirmed).getTime()) / (86400 * 1000);
+  const daysSinceConfirmed = (Date.now() - lastMs) / (86400 * 1000);
   const weekDecay = Math.floor(daysSinceConfirmed / 7) * 0.05;
   return Math.max(0.1, entry.confidence - weekDecay);
 }

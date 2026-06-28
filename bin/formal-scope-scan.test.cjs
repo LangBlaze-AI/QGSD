@@ -19,7 +19,8 @@ const {
   mergeProjectSpecsIntoRegistry,
   runBugModeMatching,
   loadModelRegistry,
-  discoverViaCallGraph
+  discoverViaCallGraph,
+  persistBugGap
 } = require('./formal-scope-scan.cjs');
 
 const SCOPE_SCAN = path.join(__dirname, 'formal-scope-scan.cjs');
@@ -472,5 +473,76 @@ test('discoverViaCallGraph discovers module via caller file matching source_file
     assert.ok(matchedModules.has(testModName), 'matchedModules set should be updated');
   } finally {
     fs.rmSync(testModDir, { recursive: true });
+  }
+});
+
+// ── FSS-1: persistBugGap shape-guard (fail-open) ─────────────────────────────
+
+test('persistBugGap fails open when gaps file lacks an entries array (shape guard)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fss-gaps-'));
+  const gapsPath = path.join(tmpDir, 'bug-model-gaps.json');
+  // valid JSON, wrong shape: no entries array
+  fs.writeFileSync(gapsPath, JSON.stringify({ version: '1.0' }));
+  try {
+    assert.doesNotThrow(() => {
+      persistBugGap('some bug description', [{ model: 'X.tla' }], gapsPath);
+    });
+    const saved = JSON.parse(fs.readFileSync(gapsPath, 'utf8'));
+    assert.ok(Array.isArray(saved.entries), 'entries should be normalized to an array');
+    assert.strictEqual(saved.entries.length, 1);
+    assert.strictEqual(saved.entries[0].description, 'some bug description');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true });
+  }
+});
+
+// ── FSS-2: runBugModeMatching null/non-object entry guard ─────────────────────
+
+test('runBugModeMatching skips null/non-object model entries instead of crashing', () => {
+  const registry = {
+    version: '1.0',
+    models: {
+      'BadEntry.tla': null,
+      'AlsoBad.als': 42,
+      'NFCircuitBreaker.tla': { requirements: ['BREAK-01'], description: 'circuit breaker timeout detection' }
+    }
+  };
+  let matches;
+  assert.doesNotThrow(() => {
+    matches = runBugModeMatching('circuit breaker timeout', [], undefined, registry);
+  });
+  assert.ok(Array.isArray(matches));
+  // the good entry should still be matchable; the bad ones must not appear
+  assert.ok(!matches.some(m => m.model === 'BadEntry.tla' || m.model === 'AlsoBad.als'));
+});
+
+// ── FSS-3: matchProjectSpecs non-string keyword guard ────────────────────────
+
+test('matchProjectSpecs ignores non-string keywords without crashing', () => {
+  const manifestPath = path.join(process.cwd(), '.planning', 'formal', 'specs', 'formal-checks.json');
+  const original = fs.readFileSync(manifestPath, 'utf8');
+  const manifest = {
+    version: 1,
+    specs: [{
+      module: 'gke',
+      type: 'tla',
+      spec_path: '.planning/formal/specs/G.tla',
+      command: 'make',
+      args: ['check'],
+      keywords: [null, 123, 'gke'],
+      requirements: [],
+      maturity: 'draft'
+    }]
+  };
+  try {
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+    let matches;
+    assert.doesNotThrow(() => {
+      matches = matchProjectSpecs('fix gke pod restart', [], null);
+    });
+    // the valid string keyword 'gke' should still match
+    assert.ok(matches.some(m => m.module === 'gke'));
+  } finally {
+    fs.writeFileSync(manifestPath, original);
   }
 });

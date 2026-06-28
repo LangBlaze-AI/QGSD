@@ -116,6 +116,36 @@ test('detectLivenessProperties returns [] for MCMCPEnv when invariants.md has ##
   assert.deepStrictEqual(result, [], 'MCMCPEnv should have 0 missing fairness declarations');
 });
 
+test('detectLivenessProperties does not crash for inherited Object property names as configName', () => {
+  const { detectLivenessProperties } = require('./run-tlc.cjs');
+  const cfgPath = path.join(__dirname, '..', '.planning', 'formal', 'tla', 'MCliveness.cfg');
+  const specDir = path.join(__dirname, '..', '.planning', 'formal', 'spec');
+  for (const evil of ['constructor', 'toString', 'hasOwnProperty', '__proto__', 'valueOf']) {
+    assert.doesNotThrow(
+      () => detectLivenessProperties(evil, cfgPath, specDir),
+      'configName=' + evil + ' must not throw (SURFACE_MAP[evil] resolves via prototype to a function/object)'
+    );
+    assert.deepStrictEqual(
+      detectLivenessProperties(evil, cfgPath, specDir),
+      [],
+      'configName=' + evil + ' is an unknown surface — must fail-open to []'
+    );
+  }
+});
+
+test('detectLivenessProperties does not crash when configName is null/undefined/non-string', () => {
+  const { detectLivenessProperties } = require('./run-tlc.cjs');
+  const cfgPath = path.join(__dirname, '..', '.planning', 'formal', 'tla', 'MCliveness.cfg');
+  const specDir = path.join(__dirname, '..', '.planning', 'formal', 'spec');
+  for (const bad of [null, undefined, 42]) {
+    assert.doesNotThrow(
+      () => detectLivenessProperties(bad, cfgPath, specDir),
+      'configName=' + String(bad) + ' must not throw on configName.startsWith'
+    );
+    assert.deepStrictEqual(detectLivenessProperties(bad, cfgPath, specDir), []);
+  }
+});
+
 test('SURFACE_MAP in run-tlc.cjs contains MCMCPEnv -> mcp-calls entry', () => {
   // Verify SURFACE_MAP has the mcp-calls mapping by checking module source.
   // NOTE: 'MCMCPEnv' in VALID_CONFIGS MUST exactly match this SURFACE_MAP key —

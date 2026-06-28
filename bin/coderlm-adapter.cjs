@@ -163,6 +163,7 @@ function httpPost(url, body, timeout) {
  * @returns {Object} Adapter object with health() and query methods
  */
 function createAdapter(opts = {}) {
+  if (opts === null || typeof opts !== 'object') opts = {};
   // Default: enabled=true — lifecycle module manages server availability.
   // NF_CODERLM_ENABLED env var is no longer required (self-enabling with fail-open).
   // Pass enabled:false explicitly to disable for testing.
@@ -343,9 +344,7 @@ check().then(r => console.log(JSON.stringify(r)));
         _metrics.queryCount++;
         _metrics.totalLatencyMs += Date.now() - start;
         if (result.error) {
-          const out = { error: result.error };
-          _cache.set(cacheKey, out);
-          return out;
+          return { error: result.error };
         }
         if (result.status === 200) {
           try {

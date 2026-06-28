@@ -195,4 +195,37 @@ describe('formal-proximity builder', () => {
       }
     });
   });
+
+  describe('proximity adversarial method resolution', () => {
+    it('falls back to default for Object.prototype-inherited method names instead of crashing', () => {
+      const { index } = buildIndex();
+      let fromKey, toKey;
+      for (const [key, node] of Object.entries(index.nodes)) {
+        if (node.edges.length > 0) { fromKey = key; toKey = node.edges[0].to; break; }
+      }
+      assert.ok(fromKey, 'fixture needs a node with at least one edge');
+      for (const method of ['__proto__', 'constructor', 'hasOwnProperty', 'toString']) {
+        const score = proximity(index, fromKey, toKey, 5, { method });
+        assert.equal(typeof score, 'number', `method=${method} should return a number`);
+        assert.ok(score >= 0 && score <= 1, `method=${method} score in range, got ${score}`);
+      }
+    });
+  });
+
+  describe('proximity fail-open on malformed index', () => {
+    it('returns 0 when index has no nodes map', () => {
+      assert.equal(proximity({}, 'a::1', 'b::2'), 0);
+    });
+    it('returns 0 when index is null', () => {
+      assert.equal(proximity(null, 'a::1', 'b::2'), 0);
+    });
+  });
+
+  describe('countEmbeddedEdges fail-open', () => {
+    it('returns zero totals for a null index instead of throwing', () => {
+      const result = countEmbeddedEdges(null);
+      assert.equal(result.totalEdges, 0);
+      assert.deepEqual(result.byType, {});
+    });
+  });
 });

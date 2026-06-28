@@ -76,6 +76,14 @@ function runProjectCheck(spec, cwd) {
   const startMs = Date.now();
   const base = { module: spec.module, tool: spec.type || 'unknown' };
 
+  // Safety gate 0 — spec_path must be a non-empty string. Manifest validation
+  // only checks command/args, so a malformed entry can reach here without one;
+  // path.isAbsolute(undefined) would throw ERR_INVALID_ARG_TYPE outside the spawn
+  // try/catch and crash the process (fail-open violation).
+  if (typeof spec.spec_path !== 'string' || spec.spec_path.length === 0) {
+    return { ...base, status: 'skipped', detail: 'missing or invalid spec_path', runtimeMs: 0 };
+  }
+
   // Safety gate 1 — command allowlist
   if (!ALLOWED_COMMANDS.has(spec.command)) {
     return { ...base, status: 'skipped', detail: 'command not in allowlist: ' + spec.command, runtimeMs: 0 };

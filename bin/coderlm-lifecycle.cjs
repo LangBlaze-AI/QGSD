@@ -440,8 +440,9 @@ function status() {
     let idleDurationMs = null;
     try {
       const ts = fs.readFileSync(_lastqueryPath, 'utf8').trim();
-      lastQueryMs = parseInt(ts, 10);
-      if (!isNaN(lastQueryMs)) {
+      const parsedTs = parseInt(ts, 10);
+      if (!isNaN(parsedTs)) {
+        lastQueryMs = parsedTs;
         idleDurationMs = Date.now() - lastQueryMs;
       }
     } catch (e) {

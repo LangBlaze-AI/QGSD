@@ -392,6 +392,7 @@ function matchProjectSpecs(description, files, tokens) {
     // Keyword match
     if (spec.keywords && Array.isArray(spec.keywords)) {
       for (const kw of spec.keywords) {
+        if (typeof kw !== 'string') continue;
         if (toks.some(t => t === kw.toLowerCase())) {
           matched = true;
           break;
@@ -495,6 +496,7 @@ function runBugModeMatching(description, files, registryPath, preloadedRegistry)
 
   const matches = [];
   for (const [modelKey, modelMeta] of Object.entries(registry.models)) {
+    if (!modelMeta || typeof modelMeta !== 'object') continue;
     const relevanceScore = scoreConceptMatch(description, modelKey, modelMeta);
     if (relevanceScore > 0) {
       matches.push({
@@ -530,7 +532,11 @@ function loadBugModelGaps(gapsPath) {
   const p = gapsPath || BUG_GAPS_PATH;
   try {
     if (!fs.existsSync(p)) return { version: '1.0', entries: [] };
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
+    const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (!data || typeof data !== 'object' || !Array.isArray(data.entries)) {
+      return { version: '1.0', entries: [] };
+    }
+    return data;
   } catch (e) {
     process.stderr.write('Warning: Failed to load bug-model-gaps.json: ' + e.message + '\n');
     return { version: '1.0', entries: [] };

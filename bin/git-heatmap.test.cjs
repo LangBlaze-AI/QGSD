@@ -256,3 +256,41 @@ test('end-to-end: script produces valid schema against real repo', () => {
   assert.ok(data.signals.churn_ranking.length > 0, 'should find churn data in a real repo');
   assert.ok(data.signals.bugfix_hotspots.length > 0, 'should find bugfix data in a real repo');
 });
+
+// ── 9. Prototype-pollution hardening ───────────────────────────────────────
+
+test('buildUncoveredHotZones: file named __proto__ does not corrupt output', () => {
+  const { buildUncoveredHotZones } = require('./git-heatmap.cjs');
+  const churnRanking = [{ file: '__proto__', total_churn: 50, commits: 2, lines_added: 30, lines_removed: 20 }];
+  const zones = buildUncoveredHotZones([], [], churnRanking, new Set());
+  assert.strictEqual(zones.length, 1);
+  const z = zones[0];
+  assert.strictEqual(z.file, '__proto__');
+  assert.strictEqual(typeof z.churn, 'number', 'churn must be a number, not Object.prototype');
+  assert.strictEqual(z.churn, 50);
+  assert.strictEqual(z.fixes, 0);
+  assert.strictEqual(z.adjustments, 0);
+  assert.ok(Number.isFinite(z.priority), 'priority must be finite, not NaN');
+  assert.deepStrictEqual(z.signals, ['churn'], 'only the churn signal should be present');
+});
+
+test('extractChurnRanking: file named __proto__ does not crash or pollute Object.prototype', () => {
+  const { extractChurnRanking } = require('./git-heatmap.cjs');
+  const os = require('os');
+  const fs = require('fs');
+  const { execFileSync } = require('child_process');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'heatmap-proto-'));
+  const git = (a) => execFileSync('git', a, { cwd: tmp, stdio: ['pipe', 'pipe', 'pipe'] });
+  git(['init', '-q']);
+  git(['config', 'user.email', 't@t.t']);
+  git(['config', 'user.name', 'tester']);
+  fs.writeFileSync(path.join(tmp, '__proto__'), 'a\nb\nc\n');
+  git(['add', '-A']);
+  git(['commit', '-q', '-m', 'add proto file']);
+  assert.doesNotThrow(() => extractChurnRanking(tmp, null, 0), 'must not throw on a __proto__ filename');
+  assert.strictEqual(Object.prototype.lines_added, undefined, 'must not pollute Object.prototype');
+  const ranking = extractChurnRanking(tmp, null, 0);
+  const entry = ranking.find((r) => r.file === '__proto__');
+  assert.ok(entry, 'should include the __proto__ file in the ranking');
+  assert.strictEqual(typeof entry.total_churn, 'number');
+});

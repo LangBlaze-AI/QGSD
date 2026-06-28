@@ -106,6 +106,11 @@ function quickCoverageCheck(requirements) {
 function discoverCandidates(proximityIndex, modelRegistry, requirements, opts = {}) {
   const { proximity, ENSEMBLE_METHODS, AMPLIFIED_ENSEMBLE_METHODS, loadEmbeddingCache } = require('./formal-proximity.cjs');
 
+  // Normalize requirements once so every downstream loop/map/find sees only
+  // plain objects (also handles a non-array requirements value from a corrupt
+  // requirements.json) — fail-open over a garbage element rather than crash.
+  requirements = Array.isArray(requirements) ? requirements.filter(r => r && typeof r === 'object') : [];
+
   // Load category-groups for domain gating
   const CATEGORY_GROUPS_PATH = path.join(process.cwd(), '.planning', 'formal', 'category-groups.json');
   let categoryGroups = {};
@@ -116,7 +121,7 @@ function discoverCandidates(proximityIndex, modelRegistry, requirements, opts = 
   const modelCategoryGroups = new Map();
   for (const [mp, mi] of Object.entries(modelRegistry.models || {})) {
     const groups = new Set();
-    for (const rId of (mi.requirements || [])) {
+    for (const rId of ((mi && mi.requirements) || [])) {
       const req = requirements.find(r => r.id === rId);
       if (req && req.category && categoryGroups[req.category]) {
         groups.add(categoryGroups[req.category]);
@@ -149,7 +154,7 @@ function discoverCandidates(proximityIndex, modelRegistry, requirements, opts = 
 
   const noFastPath = opts.noFastPath || false;
 
-  const modelPaths = Object.keys(modelRegistry.models || {});
+  const modelPaths = Object.keys(modelRegistry.models || {}).filter(mp => modelRegistry.models[mp] && typeof modelRegistry.models[mp] === 'object');
   const reqIds = requirements.map(r => r.id);
 
   // Fast-path: skip ensemble when coverage >= 95%

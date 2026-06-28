@@ -476,3 +476,43 @@ describe('Fail-open behavior', () => {
     }
   });
 });
+
+// ── Adversarial: entry-point arg guards ──
+
+describe('Adversarial — entry-point arg guards', () => {
+  it('does not crash when sourceConfig is null (fail-open)', () => {
+    const tmpDir = makeTmpDir();
+    try {
+      let result;
+      assert.doesNotThrow(() => {
+        result = handleInternal(null, { projectRoot: tmpDir });
+      }, 'null sourceConfig must not throw');
+      assert.ok(result && typeof result === 'object');
+      assert.equal(result.source_type, 'internal');
+      assert.equal(result.source_label, 'Internal Work');
+      assert.ok(Array.isArray(result.issues));
+    } finally {
+      rmrf(tmpDir);
+    }
+  });
+});
+
+describe('Adversarial — options omitted', () => {
+  it('defaults projectRoot to cwd when options is undefined (no crash)', () => {
+    const tmpDir = makeTmpDir();
+    const origCwd = process.cwd();
+    try {
+      process.chdir(tmpDir); // make cwd a controlled empty dir to avoid scanning the real repo
+      let result;
+      assert.doesNotThrow(() => {
+        result = handleInternal({});
+      }, 'undefined options must not throw');
+      assert.ok(result && typeof result === 'object');
+      assert.equal(result.source_type, 'internal');
+      assert.ok(Array.isArray(result.issues));
+    } finally {
+      process.chdir(origCwd);
+      rmrf(tmpDir);
+    }
+  });
+});

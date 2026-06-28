@@ -254,7 +254,7 @@ function recomputeStats(data, deltas) {
   deltas = deltas || DEFAULT_SCORE_DELTAS;
   // Reset all model stats
   for (const model of VALID_MODELS) {
-    if (!data.models[model]) data.models[model] = emptyModelStats();
+    if (!data.models[model] || typeof data.models[model] !== 'object' || Array.isArray(data.models[model])) data.models[model] = emptyModelStats();
     const m = data.models[model];
     m.score = 0;
     m.tp    = 0;
@@ -300,6 +300,10 @@ function recomputeSlots(data, deltas) {
   deltas = deltas || DEFAULT_SCORE_DELTAS;
   // Reset all slot stats in data.slots
   for (const key of Object.keys(data.slots)) {
+    if (!data.slots[key] || typeof data.slots[key] !== 'object' || Array.isArray(data.slots[key])) {
+      const i = key.indexOf(':');
+      data.slots[key] = emptySlotStats(i === -1 ? key : key.slice(0, i), i === -1 ? '' : key.slice(i + 1));
+    }
     const s = data.slots[key];
     s.score = 0; s.tp = 0; s.tn = 0; s.fp = 0; s.fn = 0; s.impr = 0; s.invocations = 0;
   }
