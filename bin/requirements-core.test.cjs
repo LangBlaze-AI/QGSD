@@ -400,3 +400,36 @@ test('buildTraceability: formal_models enriches with registry metadata when avai
   assert.strictEqual(trace.formalModels[0].description, 'Y model');
   assert.strictEqual(trace.formalModels[0].version, 3);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. Adversarial hardening — prototype-pollution & corrupt-array shape
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('computeCoverage: category "__proto__" does not pollute Object.prototype', () => {
+  try {
+    const reqs = [makeReq('A', { category: '__proto__', status: 'Complete' })];
+    const cov = rc.computeCoverage(reqs, { models: {} }, []);
+    // Object.prototype must NOT be polluted by the __proto__ category key
+    assert.strictEqual(({}).total, undefined, 'Object.prototype.total was polluted');
+    // and the category must still be counted as ordinary data
+    assert.strictEqual(cov.byCategory['__proto__'].total, 1);
+  } finally {
+    delete Object.prototype.total; // clean up if the (buggy) code polluted it
+  }
+});
+
+test('groupByPrinciple: prototype-named category does not crash and falls back', () => {
+  for (const cat of ['constructor', '__proto__', 'toString']) {
+    const reqs = [makeReq('A', { category: cat })];
+    let grouped;
+    assert.doesNotThrow(() => { grouped = rc.groupByPrinciple(reqs); }, `crashed on category=${cat}`);
+    assert.strictEqual(grouped['Planning Discipline'].count, 1, `category=${cat} not bucketed into fallback`);
+  }
+});
+
+test('getUniqueCategories: null/non-object entries are skipped, not crash', () => {
+  const reqs = [makeReq('A', { category: 'Core' }), null, 'oops', makeReq('B', { category: 'Safety' })];
+  let cats;
+  assert.doesNotThrow(() => { cats = rc.getUniqueCategories(reqs); });
+  assert.deepStrictEqual(cats, ['Core', 'Safety']);
+});

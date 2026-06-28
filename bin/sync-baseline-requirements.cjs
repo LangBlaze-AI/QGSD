@@ -21,7 +21,9 @@ function _syncFromBaseline(baseline, projectRoot, opts = {}) {
   if (fs.existsSync(reqPath)) {
     try {
       rawEnvelope = JSON.parse(fs.readFileSync(reqPath, 'utf8'));
-      requirements = rawEnvelope.requirements || [];
+      requirements = Array.isArray(rawEnvelope && rawEnvelope.requirements)
+        ? rawEnvelope.requirements.filter(r => r && typeof r === 'object')
+        : [];
     } catch (_) {
       rawEnvelope = {};
       requirements = [];

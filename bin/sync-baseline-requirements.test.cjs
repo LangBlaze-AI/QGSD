@@ -419,6 +419,42 @@ describe('syncBaselineRequirements', () => {
     assert.equal(rewritten.status, 'Complete');
     assert.notEqual(after.aggregated_at, beforeTimestamp, 'Timestamp should change when provenance is repaired');
   });
+
+  it('23. Non-array requirements field fails open (no crash)', () => {
+    if (!realBaseline) return;
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-baseline-'));
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'formal'), { recursive: true });
+    // Valid JSON, but `requirements` is an object, not an array.
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'formal', 'requirements.json'),
+      JSON.stringify({ requirements: { bogus: true } }, null, 2)
+    );
+
+    let result;
+    assert.doesNotThrow(() => {
+      result = syncBaselineRequirements('cli', tmpDir);
+    }, 'non-array requirements must not crash the sync');
+    assert.equal(result.total_before, 0, 'malformed requirements should be treated as empty');
+    assert.equal(result.added.length, realBaseline.total);
+  });
+
+  it('24. Null entry inside requirements array fails open (no crash)', () => {
+    if (!realBaseline) return;
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-baseline-'));
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'formal'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'formal', 'requirements.json'),
+      JSON.stringify({ requirements: [null, { id: 'SEC-01', text: 'existing sec req' }] }, null, 2)
+    );
+
+    let result;
+    assert.doesNotThrow(() => {
+      result = syncBaselineRequirements('cli', tmpDir);
+    }, 'a null array element must not crash the sync');
+    // null is dropped; the one real existing requirement remains.
+    assert.equal(result.total_before, 1);
+    assert.ok(result.added.length > 0, 'baseline should still be added');
+  });
 });
 
 describe('CLI auto-detect default', () => {

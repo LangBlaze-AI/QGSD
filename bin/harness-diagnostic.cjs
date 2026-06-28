@@ -70,7 +70,7 @@ function generateReport(cwd, options = {}) {
     if (fs.existsSync(scoreboardPath)) {
       const scoreboard = JSON.parse(fs.readFileSync(scoreboardPath, 'utf8'));
       const slots = scoreboard.slots || {};
-      const slotAgg = {};
+      const slotAgg = Object.create(null);
 
       for (const [key, data] of Object.entries(slots)) {
         const slotName = key.split(':')[0];
@@ -227,21 +227,28 @@ function generateReport(cwd, options = {}) {
  * @returns {string}
  */
 function formatTerminalReport(report) {
+  report = (report && typeof report === 'object') ? report : {};
+  const slotAvailability = Array.isArray(report.slot_availability) ? report.slot_availability : [];
+  const passAtK = (report.pass_at_k && typeof report.pass_at_k === 'object') ? report.pass_at_k : { total: 0, pass_at_1: 0, pass_at_3: 0, avg_k: 0 };
+  const tokenSpend = (report.token_spend && typeof report.token_spend === 'object') ? report.token_spend : { total_records: 0 };
+  const stallEvents = Array.isArray(report.stall_events) ? report.stall_events : [];
+  const circuitBreaker = (report.circuit_breaker && typeof report.circuit_breaker === 'object') ? report.circuit_breaker : {};
+  const recommendations = Array.isArray(report.recommendations) ? report.recommendations : [];
   const lines = [];
 
   lines.push('nForma Harness Diagnostic Report');
   lines.push('=================================');
-  lines.push(`Generated: ${report.timestamp}`);
+  lines.push(`Generated: ${report.timestamp || 'unknown'}`);
   lines.push('');
 
   // Slot Availability
   lines.push('## Slot Availability');
-  if (report.slot_availability.length === 0) {
+  if (slotAvailability.length === 0) {
     lines.push('  No slot data available.');
   } else {
     lines.push('  slot           rounds   success   rate     status');
     lines.push('  -----------------------------------------------');
-    for (const s of report.slot_availability) {
+    for (const s of slotAvailability) {
       const rate = (s.success_rate * 100).toFixed(1) + '%';
       lines.push(
         '  ' +
@@ -257,28 +264,28 @@ function formatTerminalReport(report) {
 
   // Pass@k
   lines.push('## Pass@k Consensus Efficiency');
-  if (report.pass_at_k.total === 0) {
+  if (passAtK.total === 0) {
     lines.push('  No pass@k data available.');
   } else {
-    lines.push(`  pass@1:    ${(report.pass_at_k.pass_at_1 * 100).toFixed(1)}%`);
-    lines.push(`  pass@3:    ${(report.pass_at_k.pass_at_3 * 100).toFixed(1)}%`);
-    lines.push(`  avg rounds: ${report.pass_at_k.avg_k.toFixed(1)}`);
-    lines.push(`  total events: ${report.pass_at_k.total}`);
+    lines.push(`  pass@1:    ${(passAtK.pass_at_1 * 100).toFixed(1)}%`);
+    lines.push(`  pass@3:    ${(passAtK.pass_at_3 * 100).toFixed(1)}%`);
+    lines.push(`  avg rounds: ${passAtK.avg_k.toFixed(1)}`);
+    lines.push(`  total events: ${passAtK.total}`);
   }
   lines.push('');
 
   // Token Spend
   lines.push('## Token Spend');
   lines.push('  Note: Token values unreliable (all zeros)');
-  lines.push(`  total records: ${report.token_spend.total_records}`);
+  lines.push(`  total records: ${tokenSpend.total_records}`);
   lines.push('');
 
   // Stall Events
   lines.push('## Stall Events');
-  if (!report.stall_events || report.stall_events.length === 0) {
+  if (stallEvents.length === 0) {
     lines.push('  No stalled slots detected.');
   } else {
-    for (const s of report.stall_events) {
+    for (const s of stallEvents) {
       lines.push(`  ${s.slot}: ${s.consecutiveTimeouts} consecutive timeouts (last: ${s.lastSeen || 'unknown'})`);
     }
   }
@@ -286,9 +293,9 @@ function formatTerminalReport(report) {
 
   // Circuit Breaker
   lines.push('## Circuit Breaker');
-  if (report.circuit_breaker.active) {
+  if (circuitBreaker.active) {
     lines.push('  Status: ACTIVE (oscillation detected)');
-  } else if (report.circuit_breaker.disabled) {
+  } else if (circuitBreaker.disabled) {
     lines.push('  Status: disabled');
   } else {
     lines.push('  Status: inactive');
@@ -297,7 +304,7 @@ function formatTerminalReport(report) {
 
   // Recommendations
   lines.push('## Recommendations');
-  for (const r of report.recommendations) {
+  for (const r of recommendations) {
     lines.push(`  - ${r}`);
   }
 

@@ -1284,3 +1284,39 @@ test('full script output includes pass@k section', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+// ─── Test: computeRates adversarial inputs ───────────────────────────────────
+
+test('computeRates skips a null round entry instead of crashing', () => {
+  const { computeRates } = require('./verify-quorum-health.cjs');
+  const rounds = [null, { votes: { gemini: 'TP' } }];
+  // Must not throw; the one valid round is < MIN_ROUNDS so it falls back to prior.
+  const r = computeRates('gemini', rounds);
+  assert.ok(typeof r.tpRate === 'number', 'should return a numeric tpRate, not crash');
+  assert.equal(r.usedPrior, true, 'with < 30 valid rounds it uses the prior');
+  assert.equal(r.tpRate, 0.85, 'prior tp rate');
+});
+
+test('computeRates treats a non-array rounds value as empty (prior fallback)', () => {
+  const { computeRates } = require('./verify-quorum-health.cjs');
+  // Currently throws: ({}).filter is not a function
+  const r = computeRates('gemini', { malformed: true });
+  assert.ok(typeof r.tpRate === 'number', 'should not crash on non-array rounds');
+  assert.equal(r.usedPrior, true, 'non-array rounds -> 0 valid rounds -> prior');
+  assert.equal(r.n, 0, 'no rounds counted');
+});
+
+test('computePassAtKRates fails open (returns zeros) when path is a directory', () => {
+  const { computePassAtKRates } = require('./verify-quorum-health.cjs');
+  const tmpDir = makeTmpDir();
+  try {
+    // A directory exists() == true but readFileSync throws EISDIR.
+    const result = computePassAtKRates(tmpDir);
+    assert.equal(result.total, 0);
+    assert.equal(result.pass_at_1, 0);
+    assert.equal(result.pass_at_3, 0);
+    assert.equal(result.avg_k, 0);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

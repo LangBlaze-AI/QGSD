@@ -58,7 +58,15 @@ function load(rel) {
     process.stderr.write('[check-spec-sync] File not found: ' + rel + '\n');
     process.exit(1);
   }
-  return fs.readFileSync(abs, 'utf8');
+  try {
+    return fs.readFileSync(abs, 'utf8');
+  } catch (e) {
+    process.stderr.write(
+      '[check-spec-sync] Could not read file (not a regular readable file — e.g. a directory or unreadable): ' +
+      rel + ' (' + (e && e.code ? e.code.toLowerCase() : 'read error') + ')\n'
+    );
+    process.exit(1);
+  }
 }
 
 function loadAbs(abs) {
@@ -66,7 +74,15 @@ function loadAbs(abs) {
     process.stderr.write('[check-spec-sync] File not found: ' + abs + '\n');
     process.exit(1);
   }
-  return fs.readFileSync(abs, 'utf8');
+  try {
+    return fs.readFileSync(abs, 'utf8');
+  } catch (e) {
+    process.stderr.write(
+      '[check-spec-sync] Could not read file (not a regular readable file — e.g. a directory or unreadable): ' +
+      abs + ' (' + (e && e.code ? e.code.toLowerCase() : 'read error') + ')\n'
+    );
+    process.exit(1);
+  }
 }
 
 const tlaSrc      = loadAbs(TLA_ABS_PATH);
@@ -305,12 +321,19 @@ if (xstateGuardNames.length > 0) {
     fail('.planning/formal/tla/guards/nf-workflow.json not found — cannot verify guard name sync');
   } else {
     let guardsJson = null;
+    let guardsParsed = false;
     try {
       guardsJson = JSON.parse(fs.readFileSync(GUARDS_ABS_PATH, 'utf8'));
+      guardsParsed = true;
     } catch (e) {
       fail('Could not parse guards JSON at ' + GUARDS_ABS_PATH + ': ' + e.message);
     }
-    if (guardsJson) {
+    if (guardsParsed && (guardsJson === null || typeof guardsJson !== 'object' || Array.isArray(guardsJson))) {
+      fail('Guards JSON at ' + GUARDS_ABS_PATH + ' is not a JSON object (got ' +
+        (guardsJson === null ? 'null' : Array.isArray(guardsJson) ? 'array' : typeof guardsJson) +
+        ') — cannot verify guard name sync');
+    }
+    if (guardsJson && typeof guardsJson === 'object' && !Array.isArray(guardsJson)) {
       const mappedGuardNames = Object.keys(guardsJson.guards || {});
       ok('XState guard names:           ' + xstateGuardNames.join(', '));
       ok('Guards JSON mapped names:     ' + mappedGuardNames.join(', '));

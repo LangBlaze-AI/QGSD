@@ -110,6 +110,51 @@ test('exits 1 when guards/nf-workflow.json references a guard not in XState mach
   }
 });
 
+test('exits 1 when guards/nf-workflow.json parses to null (falsy guards must not bypass the drift check)', () => {
+  const guardsPath = path.join(REPO_ROOT, '.planning', 'formal', 'tla', 'guards', 'nf-workflow.json');
+  if (!fs.existsSync(guardsPath)) {
+    return; // Skip if guards JSON not present
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-spec-sync-null-guards-'));
+  const tmpGuards = path.join(tmpDir, 'nf-workflow.json');
+  fs.writeFileSync(tmpGuards, 'null', 'utf8');
+
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [CHECK_SPEC_SYNC, '--guards-path=' + tmpGuards],
+      { encoding: 'utf8', cwd: REPO_ROOT }
+    );
+    assert.strictEqual(result.status, 1,
+      'Expected exit 1: a guards file that parses to null must be reported as drift, not silently passed. stdout: ' +
+      result.stdout + '\nstderr: ' + result.stderr
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('exits 1 with a graceful error (no uncaught EISDIR) when --tla-path points to a directory', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-spec-sync-dir-tla-'));
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [CHECK_SPEC_SYNC, '--tla-path=' + tmpDir],
+      { encoding: 'utf8', cwd: REPO_ROOT }
+    );
+    assert.strictEqual(result.status, 1,
+      'Expected exit 1 when --tla-path is a directory. stdout: ' + result.stdout + '\nstderr: ' + result.stderr
+    );
+    assert.ok(
+      !/EISDIR|Error: EISDIR|\bat Object\.readFileSync\b/.test(result.stderr),
+      'Expected a handled error, not an uncaught EISDIR stack trace. stderr: ' + result.stderr
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('exits 1 when TLA+ TypeOK references a state not in XState machine (orphan detection)', () => {
   // This test verifies the in-sync state produces no orphan warnings.
   // The fixture-based orphan injection is covered by the state drift test above

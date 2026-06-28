@@ -6,8 +6,11 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
-const { compareAssumption, extractFormalValue, loadActualData } = require('./hypothesis-measure.cjs')._pure;
+const { compareAssumption, extractFormalValue, loadActualData, measureHypotheses } = require('./hypothesis-measure.cjs')._pure;
 
 // ── compareAssumption tests (@req H2M-01) ────────────────────────────────────
 
@@ -136,4 +139,49 @@ test('@req H2M-01: measurement results have required schema fields', () => {
     ['CONFIRMED', 'VIOLATED', 'UNMEASURABLE'].includes(result.verdict),
     'verdict must be CONFIRMED, VIOLATED, or UNMEASURABLE'
   );
+});
+
+// ── measureHypotheses fail-open / shape-guard tests (@req H2M-01) ─────────────
+
+// @requirement H2M-01
+test('@req H2M-01: measureHypotheses fails open when proposed-metrics.json metrics is a non-array object', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'h2m-shape-'));
+  const dir = path.join(root, '.planning', 'formal', 'evidence');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'proposed-metrics.json'), '{"metrics": {"a": 1}}', 'utf8');
+
+  let result;
+  assert.doesNotThrow(() => { result = measureHypotheses(root); });
+  assert.strictEqual(result.total_measured, 0);
+  assert.deepStrictEqual(result.measurements, []);
+});
+
+// @requirement H2M-01
+test('@req H2M-01: measureHypotheses fails open when proposed-metrics.json is literal null', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'h2m-null-'));
+  const dir = path.join(root, '.planning', 'formal', 'evidence');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'proposed-metrics.json'), 'null', 'utf8');
+
+  let result;
+  assert.doesNotThrow(() => { result = measureHypotheses(root); });
+  assert.strictEqual(result.total_measured, 0);
+});
+
+// @requirement H2M-01
+test('@req H2M-01: measureHypotheses skips null/non-object metric entries instead of throwing', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'h2m-entry-'));
+  const dir = path.join(root, '.planning', 'formal', 'evidence');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'proposed-metrics.json'),
+    JSON.stringify({ metrics: [null, { tier: 1, assumption_name: 'X' }] }),
+    'utf8'
+  );
+
+  let result;
+  assert.doesNotThrow(() => { result = measureHypotheses(root); });
+  // null entry skipped, the one valid tier-1 entry still measured
+  assert.strictEqual(result.total_measured, 1);
+  assert.strictEqual(result.measurements.length, 1);
 });

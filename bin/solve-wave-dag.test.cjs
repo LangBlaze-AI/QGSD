@@ -388,6 +388,38 @@ describe('solve-wave-dag module', () => {
       assert.equal(typeof mod.computeWavesFromGraph, 'function');
     });
   });
+
+  describe('hardening — adversarial edge cases', () => {
+    it('returns empty array for null/undefined residual vector (fail-open parity with computeWavesFromGraph)', () => {
+      assert.deepStrictEqual(mod.computeWaves(null), []);
+      assert.deepStrictEqual(mod.computeWaves(undefined), []);
+      assert.deepStrictEqual(mod.computeWaves(42), []);
+    });
+
+    it('skips null / non-object edge entries without crashing', () => {
+      const result = mod.computeWavesFromGraph({
+        nodes: ['A', 'B'],
+        edges: [null, 'bad', 42, { from: 'B', to: 'A' }]
+      });
+      assert.ok(Array.isArray(result));
+      const aWave = result.find(w => w.layers.includes('A'));
+      const bWave = result.find(w => w.layers.includes('B'));
+      if (aWave === bWave) {
+        assert.ok(aWave.sequential);
+        assert.ok(aWave.layers.indexOf('A') < aWave.layers.indexOf('B'));
+      } else {
+        assert.ok(aWave.wave < bWave.wave, 'A (dependency) must precede B');
+      }
+    });
+
+    it('getLayerDeps returns [] for inherited Object.prototype keys', () => {
+      for (const k of ['__proto__', 'constructor', 'hasOwnProperty', 'toString', 'valueOf']) {
+        const deps = mod.getLayerDeps(k);
+        assert.ok(Array.isArray(deps), `getLayerDeps(${k}) must be an array`);
+        assert.deepStrictEqual(deps, [], `getLayerDeps(${k}) must be []`);
+      }
+    });
+  });
 });
 
 // modified by benchmark

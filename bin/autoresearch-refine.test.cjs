@@ -332,4 +332,38 @@ describe('autoresearch-refine', () => {
     const tsvContent = mock._files[tsvPath()];
     assert.ok(tsvContent.includes('no-op'));
   });
+
+  it('sanitizes tab/newline in onTweak description so TSV-as-memory is not corrupted', async () => {
+    const mock = createMockDeps({
+      execFileSync: () => {
+        const err = new Error('violation');
+        err.status = 1;
+        err.stdout = 'Invariant Safety is violated. 5 distinct states found.';
+        err.stderr = '';
+        throw err;
+      }
+    });
+    mock._files[modelPath()] = 'MODULE TestModel';
+    _setDeps(mock);
+
+    await refine({
+      modelPath: modelPath(),
+      bugContext: 'test bug',
+      formalism: 'tla',
+      maxIterations: 1,
+      onTweak: async () => 'added invariant\nwith newline\tand tab'
+    });
+
+    const tsvContent = mock._files[tsvPath()];
+    const lines = tsvContent.trim().split('\n');
+    // Header + exactly one data row — the embedded newline must NOT create a 3rd line
+    assert.equal(lines.length, 2, 'description newline must not inject a spurious TSV row');
+    // The single data row must have exactly 6 tab-separated columns
+    assert.equal(lines[1].split('\t').length, 6, 'description tab must not inject an extra column');
+  });
+
+  it('rejects with a clear error when opts is null/undefined', async () => {
+    await assert.rejects(() => refine(null), /opts (object )?is required/);
+    await assert.rejects(() => refine(), /opts (object )?is required/);
+  });
 });

@@ -36,6 +36,31 @@ describe('parseSemver', () => {
   });
 });
 
+describe('parseSemver / checkNpmOutdated non-string versions', () => {
+  it('parseSemver coerces a numeric version instead of throwing', () => {
+    assert.deepEqual(parseSemver(22), [22, 0, 0]);
+  });
+
+  it('checkNpmOutdated still reports packages when a version field is numeric', () => {
+    const mockExec = (cmd, args) => {
+      if (cmd === 'npm' && args[0] === 'outdated') {
+        const err = new Error('exit code 1');
+        err.stdout = JSON.stringify({
+          lodash: { current: 4, latest: 5 },
+          express: { current: '4.18.0', latest: '5.0.0' }
+        });
+        throw err;
+      }
+      return '';
+    };
+    const issues = checkNpmOutdated('/tmp', mockExec);
+    // both packages must survive; current code returns [] because the numeric
+    // lodash entry throws and the outer catch discards everything
+    assert.equal(issues.length, 2);
+    assert.ok(issues.some(i => /express/.test(i.title)));
+  });
+});
+
 describe('classifyVersionBump', () => {
   it('returns warning for major bump', () => {
     assert.equal(classifyVersionBump('1.0.0', '2.0.0'), 'warning');
@@ -260,5 +285,30 @@ describe('handleDeps', () => {
     );
 
     assert.equal(pipCalled, true);
+  });
+});
+
+describe('handleDeps adversarial args', () => {
+  it('does not throw when options is omitted', () => {
+    let result;
+    assert.doesNotThrow(() => {
+      // ecosystems:[] short-circuits before any exec, so no real npm runs
+      result = handleDeps({ type: 'deps', label: 'D', ecosystems: [] });
+    });
+    assert.equal(result.status, 'ok');
+    assert.equal(result.source_type, 'deps');
+    assert.deepEqual(result.issues, []);
+  });
+
+  it('does not throw when sourceConfig is null', () => {
+    const empty = makeTmpDir();
+    let result;
+    assert.doesNotThrow(() => {
+      result = handleDeps(null, { basePath: empty, execFn: () => '' });
+    });
+    assert.equal(result.status, 'ok');
+    assert.equal(result.source_label, 'Dependencies');
+    assert.deepEqual(result.issues, []);
+    fs.rmSync(empty, { recursive: true, force: true });
   });
 });

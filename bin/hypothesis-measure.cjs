@@ -299,8 +299,11 @@ function measureHypotheses(root) {
     };
   }
 
-  // Filter to tier-1 only
-  const tier1 = (metricsData.metrics || []).filter(m => m.tier === 1);
+  // Filter to tier-1 only (guard against null root, non-array metrics, and null/non-object entries)
+  const metricsList = (metricsData && typeof metricsData === 'object' && Array.isArray(metricsData.metrics))
+    ? metricsData.metrics
+    : [];
+  const tier1 = metricsList.filter(m => m && typeof m === 'object' && m.tier === 1);
 
   // Load actual data from all 4 sources
   const actualData = loadActualData(root);

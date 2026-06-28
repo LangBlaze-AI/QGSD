@@ -149,8 +149,9 @@ function rankActionItems(verdicts, latestResiduals, maxItems) {
  * @returns {string} Formatted convergence section
  */
 function formatConvergenceSection(options = {}) {
-  const root = options.root || process.cwd();
-  const maxItems = options.maxItems || DEFAULT_MAX_ITEMS;
+  const opts = (options && typeof options === 'object') ? options : {};
+  const root = opts.root || process.cwd();
+  const maxItems = opts.maxItems || DEFAULT_MAX_ITEMS;
   const formalDir = path.join(root, '.planning', 'formal');
   const trendPath = path.join(formalDir, 'solve-trend.jsonl');
   const verdictsPath = path.join(formalDir, 'oscillation-verdicts.json');
@@ -162,6 +163,11 @@ function formatConvergenceSection(options = {}) {
   } catch (_) {
     entries = [];
   }
+  // Fail-open: readTrendWindow JSON.parses each line verbatim, so a corrupt
+  // solve-trend.jsonl can yield non-object entries (a bare `null`, number,
+  // string, or array). Drop them before any per_layer/buckets dereference.
+  if (!Array.isArray(entries)) entries = [];
+  entries = entries.filter(e => e && typeof e === 'object' && !Array.isArray(e));
 
   if (entries.length === 0) {
     return '─ Convergence Report ─────────────────────────────────\n' +

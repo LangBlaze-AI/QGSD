@@ -296,3 +296,49 @@ test('ENB-TC11: validate command returns JSON with valid/errors fields', async (
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+// ENB-TC12: update recovers from wrong-shape (null) existing envelope instead of crashing
+test('ENB-TC12: update recovers from wrong-shape (null) existing envelope', async (t) => {
+  const { tmpDir, phaseDir } = setupTempPhase('v0.18-03-shape');
+  try {
+    const envelopePath = path.join(phaseDir, 'task-envelope.json');
+    fs.writeFileSync(envelopePath, 'null', 'utf8');
+    const result = spawnSync('node', [
+      path.join(process.cwd(), 'bin', 'task-envelope.cjs'),
+      'update',
+      '--section', 'plan',
+      '--phase', 'v0.18-03-shape',
+      '--plan-path', 'PLAN.md'
+    ], { cwd: tmpDir, encoding: 'utf8' });
+    assert.strictEqual(result.status, 0, `Should recover, not crash. stderr: ${result.stderr}`);
+    const envelope = JSON.parse(fs.readFileSync(envelopePath, 'utf8'));
+    assert.strictEqual(envelope.schema_version, '1');
+    assert.ok(envelope.plan, 'plan section should be written');
+    assert.strictEqual(envelope.plan.plan_path, 'PLAN.md');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// ENB-TC13: update recovers from corrupt-JSON existing envelope instead of aborting
+test('ENB-TC13: update recovers from corrupt-JSON existing envelope', async (t) => {
+  const { tmpDir, phaseDir } = setupTempPhase('v0.18-03-corrupt');
+  try {
+    const envelopePath = path.join(phaseDir, 'task-envelope.json');
+    fs.writeFileSync(envelopePath, '{not valid json', 'utf8');
+    const result = spawnSync('node', [
+      path.join(process.cwd(), 'bin', 'task-envelope.cjs'),
+      'update',
+      '--section', 'plan',
+      '--phase', 'v0.18-03-corrupt',
+      '--plan-path', 'PLAN.md'
+    ], { cwd: tmpDir, encoding: 'utf8' });
+    assert.strictEqual(result.status, 0, `Should recover from corrupt file. stderr: ${result.stderr}`);
+    const envelope = JSON.parse(fs.readFileSync(envelopePath, 'utf8'));
+    assert.strictEqual(envelope.schema_version, '1');
+    assert.ok(envelope.plan, 'plan section should be written');
+    assert.strictEqual(envelope.plan.plan_path, 'PLAN.md');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

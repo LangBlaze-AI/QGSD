@@ -192,4 +192,22 @@ describe('formatConvergenceSection', () => {
     const result = formatConvergenceSection({ root: tmpDir });
     assert.ok(result.includes('All layers stable'));
   });
+
+  it('does not throw when trend file contains a null JSON entry (corrupt line)', () => {
+    const trendPath = path.join(tmpDir, '.planning', 'formal', 'solve-trend.jsonl');
+    // Middle entry is the bare JSON literal `null`; last entry is valid.
+    // Reproduces the deref crash at the per_layer map (and the latestEntry deref).
+    fs.writeFileSync(
+      trendPath,
+      '{"per_layer":{"r_to_f":5}}\nnull\n{"per_layer":{"r_to_f":3}}\n'
+    );
+    let result;
+    assert.doesNotThrow(() => { result = formatConvergenceSection({ root: tmpDir }); });
+    assert.equal(typeof result, 'string');
+    assert.ok(result.includes('Convergence Trends'));
+  });
+
+  it('does not throw when called with null options', () => {
+    assert.doesNotThrow(() => formatConvergenceSection(null));
+  });
 });

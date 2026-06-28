@@ -74,7 +74,8 @@ function ensureTsvHeader(tsvPath) {
  */
 function appendTsvRow(tsvPath, row) {
   try {
-    const line = `${row.iteration}\t${row.commit || '-'}\t${row.checker_result}\t${row.states}\t${row.status}\t${row.description}\n`;
+    const clean = (v) => String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' ');
+    const line = `${clean(row.iteration)}\t${clean(row.commit || '-')}\t${clean(row.checker_result)}\t${clean(row.states)}\t${clean(row.status)}\t${clean(row.description)}\n`;
     deps.appendFileSync(tsvPath, line, 'utf-8');
   } catch (_err) {
     // Fail-open on TSV write errors
@@ -166,6 +167,9 @@ function runChecker(modelPath, formalism, timeout) {
  * @returns {Promise<{ converged: boolean, iterations: number, finalModel: string, resultsLog: string, stuck_reason: string|null }>}
  */
 async function refine(opts) {
+  if (!opts || typeof opts !== 'object') {
+    throw new Error('opts object is required');
+  }
   const {
     modelPath,
     bugContext,

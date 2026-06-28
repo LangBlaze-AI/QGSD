@@ -347,3 +347,42 @@ Binary files a/logo.png and b/logo.png differ`;
     assert.equal(ranges.size, 0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Hardening: malformed-but-parseable formal artifacts (fail-open contract)
+// ---------------------------------------------------------------------------
+
+describe('L1 malformed instrumentation hardening', () => {
+  it('does not crash on a null emission point entry', () => {
+    const map = { emission_points: [null, { file: 'hooks/nf-prompt.js', line_number: 1, action: 'a', xstate_event: null }] };
+    let l1;
+    assert.doesNotThrow(() => { l1 = analyzeL1(['hooks/nf-prompt.js'], new Map(), map); });
+    assert.equal(l1.affected_emission_points, 1);
+  });
+});
+
+describe('L2 malformed FSM hardening', () => {
+  it('does not crash when a state maps to a null transition object', () => {
+    const l1 = { details: [{ xstate_event: 'QUORUM_START', action: 'quorum_start' }] };
+    const fsm = {
+      observed_transitions: {
+        IDLE: null,
+        COLLECTING_VOTES: { QUORUM_START: { to_state: 'COLLECTING_VOTES', count: 1 } },
+      },
+    };
+    let l2;
+    assert.doesNotThrow(() => { l2 = analyzeL2(l1, fsm); });
+    assert.ok(l2.details.some(t => t.state === 'COLLECTING_VOTES' && t.event === 'QUORUM_START'));
+    assert.ok(!l2.details.some(t => t.state === 'IDLE'));
+  });
+});
+
+describe('L3 rpn hardening', () => {
+  it('does not return NaN max_rpn when an affected hazard is missing rpn', () => {
+    const l2 = { details: [{ state: 'IDLE', event: 'QUORUM_START', to_state: 'COLLECTING_VOTES', count: 1 }] };
+    const hazardModel = { hazards: [{ id: 'H1', state: 'IDLE', event: 'QUORUM_START', severity: 4 }] };
+    const l3 = analyzeL3(l2, hazardModel, { failure_modes: [] });
+    assert.equal(l3.affected_hazards, 1);
+    assert.ok(Number.isFinite(l3.max_rpn), `max_rpn should be finite, got ${l3.max_rpn}`);
+  });
+});
