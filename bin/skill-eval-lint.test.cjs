@@ -66,6 +66,24 @@ describe('skill-eval-lint detector', () => {
     // the inner \" must not be mistaken for the closing quote
     assert.equal(findEvalTrailingViolations(`${E}console.log(\\"hi\\")" 2>/dev/null`, 'f.md').length, 0);
   });
+
+  it('does NOT flag a trailing CR from CRLF line endings', () => {
+    assert.equal(findEvalTrailingViolations(`${E}code"\r\nNEXT`, 'f.md').length, 0);
+    // and still flags a real arg even with CRLF
+    const v = findEvalTrailingViolations(`${E}code" --force\r\nNEXT`, 'f.md');
+    assert.equal(v.length, 1);
+    assert.equal(v[0].rule, 'eval-arg-after');
+  });
+
+  it('fails open (returns []) on non-string text instead of throwing', () => {
+    assert.deepEqual(findEvalTrailingViolations(null, 'f.md'), []);
+    assert.deepEqual(findEvalTrailingViolations(undefined, 'f.md'), []);
+    assert.deepEqual(findEvalTrailingViolations(123, 'f.md'), []);
+  });
+
+  it('accepts a trailing shell comment after the eval', () => {
+    assert.equal(findEvalTrailingViolations(`${E}code" # explanatory note`, 'f.md').length, 0);
+  });
 });
 
 describe('the live skill/workflow tree satisfies the standard', () => {

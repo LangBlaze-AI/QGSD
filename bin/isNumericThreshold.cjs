@@ -26,9 +26,14 @@ function isNumericThreshold(formalRef, options = {}) {
   // Spec without param key = invariant reference
   if (parsed.type === 'spec' && !parsed.param) return false;
 
-  // Try to extract the value and check if it is numeric
-  const value = extractFormalExpected(formalRef, options);
-  return typeof value === 'number';
+  // Try to extract the value and check if it is numeric (fail-open on any error)
+  let value;
+  try {
+    value = extractFormalExpected(formalRef, options);
+  } catch {
+    return false;
+  }
+  return Number.isFinite(value);
 }
 
 module.exports = { isNumericThreshold };

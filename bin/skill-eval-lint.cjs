@@ -24,6 +24,7 @@ const NEEDLE = 'node -e ' + '"';
 // trailing token. `rule` is 'eval-env-after' or 'eval-arg-after'.
 function findEvalTrailingViolations(text, file) {
   const out = [];
+  if (typeof text !== 'string') return out;
   let i = 0;
   while ((i = text.indexOf(NEEDLE, i)) !== -1) {
     // find the matching closing double-quote (honoring \" escapes)
@@ -34,11 +35,11 @@ function findEvalTrailingViolations(text, file) {
     }
     if (j >= text.length) break; // unterminated — skip
     const lineEnd = text.indexOf('\n', j);
-    const rest = text.slice(j + 1, lineEnd === -1 ? text.length : lineEnd);
+    const rest = text.slice(j + 1, lineEnd === -1 ? text.length : lineEnd).replace(/\r$/, '');
     const leadWs = /^[ \t]/.test(rest); // is the next token whitespace-separated?
     const t = rest.replace(/^[ \t]+/, '');
     let rule = null;
-    if (t === '' || /^(\)|2>|1>|>|<|\||&|;|\}|`|\\)/.test(t)) {
+    if (t === '' || /^(\)|2>|1>|>|<|\||&|;|\}|`|\\|#)/.test(t)) {
       rule = null; // legal: nothing, or a redirect/operator/closer follows
     } else if (!leadWs && /^["']/.test(t)) {
       // A quote *immediately* after the close (no space) is shell string

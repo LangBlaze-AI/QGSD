@@ -16,6 +16,14 @@ function readDebtLedger(ledgerPath) {
   try {
     const content = fs.readFileSync(ledgerPath, 'utf8');
     const ledger = JSON.parse(content);
+    if (
+      ledger === null ||
+      typeof ledger !== 'object' ||
+      Array.isArray(ledger) ||
+      !Array.isArray(ledger.debt_entries)
+    ) {
+      throw new Error('Ledger has invalid shape: expected object with debt_entries array');
+    }
     return ledger;
   } catch (err) {
     // Fail-open: log error but return empty ledger
@@ -42,10 +50,15 @@ function writeDebtLedger(ledgerPath, ledger) {
   const dir = path.dirname(ledgerPath);
   fs.mkdirSync(dir, { recursive: true });
 
+  // Normalize malformed input (null/array/non-object) to a valid ledger shape
+  const safeLedger = (ledger && typeof ledger === 'object' && !Array.isArray(ledger)) ? ledger : {};
+
   // Update last_updated timestamp
   const now = new Date().toISOString();
   const ledgerToWrite = {
-    ...ledger,
+    schema_version: '1',
+    debt_entries: [],
+    ...safeLedger,
     last_updated: now
   };
 

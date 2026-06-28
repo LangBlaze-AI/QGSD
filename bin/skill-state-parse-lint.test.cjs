@@ -62,6 +62,20 @@ describe('skill-state-parse-lint detector', () => {
     const code = "try { a(); } catch (e) {}\nconst x = JSON.parse(fs.readFileSync(p));";
     assert.equal(findUnguardedParses(code, 'f.md').length, 1);
   });
+
+  it('does NOT flag a guarded parse when the try body has a brace inside a string literal', () => {
+    const code = 'try { const close = \'}\'; const x = JSON.parse(fs.readFileSync(p, \'utf8\')); } catch (e) {}';
+    assert.equal(findUnguardedParses(code, 'f.md').length, 0, 'a } inside a string must not end the try range early');
+  });
+
+  it('does NOT flag a guarded parse when the try body has a stray brace inside a // comment', () => {
+    const code = 'try {\n  // skip the closing } below\n  const x = JSON.parse(fs.readFileSync(p));\n} catch (e) {}';
+    assert.equal(findUnguardedParses(code, 'f.md').length, 0, 'a } inside a comment must not end the try range early');
+  });
+
+  it('still flags a genuinely unguarded parse (control)', () => {
+    assert.equal(findUnguardedParses('const x = JSON.parse(fs.readFileSync(p));', 'f.md').length, 1);
+  });
 });
 
 describe('the live skill/workflow tree satisfies Rule 7', () => {

@@ -119,3 +119,49 @@ test('exits 0 with empty ndjson file', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+// ─── Test 8: skips corrupt NDJSON line instead of crashing ────────────────
+test('skips corrupt NDJSON line instead of crashing', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cre-test-'));
+  try {
+    const ndjsonFile = path.join(tmpDir, 'check-results.ndjson');
+    fs.writeFileSync(
+      ndjsonFile,
+      JSON.stringify({ tool: 't', formalism: 'tla', result: 'pass', timestamp: new Date().toISOString(), metadata: {} }) + '\n' +
+      '{ this is not valid json\n',
+      'utf8',
+    );
+    const result = run(ndjsonFile);
+    assert.strictEqual(result.status, 0, 'corrupt line should be skipped, not crash');
+    assert.ok(!/SyntaxError/.test(result.stderr), 'should not emit a SyntaxError stack');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// ─── Test 9: does not crash on a JSON null line ───────────────────────────
+test('does not crash on a JSON null line', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cre-test-'));
+  try {
+    const ndjsonFile = writeTmpNdjson(tmpDir, ['null']);
+    const result = run(ndjsonFile);
+    assert.strictEqual(result.status, 0, 'null line should be ignored, not crash');
+    assert.ok(!/TypeError/.test(result.stderr), 'should not emit a TypeError stack');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// ─── Test 10: exits 1 when a result is error ──────────────────────────────
+test('exits 1 when a result is error', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cre-test-'));
+  try {
+    const ndjsonFile = writeTmpNdjson(tmpDir, [
+      JSON.stringify({ tool: 't', formalism: 'tla', result: 'error', timestamp: new Date().toISOString(), metadata: {} }),
+    ]);
+    const result = run(ndjsonFile);
+    assert.strictEqual(result.status, 1, 'an errored check must not pass CI');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

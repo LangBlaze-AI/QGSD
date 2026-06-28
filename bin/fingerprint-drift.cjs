@@ -10,7 +10,7 @@ const crypto = require('crypto');
  */
 function fingerprintDrift(drift) {
   // Validate that formal_parameter_key exists and is non-empty
-  if (!drift.formal_parameter_key || typeof drift.formal_parameter_key !== 'string' || drift.formal_parameter_key.trim() === '') {
+  if (!drift || typeof drift !== 'object' || !drift.formal_parameter_key || typeof drift.formal_parameter_key !== 'string' || drift.formal_parameter_key.trim() === '') {
     throw new Error('formal_parameter_key required (non-empty string)');
   }
 

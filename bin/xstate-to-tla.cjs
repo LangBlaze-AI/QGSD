@@ -21,4 +21,14 @@ const result = spawnSync(process.execPath, [fsmToTla, ...args], {
   cwd: process.cwd(),
 });
 
-process.exit(result.status || 0);
+// result.status is null when the child could not be spawned (result.error) or was
+// terminated by a signal (OOM/segfault). Treat those as failures, not success.
+if (result.error) {
+  console.error(`[xstate-to-tla] Failed to run fsm-to-tla: ${result.error.message}`);
+  process.exit(1);
+}
+if (result.status === null) {
+  console.error(`[xstate-to-tla] fsm-to-tla terminated by signal ${result.signal || 'unknown'}`);
+  process.exit(1);
+}
+process.exit(result.status);

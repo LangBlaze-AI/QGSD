@@ -9,8 +9,13 @@ if (!fs.existsSync(NDJSON_PATH)) {
 }
 
 const lines  = fs.readFileSync(NDJSON_PATH, 'utf8').split('\n').filter(l => l.trim().length > 0);
-const parsed = lines.map(l => JSON.parse(l));
-const fails  = parsed.filter(r => r.result === 'fail');
+const parsed = [];
+for (const l of lines) {
+  let rec;
+  try { rec = JSON.parse(l); } catch { continue; }       // skip corrupt lines (fail-open)
+  if (rec && typeof rec === 'object') parsed.push(rec);   // skip non-object records
+}
+const fails  = parsed.filter(r => r.result === 'fail' || r.result === 'error');
 
 if (fails.length > 0) {
   process.stderr.write('[check-results-exit] ' + fails.length + ' fail(s) found:\n');

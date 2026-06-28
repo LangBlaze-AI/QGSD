@@ -12,9 +12,9 @@
 function resolveGateScore(gateData, gateName) {
   if (!gateData) return 0;
   switch (gateName) {
-    case 'a': return gateData.wiring_evidence_score || gateData.grounding_score || 0;
-    case 'b': return gateData.wiring_purpose_score || gateData.gate_b_score || 0;
-    case 'c': return gateData.wiring_coverage_score || gateData.gate_c_score || 0;
+    case 'a': return gateData.wiring_evidence_score ?? gateData.grounding_score ?? 0;
+    case 'b': return gateData.wiring_purpose_score ?? gateData.gate_b_score ?? 0;
+    case 'c': return gateData.wiring_coverage_score ?? gateData.gate_c_score ?? 0;
     default: return 0;
   }
 }

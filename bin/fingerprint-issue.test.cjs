@@ -196,3 +196,63 @@ test('hashMessage helper', async (t) => {
     assert.strictEqual(hash1, hash2, 'Case should not affect message hash');
   });
 });
+
+test('Issue Fingerprinting - Null Safety', async (t) => {
+  await t.test('null issue does not throw and yields valid fingerprint', () => {
+    let fp;
+    assert.doesNotThrow(() => { fp = fingerprintIssue(null); });
+    assert.match(fp, /^[a-f0-9]{16}$/, 'null issue should still produce valid fingerprint');
+  });
+
+  await t.test('undefined issue does not throw', () => {
+    assert.doesNotThrow(() => fingerprintIssue(undefined));
+  });
+
+  await t.test('non-object issue (string/number) does not throw', () => {
+    assert.doesNotThrow(() => fingerprintIssue('boom'));
+    assert.doesNotThrow(() => fingerprintIssue(42));
+  });
+
+  await t.test('null issue equals an all-defaults empty object', () => {
+    const fpNull = fingerprintIssue(null);
+    const fpEmpty = fingerprintIssue({});
+    assert.strictEqual(fpNull, fpEmpty, 'null should be treated as empty issue');
+  });
+});
+
+test('hashMessage helper - non-string input', async (t) => {
+  await t.test('numeric message does not throw and yields hex', () => {
+    let h;
+    assert.doesNotThrow(() => { h = hashMessage(42); });
+    assert.match(h, /^[a-f0-9]{16}$/);
+  });
+
+  await t.test('object/array message does not throw', () => {
+    assert.doesNotThrow(() => hashMessage({ text: 'x' }));
+    assert.doesNotThrow(() => hashMessage(['a', 'b']));
+  });
+
+  await t.test('fingerprintIssue tolerates numeric message', () => {
+    let fp;
+    assert.doesNotThrow(() => {
+      fp = fingerprintIssue({ exception_type: 'TypeError', function_name: 'f', message: 42 });
+    });
+    assert.match(fp, /^[a-f0-9]{16}$/);
+  });
+});
+
+test('Issue Fingerprinting - Non-string fields', async (t) => {
+  await t.test('numeric exception_type does not throw', () => {
+    let fp;
+    assert.doesNotThrow(() => {
+      fp = fingerprintIssue({ exception_type: 500, function_name: 'f', message: 'x' });
+    });
+    assert.match(fp, /^[a-f0-9]{16}$/);
+  });
+
+  await t.test('object function_name does not throw', () => {
+    assert.doesNotThrow(() => {
+      fingerprintIssue({ exception_type: 'TypeError', function_name: { name: 'parse' }, message: 'x' });
+    });
+  });
+});

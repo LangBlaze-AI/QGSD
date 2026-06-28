@@ -212,6 +212,50 @@ describe('Debt Ledger I/O', () => {
       }
     });
   });
+
+  describe('readDebtLedger shape guard', () => {
+    it('file that parses to null/array/scalar fails open to a valid empty ledger', () => {
+      setup();
+      try {
+        const nullPath = path.join(tempDir, 'null.json');
+        fs.writeFileSync(nullPath, 'null');
+        const r1 = readDebtLedger(nullPath);
+        assert.strictEqual(r1.schema_version, '1');
+        assert(Array.isArray(r1.debt_entries));
+        assert.strictEqual(r1.debt_entries.length, 0);
+
+        const arrPath = path.join(tempDir, 'arr.json');
+        fs.writeFileSync(arrPath, '[]');
+        const r2 = readDebtLedger(arrPath);
+        assert(Array.isArray(r2.debt_entries));
+        assert.strictEqual(r2.debt_entries.length, 0);
+
+        const numPath = path.join(tempDir, 'num.json');
+        fs.writeFileSync(numPath, '42');
+        const r3 = readDebtLedger(numPath);
+        assert(Array.isArray(r3.debt_entries));
+        assert.strictEqual(r3.debt_entries.length, 0);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('writeDebtLedger input guard', () => {
+    it('null ledger is normalized, not persisted as a malformed object', () => {
+      setup();
+      try {
+        const ledgerPath = path.join(tempDir, 'ledger.json');
+        writeDebtLedger(ledgerPath, null);
+        const raw = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
+        assert.strictEqual(raw.schema_version, '1');
+        assert(Array.isArray(raw.debt_entries));
+        assert.strictEqual(raw.debt_entries.length, 0);
+      } finally {
+        teardown();
+      }
+    });
+  });
 });
 
 describe('Debt Retention Policy', () => {

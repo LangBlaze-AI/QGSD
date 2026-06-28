@@ -8,7 +8,7 @@ const crypto = require('crypto');
  * @returns {string} - 16-char hex hash
  */
 function hashMessage(msg) {
-  const normalized = (msg || '')
+  const normalized = String(msg == null ? '' : msg)
     .replace(/\d{4}-\d{2}-\d{2}T[\d:.Z]+/g, 'TIMESTAMP') // ISO8601 timestamps
     .replace(/:\d+/g, ':LINE')                             // Line numbers
     .toLowerCase()
@@ -25,16 +25,18 @@ function hashMessage(msg) {
  * @returns {string} - 16-char hex fingerprint
  */
 function fingerprintIssue(issue) {
+  const safeIssue = (issue && typeof issue === 'object') ? issue : {};
+
   // Normalize exception type
-  const exceptionType = (issue.exception_type || 'unknown').toLowerCase();
+  const exceptionType = String(safeIssue.exception_type || 'unknown').toLowerCase();
 
   // Normalize function name (replace non-alphanumeric with underscore)
-  const functionName = (issue.function_name || 'unknown')
+  const functionName = String(safeIssue.function_name || 'unknown')
     .toLowerCase()
     .replace(/[^a-z0-9_]/g, '_');
 
   // Hash the message
-  const msgHash = hashMessage(issue.message);
+  const msgHash = hashMessage(safeIssue.message);
 
   // Combine components with colon separator
   const combined = `${exceptionType}:${functionName}:${msgHash}`;

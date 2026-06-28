@@ -128,4 +128,36 @@ describe('sweepPtoF', () => {
     const result = sweepPtoF({ root: tmpDir });
     assert.strictEqual(result.residual, 0);
   });
+
+  it('does not crash on null entry in debt_entries (fail-open)', () => {
+    seedLedger([
+      null,
+      { id: 'a', status: 'acknowledged', formal_ref: null, meta: { measured_value: 10 } },
+    ]);
+    const result = sweepPtoF({ root: tmpDir });
+    assert.strictEqual(result.residual, 0);
+    assert.strictEqual(result.detail.skipped_unlinked, 1);
+    assert.deepStrictEqual(result.detail.skipped_unlinked_ids, ['a']);
+  });
+
+  it('does not crash when debt_entries is not an array (fail-open)', () => {
+    const formalDir = path.join(tmpDir, '.planning', 'formal');
+    fs.mkdirSync(formalDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(formalDir, 'debt.json'),
+      JSON.stringify({ schema_version: '1', debt_entries: { bogus: true } }),
+    );
+    const result = sweepPtoF({ root: tmpDir });
+    assert.strictEqual(result.residual, 0);
+    assert.strictEqual(result.detail.skipped_unlinked, 0);
+  });
+
+  it('does not crash when debt.json contains literal null (fail-open)', () => {
+    const formalDir = path.join(tmpDir, '.planning', 'formal');
+    fs.mkdirSync(formalDir, { recursive: true });
+    fs.writeFileSync(path.join(formalDir, 'debt.json'), 'null');
+    const result = sweepPtoF({ root: tmpDir });
+    assert.strictEqual(result.residual, 0);
+    assert.deepStrictEqual(result.detail.divergent_entries, []);
+  });
 });

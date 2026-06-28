@@ -80,6 +80,17 @@ describe('resolve-formal-tools adversarial', () => {
       'returns global path or null — never uses the bogus projectRoot');
   });
 
+  it('truthy non-string projectRoot does not crash (falls back to default)', () => {
+    for (const bad of [123, {}, [], true, ['/some/dir']]) {
+      const tla = resolveTlaJar(bad);
+      const alloy = resolveAlloyJar(bad);
+      assert.ok(tla === null || typeof tla === 'string',
+        `resolveTlaJar(${JSON.stringify(bad)}) returns null or string`);
+      assert.ok(alloy === null || typeof alloy === 'string',
+        `resolveAlloyJar(${JSON.stringify(bad)}) returns null or string`);
+    }
+  });
+
   it('does not follow projectRoot that is a file (not directory)', async () => {
     const tmpdir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nf-formal-test-'));
     const filePath = path.join(tmpdir, 'isafile');

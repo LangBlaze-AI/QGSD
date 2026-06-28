@@ -22,7 +22,7 @@ const NF_FORMAL_HOME = path.join(os.homedir(), '.local', 'share', 'nf-formal');
  * @returns {string|null} Absolute path to tla2tools.jar, or null if not found.
  */
 function resolveTlaJar(projectRoot) {
-  const root = projectRoot || path.join(__dirname, '..');
+  const root = (typeof projectRoot === 'string' && projectRoot) ? projectRoot : path.join(__dirname, '..');
   const candidates = [
     path.join(NF_FORMAL_HOME, 'tla', 'tla2tools.jar'),
     path.join(root, '.planning', 'formal', 'tla', 'tla2tools.jar'),
@@ -37,7 +37,7 @@ function resolveTlaJar(projectRoot) {
  * @returns {string|null} Absolute path to Alloy JAR, or null if not found.
  */
 function resolveAlloyJar(projectRoot) {
-  const root = projectRoot || path.join(__dirname, '..');
+  const root = (typeof projectRoot === 'string' && projectRoot) ? projectRoot : path.join(__dirname, '..');
   const candidates = [
     path.join(NF_FORMAL_HOME, 'alloy', 'org.alloytools.alloy.dist.jar'),
     path.join(root, '.planning', 'formal', 'alloy', 'org.alloytools.alloy.dist.jar'),
