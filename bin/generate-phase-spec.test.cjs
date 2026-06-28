@@ -158,3 +158,35 @@ test('.planning/formal/tla/scratch/ directory exists after running CLI on phase 
     '.planning/formal/tla/scratch/ directory must exist after CLI run'
   );
 });
+
+// ── Test 9: parsePlanFrontmatter — non-string input fails open ────────────────
+
+test('parsePlanFrontmatter — non-string input fails open to empty truths', () => {
+  for (const bad of [undefined, null, 42, {}, Buffer.from('---')]) {
+    const fm = parsePlanFrontmatter(bad);
+    assert.ok(Array.isArray(fm.truths), 'truths must be an array for input ' + String(bad));
+    assert.strictEqual(fm.truths.length, 0, 'truths must be empty for non-string input ' + String(bad));
+  }
+});
+
+// ── Test 10: generatePhaseSpec — non-string truth elements / non-array truths ──
+
+test('generatePhaseSpec — non-string truth elements and non-array truths do not crash', () => {
+  const r1 = generatePhaseSpec({ phase: 'x', truths: ['ok', null, 42, undefined] });
+  assert.ok(r1.spec.includes('---- MODULE'), 'must still produce a module header');
+  assert.ok(r1.spec.includes('INVARIANT Req01'), 'the valid string truth must still be emitted');
+  assert.strictEqual(r1.truthCount, 1, 'only the string truth should be counted');
+
+  const r2 = generatePhaseSpec({ phase: 'x', truths: 'oneTruth' });
+  assert.ok(r2.spec.includes('---- MODULE'), 'non-array truths must not crash');
+  assert.strictEqual(r2.truthCount, 0, 'non-array truths must be treated as empty');
+});
+
+// ── Test 11: generatePhaseSpec — non-string phase falls back to unknown ───────
+
+test('generatePhaseSpec — non-string phase falls back to unknown', () => {
+  const { moduleName, spec } = generatePhaseSpec({ phase: 42, truths: [] });
+  assert.ok(typeof moduleName === 'string' && moduleName.startsWith('Phase'), 'moduleName must be a Phase* string');
+  assert.ok(spec.includes('---- MODULE'), 'must still produce a module header');
+  assert.ok(spec.endsWith('===='), 'spec must end with ====');
+});

@@ -116,7 +116,7 @@ function buildDerivedFrom(fm) {
   ];
 
   // Add hazard-model reference if the failure mode has one
-  if (fm.derived_from) {
+  if (Array.isArray(fm.derived_from)) {
     const hazardLink = fm.derived_from.find(
       d => d.artifact === 'reasoning/hazard-model.json'
     );
@@ -151,16 +151,18 @@ function generateRecipe(fm, hazardMap, riskMap) {
 function generateAllRecipes(failureModes, hazards, riskTransitions) {
   // Build lookup maps by state-event key
   const hazardMap = new Map();
-  for (const h of hazards) {
-    hazardMap.set(`${h.state}-${h.event}`, h);
+  for (const h of Array.isArray(hazards) ? hazards : []) {
+    if (h && typeof h === 'object') hazardMap.set(`${h.state}-${h.event}`, h);
   }
 
   const riskMap = new Map();
-  for (const t of riskTransitions) {
-    riskMap.set(`${t.state}-${t.event}`, t);
+  for (const t of Array.isArray(riskTransitions) ? riskTransitions : []) {
+    if (t && typeof t === 'object') riskMap.set(`${t.state}-${t.event}`, t);
   }
 
-  const recipes = failureModes.map(fm => generateRecipe(fm, hazardMap, riskMap));
+  const recipes = (Array.isArray(failureModes) ? failureModes : [])
+    .filter(fm => fm && typeof fm === 'object')
+    .map(fm => generateRecipe(fm, hazardMap, riskMap));
 
   // Compute summary
   const byFailureMode = {};

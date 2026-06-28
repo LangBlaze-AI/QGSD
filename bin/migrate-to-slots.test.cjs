@@ -9,7 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { addSlotToQuorumActive } = require('./migrate-to-slots.cjs');
+const { addSlotToQuorumActive, migrateClaudeJson, populateActiveSlots } = require('./migrate-to-slots.cjs');
 
 // Helper: create a temporary directory and return its path
 function makeTmpDir() {
@@ -100,6 +100,54 @@ test('MS-TC-ADD-5: multiple calls append all slots in call order', () => {
       ['claude-1', 'copilot-2', 'opencode-2', 'codex-cli-2'],
       'all slots must be appended in order'
     );
+  } finally {
+    cleanTmpDir(tmpDir);
+  }
+});
+
+// MS-TC-ADD-6: nf.json whose entire content is literal `null` must not crash
+test('MS-TC-ADD-6: nf.json containing literal null is treated as empty config', () => {
+  const tmpDir = makeTmpDir();
+  try {
+    const nfPath = path.join(tmpDir, 'nf.json');
+    fs.writeFileSync(nfPath, 'null\n');
+    const result = addSlotToQuorumActive('copilot-2', nfPath);
+    assert.strictEqual(result.added, true, 'added must be true for null config');
+    assert.strictEqual(result.slot, 'copilot-2');
+    const after = JSON.parse(fs.readFileSync(nfPath, 'utf8'));
+    assert.deepStrictEqual(after.quorum_active, ['copilot-2']);
+  } finally {
+    cleanTmpDir(tmpDir);
+  }
+});
+
+// MS-TC-CLAUDE-NULL: claude.json containing literal null is a no-op, not a crash
+test('MS-TC-CLAUDE-NULL: claude.json literal null returns no-op', () => {
+  const tmpDir = makeTmpDir();
+  try {
+    const p = path.join(tmpDir, 'claude.json');
+    fs.writeFileSync(p, 'null\n');
+    const result = migrateClaudeJson(p, false);
+    assert.strictEqual(result.changed, 0);
+    assert.deepStrictEqual(result.renamed, []);
+  } finally {
+    cleanTmpDir(tmpDir);
+  }
+});
+
+// MS-TC-POP-NULL: nf.json literal null is populated from claude.json, no crash
+test('MS-TC-POP-NULL: nf.json literal null is populated, not crashed', () => {
+  const tmpDir = makeTmpDir();
+  try {
+    const nfPath = path.join(tmpDir, 'nf.json');
+    const claudePath = path.join(tmpDir, 'claude.json');
+    fs.writeFileSync(nfPath, 'null\n');
+    fs.writeFileSync(claudePath, JSON.stringify({ mcpServers: { 'claude-1': {} } }) + '\n');
+    const result = populateActiveSlots(nfPath, claudePath, false);
+    assert.strictEqual(result.skipped, false);
+    assert.deepStrictEqual(result.slots, ['claude-1']);
+    const after = JSON.parse(fs.readFileSync(nfPath, 'utf8'));
+    assert.deepStrictEqual(after.quorum_active, ['claude-1']);
   } finally {
     cleanTmpDir(tmpDir);
   }

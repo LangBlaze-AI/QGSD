@@ -144,4 +144,32 @@ describe('cross-layer-dashboard CLI', () => {
     });
   });
 
+  describe('renderTerminal robustness', () => {
+    const { renderTerminal } = require('./cross-layer-dashboard.cjs');
+
+    it('degrades to N/A instead of crashing on non-numeric l1 coverage (corrupt JSON file)', () => {
+      const result = buildResult({ gateA: null, gateB: null, gateC: null, l1Pct: '50', maturity: null });
+      let out;
+      assert.doesNotThrow(() => { out = renderTerminal(result); }, 'renderTerminal must not throw on a non-numeric l1 coverage value');
+      assert.ok(out.includes('L1 Coverage'), 'still renders the L1 Coverage row');
+      assert.ok(out.includes('N/A'), 'shows N/A for the corrupt coverage value');
+    });
+  });
+
+  describe('null-argument robustness', () => {
+    const { renderTerminal } = require('./cross-layer-dashboard.cjs');
+
+    it('buildResult does not throw on null/undefined data', () => {
+      assert.doesNotThrow(() => buildResult(undefined), 'buildResult(undefined) must not throw');
+      const r = buildResult(null);
+      assert.equal(r.gate_a, null);
+      assert.equal(r.l1_coverage_pct, null);
+      assert.equal(r.all_targets_met, false);
+    });
+
+    it('renderTerminal does not throw on null result', () => {
+      assert.doesNotThrow(() => renderTerminal(null), 'renderTerminal(null) must not throw');
+    });
+  });
+
 });

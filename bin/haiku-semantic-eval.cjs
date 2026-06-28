@@ -93,7 +93,7 @@ function parseHaikuResponse(text) {
     if (parsed && parsed.verdict) {
       return {
         verdict: normalizeVerdict(parsed.verdict),
-        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+        confidence: clampConfidence(parsed.confidence),
         reasoning: parsed.reasoning || '',
       };
     }
@@ -107,7 +107,7 @@ function parseHaikuResponse(text) {
       if (parsed && parsed.verdict) {
         return {
           verdict: normalizeVerdict(parsed.verdict),
-          confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+          confidence: clampConfidence(parsed.confidence),
           reasoning: parsed.reasoning || '',
         };
       }
@@ -116,6 +116,11 @@ function parseHaikuResponse(text) {
 
   // Fallback: unparseable
   return { verdict: 'maybe', confidence: 0.0, reasoning: `unparseable: ${text.slice(0, 100)}` };
+}
+
+function clampConfidence(c) {
+  if (typeof c !== 'number' || Number.isNaN(c)) return 0.5;
+  return Math.max(0, Math.min(1, c));
 }
 
 function normalizeVerdict(v) {
@@ -136,6 +141,7 @@ function normalizeVerdict(v) {
  * @returns {boolean} true if evaluation should be skipped
  */
 function shouldSkipCached(candidate) {
+  if (!candidate || typeof candidate !== 'object') return false;
   if (!candidate.verdict) return false;
   if (!candidate.evaluation_timestamp) return false;
   // Cached and proximity_score unchanged = skip
@@ -159,6 +165,10 @@ async function evaluateCandidatesBatch(candidates, apiKey, opts = {}) {
   const results = [];
 
   for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') {
+      results.push(candidate);
+      continue;
+    }
     const prompt = `You are evaluating whether a formal model semantically satisfies a requirement.
 Model path: ${candidate.model}
 Requirement ID: ${candidate.requirement}

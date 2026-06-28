@@ -152,6 +152,49 @@ test('diff-report.md detects new checks', () => {
   );
 });
 
+test('handles non-object NDJSON records (null/number/string/array lines) without crashing', () => {
+  const ndjson = [
+    'null',
+    '42',
+    '"a bare string"',
+    '[1,2,3]',
+    makeRecord({ check_id: 'tla:real', result: 'fail', summary: 'fail: real check' }),
+  ].join('\n');
+  const { tmpDir, result } = runTriage(ndjson);
+  const suspects = readOutput(tmpDir, 'suspects.md');
+  const diffReport = readOutput(tmpDir, 'diff-report.md');
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  assert.strictEqual(result.status, 0, 'must exit 0 on non-object NDJSON lines: ' + result.stderr);
+  assert.ok(suspects, 'suspects.md was not created');
+  assert.ok(diffReport, 'diff-report.md was not created');
+  assert.ok(suspects.includes('tla:real'), 'real fail check must still appear in suspects.md');
+});
+
+test('non-string summary in a new check does not crash diff report', () => {
+  const rec = JSON.parse(makeRecord({ check_id: 'tla:numsum', result: 'pass' }));
+  rec.summary = 12345; // JSON-valid but wrong type
+  const ndjson = JSON.stringify(rec);
+  const prevReport = makeSnapshotReport({ 'tla:existing': 'pass' }); // not first run; tla:numsum is new
+  const { tmpDir, result } = runTriage(ndjson, prevReport);
+  const diffReport = readOutput(tmpDir, 'diff-report.md');
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  assert.strictEqual(result.status, 0, 'must exit 0 with numeric summary: ' + result.stderr);
+  assert.ok(diffReport, 'diff-report.md was not created');
+  assert.ok(diffReport.includes('tla:numsum'), 'new check missing from diff-report');
+});
+
+test('check_id matching an Object.prototype member is treated as a new check, not a transition', () => {
+  const ndjson = makeRecord({ check_id: 'constructor', result: 'pass', summary: 'pass: brand new' });
+  const prevReport = makeSnapshotReport({ 'tla:existing': 'pass' });
+  const { tmpDir, result } = runTriage(ndjson, prevReport);
+  const diffReport = readOutput(tmpDir, 'diff-report.md');
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  assert.strictEqual(result.status, 0, 'must exit 0: ' + result.stderr);
+  assert.ok(diffReport.includes('constructor'), 'constructor check missing from diff-report');
+  assert.ok(/## New Checks/.test(diffReport), 'brand-new constructor check must appear under New Checks');
+  assert.ok(!/native code/.test(diffReport), 'must not render an inherited prototype function as previousResult');
+});
+
 test('run-formal-verify includes ci:triage-bundle STEPS entry', () => {
   const rfvPath = path.join(__dirname, 'run-formal-verify.cjs');
   const content = fs.readFileSync(rfvPath, 'utf8');

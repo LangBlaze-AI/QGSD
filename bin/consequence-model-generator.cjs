@@ -22,6 +22,10 @@ const os = require('os');
  * }}
  */
 function generateConsequenceModel(reproducingModelPath, mutations, options = {}) {
+  if (options === null || typeof options !== 'object') {
+    options = {};
+  }
+
   // Validate inputs
   if (!reproducingModelPath || !fs.existsSync(reproducingModelPath)) {
     throw new Error(`Reproducing model not found: ${reproducingModelPath}`);
@@ -55,6 +59,18 @@ function generateConsequenceModel(reproducingModelPath, mutations, options = {})
 
   for (let i = 0; i < mutations.length; i++) {
     const mutation = mutations[i];
+    if (!mutation || typeof mutation !== 'object') {
+      appliedMutations.push({
+        iteration: i + 1,
+        type: undefined,
+        target: undefined,
+        content: undefined,
+        applied: false,
+        error: 'Invalid mutation: expected object'
+      });
+      skippedCount++;
+      continue;
+    }
     const result = applyMutation(consequenceContent, mutation, formalism);
 
     if (result.success) {

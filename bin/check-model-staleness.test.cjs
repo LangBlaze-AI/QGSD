@@ -631,6 +631,51 @@ test('CLI --json with missing registry outputs skipped: true', async () => {
   }
 });
 
+test('registry that parses to JSON literal null degrades gracefully (no crash)', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'model-stale-'));
+  try {
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'formal'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'formal', 'model-registry.json'),
+      'null', 'utf8'
+    );
+
+    const result = checkStaleness(tmpDir);
+
+    assert.strictEqual(result.total_checked, 0);
+    assert.strictEqual(result.total_stale, 0);
+    assert.deepStrictEqual(result.stale, []);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true });
+  }
+});
+
+test('null model entry in registry is skipped gracefully (no crash)', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'model-stale-'));
+  try {
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'formal'), { recursive: true });
+
+    const modelContent = 'mod test {}\n';
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'formal', 'model1.als'), modelContent, 'utf8');
+
+    const registry = {
+      version: '1.0',
+      models: { '.planning/formal/model1.als': null },
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'formal', 'model-registry.json'),
+      JSON.stringify(registry), 'utf8'
+    );
+
+    const result = checkStaleness(tmpDir);
+
+    assert.strictEqual(result.total_stale, 0);
+    assert.deepStrictEqual(result.stale, []);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true });
+  }
+});
+
 // ── baseline-drift integration tests (CONV-04) ─────────────────────
 
 test('baseline-drift detects model staleness as a drift signal', async () => {

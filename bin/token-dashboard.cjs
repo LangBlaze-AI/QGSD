@@ -57,7 +57,7 @@ function parseTokenUsage(jsonlPath) {
  * @returns {string}
  */
 function slotFamily(slot) {
-  if (!slot) return 'unknown';
+  if (typeof slot !== 'string' || !slot) return 'unknown';
   return slot.replace(/-\d+$/, '');
 }
 
@@ -69,6 +69,7 @@ function slotFamily(slot) {
 function aggregateBySlot(records) {
   const map = new Map();
   for (const r of records) {
+    if (!r || typeof r !== 'object') continue;
     const family = slotFamily(r.slot);
     if (!map.has(family)) {
       map.set(family, { input: 0, output: 0, cacheHit: 0, recordCount: 0 });
@@ -90,6 +91,7 @@ function aggregateBySlot(records) {
 function aggregateBySession(records) {
   const map = new Map();
   for (const r of records) {
+    if (!r || typeof r !== 'object') continue;
     const sid = r.session_id || 'unknown';
     if (!map.has(sid)) {
       map.set(sid, { input: 0, output: 0, ts: r.ts || '', recordCount: 0 });
@@ -117,7 +119,9 @@ function aggregateBySession(records) {
  * @returns {{cost: number, isSubscription?: boolean}}
  */
 function estimateCost(family, inputTokens, outputTokens, cacheReadTokens) {
-  const rates = COST_PER_M[family] || COST_PER_M['default'];
+  const rates = (typeof family === 'string' && Object.prototype.hasOwnProperty.call(COST_PER_M, family))
+    ? COST_PER_M[family]
+    : COST_PER_M['default'];
   if (rates.subscription) {
     return { cost: 0, isSubscription: true };
   }

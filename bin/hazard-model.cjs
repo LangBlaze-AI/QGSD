@@ -107,7 +107,7 @@ function computeDetectionScore(fromState, event, failureTaxonomy, unitTestCovera
   const logicViolations = failureTaxonomy?.categories?.logic_violation || [];
   const hasFormalism = logicViolations.some(f =>
     (f.requirement_ids || []).some(rid =>
-      relatedPrefixes.some(pfx => rid.startsWith(pfx))
+      relatedPrefixes.some(pfx => typeof rid === 'string' && rid.startsWith(pfx))
     )
   );
 
@@ -131,8 +131,9 @@ function generateHazardModel(observedFsm, traceStats, failureTaxonomy, unitTestC
   const totalSessions = traceStats?.sessions?.length || 349;
   const hazards = [];
 
-  for (const [fromState, events] of Object.entries(observedFsm.observed_transitions)) {
-    for (const [event, data] of Object.entries(events)) {
+  for (const [fromState, events] of Object.entries((observedFsm && observedFsm.observed_transitions) || {})) {
+    for (const [event, data] of Object.entries(events || {})) {
+      if (!data || typeof data !== 'object') continue;
       const severity = computeSeverity(fromState, event);
       const occurrence = computeOccurrenceScore(data.count, totalSessions);
       const detection = computeDetectionScore(fromState, event, failureTaxonomy, unitTestCoverage);

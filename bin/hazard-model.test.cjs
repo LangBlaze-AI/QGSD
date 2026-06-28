@@ -235,3 +235,54 @@ describe('integration: real L2 data', () => {
     assert.strictEqual(typeof result.summary.high_count, 'number');
   });
 });
+
+// ── Adversarial hardening: malformed FSM (HM-1) ─────────────────────────────
+
+describe('generateHazardModel — malformed FSM (HM-1)', () => {
+  it('does not crash when observed_transitions is missing', () => {
+    const result = generateHazardModel({}, { sessions: [] }, { categories: { logic_violation: [] } }, { requirements: {} });
+    assert.strictEqual(result.hazards.length, 0);
+    assert.strictEqual(result.summary.total, 0);
+    assert.strictEqual(result.summary.max_rpn, 0);
+  });
+
+  it('does not crash when observed_transitions is null', () => {
+    const result = generateHazardModel({ observed_transitions: null }, { sessions: [] }, { categories: { logic_violation: [] } }, { requirements: {} });
+    assert.strictEqual(result.hazards.length, 0);
+  });
+});
+
+// ── Adversarial hardening: corrupt transition data (HM-2) ───────────────────
+
+describe('generateHazardModel — corrupt transition data (HM-2)', () => {
+  it('skips null transition data without crashing', () => {
+    const fsm = { observed_transitions: { IDLE: { QUORUM_START: null, VOTES_COLLECTED: { to_state: 'X', count: 10 } } } };
+    const result = generateHazardModel(fsm, { sessions: new Array(349) }, { categories: { logic_violation: [] } }, { requirements: {} });
+    // The valid transition still produces a hazard; the null one is skipped
+    assert.strictEqual(result.hazards.length, 1);
+    assert.strictEqual(result.hazards[0].event, 'VOTES_COLLECTED');
+  });
+
+  it('skips a state whose event map is null', () => {
+    const fsm = { observed_transitions: { IDLE: null } };
+    const result = generateHazardModel(fsm, { sessions: [] }, { categories: { logic_violation: [] } }, { requirements: {} });
+    assert.strictEqual(result.hazards.length, 0);
+  });
+});
+
+// ── Adversarial hardening: non-string requirement_ids (HM-3) ────────────────
+
+describe('computeDetectionScore — non-string requirement_ids (HM-3)', () => {
+  it('ignores non-string requirement ids without crashing', () => {
+    const tax = { categories: { logic_violation: [ { requirement_ids: [123, 'STOP-01'] } ] } };
+    const cov = { requirements: {} };
+    // STOP-01 matches IDLE's STOP prefix -> formalism present, no tests -> 4
+    assert.strictEqual(computeDetectionScore('IDLE', 'QUORUM_START', tax, cov), 4);
+  });
+
+  it('returns 8 when only non-string ids are present', () => {
+    const tax = { categories: { logic_violation: [ { requirement_ids: [123, null] } ] } };
+    const cov = { requirements: {} };
+    assert.strictEqual(computeDetectionScore('IDLE', 'QUORUM_START', tax, cov), 8);
+  });
+});

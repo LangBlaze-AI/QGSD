@@ -143,13 +143,15 @@ function runPhaseTlc(specPath, cfgPath, options) {
  * @returns {string}
  */
 function formatTlcFeedback(attempt, maxAttempts, tlcResult, truthsList) {
+  if (!Array.isArray(truthsList)) truthsList = [];
   if (tlcResult.passed) {
     return 'ATTEMPT ' + attempt + '/' + maxAttempts + ': TLC verification PASSED. All ' + truthsList.length + ' properties satisfied.';
   }
 
   let feedback = 'ATTEMPT ' + attempt + '/' + maxAttempts + ': TLC verification FAILED.\n';
 
-  for (const violation of tlcResult.violations) {
+  const violationList = Array.isArray(tlcResult && tlcResult.violations) ? tlcResult.violations : [];
+  for (const violation of violationList) {
     const reqMatch = violation.match(/Req(\d{2})/);
     if (reqMatch) {
       const truthIndex = parseInt(reqMatch[1], 10) - 1;

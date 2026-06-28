@@ -84,6 +84,18 @@ describe('solve-debt-bridge', () => {
       const result = readOpenDebt(debtPath);
       assert.equal(result.entries.length, 0);
     });
+
+    it('fail-open: retains valid entries when the array contains a null element', () => {
+      const entries = [
+        makeEntry({ fingerprint: 'a', status: 'open' }),
+        null,
+        makeEntry({ fingerprint: 'b', status: 'acknowledged' })
+      ];
+      fs.writeFileSync(debtPath, JSON.stringify(makeLedger(entries)));
+      const result = readOpenDebt(debtPath);
+      assert.equal(result.error, null);
+      assert.deepStrictEqual(result.entries.map(e => e.fingerprint), ['a', 'b']);
+    });
   });
 
   describe('matchDebtToResidual', () => {
@@ -177,6 +189,20 @@ describe('solve-debt-bridge', () => {
       assert.equal(result.matched[0].layer, 'r_to_f');
       assert.equal(result.matched[1].layer, 'f_to_c');
       assert.equal(result.matched[2].layer, 'f_to_t');
+    });
+
+    it('fail-open: does not throw on a null/non-object entry in the array', () => {
+      assert.deepStrictEqual(
+        matchDebtToResidual([null], {}),
+        { matched: [], unmatched: [null] }
+      );
+    });
+
+    it('fail-open: does not throw on a null element inside source_entries', () => {
+      const entries = [makeEntry({ source_entries: [null, { source_type: 'github' }] })];
+      const result = matchDebtToResidual(entries, {});
+      assert.equal(result.matched.length, 1);
+      assert.equal(result.matched[0].layer, 'f_to_c');
     });
   });
 
@@ -291,6 +317,20 @@ describe('solve-debt-bridge', () => {
       fs.writeFileSync(debtPath, 'not-json');
       const result = summarizeDebtProgress(debtPath);
       assert.deepStrictEqual(result, { open: 0, acknowledged: 0, resolving: 0, resolved: 0, total: 0 });
+    });
+
+    it('does not pollute counts for prototype-named status values', () => {
+      const entries = [
+        makeEntry({ status: 'constructor' }),
+        makeEntry({ status: 'toString' }),
+        makeEntry({ status: '__proto__' }),
+        makeEntry({ status: 'open' })
+      ];
+      fs.writeFileSync(debtPath, JSON.stringify(makeLedger(entries)));
+      const result = summarizeDebtProgress(debtPath);
+      assert.deepStrictEqual(result, {
+        open: 1, acknowledged: 0, resolving: 0, resolved: 0, total: 4
+      });
     });
   });
 

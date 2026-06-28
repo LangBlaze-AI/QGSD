@@ -203,3 +203,29 @@ must_haves:
   const parsed = JSON.parse(result.stdout);
   assert.strictEqual(parsed.status, 'skipped', 'should have status: skipped');
 });
+
+// ── Test 10: formatTlcFeedback does not crash when a failed result lacks a violations array
+
+test('formatTlcFeedback does not crash when a failed result lacks a violations array', () => {
+  let feedback;
+  assert.doesNotThrow(() => {
+    feedback = formatTlcFeedback(1, 3, { passed: false, output: '', runtimeMs: 0 }, ['t1']);
+  }, 'missing violations array must not throw');
+  assert.ok(feedback.includes('ATTEMPT 1/3'), 'should still contain attempt info');
+  assert.ok(feedback.includes('FAILED'), 'should still contain FAILED');
+});
+
+// ── Test 11: formatTlcFeedback does not crash when truthsList is omitted
+
+test('formatTlcFeedback does not crash when truthsList is omitted', () => {
+  let pass, fail;
+  assert.doesNotThrow(() => {
+    pass = formatTlcFeedback(1, 3, { passed: true, violations: [], output: '', runtimeMs: 0 });
+  }, 'omitted truthsList on pass must not throw');
+  assert.ok(pass.includes('PASSED'), 'should still report PASSED');
+  assert.doesNotThrow(() => {
+    fail = formatTlcFeedback(1, 3, { passed: false, violations: ['Invariant Req01 is violated'], output: '', runtimeMs: 0 });
+  }, 'omitted truthsList on Req-mapped failure must not throw');
+  assert.ok(fail.includes('Req01'), 'should still contain Req01');
+  assert.ok(fail.includes('(unknown truth)'), 'unmapped truth should fall back to (unknown truth)');
+});

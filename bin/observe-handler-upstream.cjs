@@ -70,9 +70,12 @@ function fetchReleases(repo, since, limit, execFn) {
       '--json', 'tagName,name,publishedAt,isPrerelease'
     ], { encoding: 'utf8' });
     let releases = JSON.parse(output);
+    if (!Array.isArray(releases)) return [];
     if (since) {
       const cutoff = new Date(since).getTime();
-      releases = releases.filter(r => new Date(r.publishedAt).getTime() > cutoff);
+      if (!Number.isNaN(cutoff)) {
+        releases = releases.filter(r => new Date(r.publishedAt).getTime() > cutoff);
+      }
     }
     return releases;
   } catch {
@@ -103,7 +106,9 @@ function fetchNotablePRs(repo, since, limit, execFn) {
     // Filter by date
     if (since) {
       const cutoff = new Date(since).getTime();
-      prs = prs.filter(pr => pr.mergedAt && new Date(pr.mergedAt).getTime() > cutoff);
+      if (!Number.isNaN(cutoff)) {
+        prs = prs.filter(pr => pr.mergedAt && new Date(pr.mergedAt).getTime() > cutoff);
+      }
     }
 
     // Filter for "notable" PRs — keyword match OR substantial size

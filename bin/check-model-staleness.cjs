@@ -76,7 +76,9 @@ function checkStaleness(root, options = {}) {
     };
   }
 
-  const models = registry.models || {};
+  const models = (registry && typeof registry === 'object' && registry.models && typeof registry.models === 'object')
+    ? registry.models
+    : {};
   const stale = [];
   let total_checked = 0;
   let first_hash_count = 0;
@@ -85,6 +87,11 @@ function checkStaleness(root, options = {}) {
   // Check each model
   for (const [modelPath, entry] of Object.entries(models)) {
     total_checked++;
+
+    // Graceful degradation: malformed (null/non-object) registry entry
+    if (entry === null || typeof entry !== 'object') {
+      continue;
+    }
 
     const fullModelPath = path.join(root, modelPath);
     const modelHash = hashFile(fullModelPath);
