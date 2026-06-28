@@ -86,11 +86,12 @@ function loadRegistry(registryPath) {
  */
 function matchChecklists({ files = [], description = '', taskType = '', registryPath } = {}) {
   const registry = loadRegistry(registryPath);
-  const descLower = description.toLowerCase();
+  const descLower = typeof description === 'string' ? description.toLowerCase() : '';
   const matches = [];
 
-  for (const checklist of registry.checklists) {
-    const triggers = checklist.triggers;
+  const checklists = Array.isArray(registry && registry.checklists) ? registry.checklists : [];
+  for (const checklist of checklists) {
+    const triggers = (checklist && checklist.triggers) || {};
     let matched = false;
 
     // Check file_patterns

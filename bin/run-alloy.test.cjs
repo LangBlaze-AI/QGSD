@@ -65,3 +65,23 @@ test('exits non-zero listing download URL in error when both JAR and ALS are mis
     'Expected stderr output describing the error'
   );
 });
+
+test('non-numeric NF_ALLOY_TIMEOUT_MS does not crash with uncaught ERR_OUT_OF_RANGE', () => {
+  // Needs Java + Alloy JAR + the default spec to reach the spawnSync(timeout) call.
+  const javaHome = process.env.JAVA_HOME ||
+    (() => { const r = spawnSync('/usr/libexec/java_home', [], { encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; })() ||
+    null;
+  const jar = resolveAlloyJar(path.join(__dirname, '..'));
+  const als = path.join(__dirname, '..', '.planning', 'formal', 'alloy', 'quorum-votes.als');
+  if (!jar || !fs.existsSync(als)) { return; } // skip when toolchain/spec absent
+
+  const result = spawnSync(process.execPath, [RUN_ALLOY], {
+    encoding: 'utf8',
+    env: { ...process.env, ...(javaHome ? { JAVA_HOME: javaHome } : {}), NF_ALLOY_TIMEOUT_MS: 'abc' },
+  });
+
+  // BEFORE FIX: stderr contains the uncaught RangeError stack and Alloy never ran.
+  // AFTER FIX: the bad value falls back to the default timeout, so no crash.
+  assert.doesNotMatch(result.stderr || '', /ERR_OUT_OF_RANGE|RangeError/,
+    'malformed NF_ALLOY_TIMEOUT_MS must not surface an uncaught timeout RangeError');
+});

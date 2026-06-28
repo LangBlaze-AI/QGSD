@@ -92,6 +92,26 @@ describe('countDirectionChanges', () => {
   });
 });
 
+describe('countDirectionChanges adversarial', () => {
+  it('skips null/non-object entries without crashing', () => {
+    const entries = [
+      { from_level: 'ADVISORY', to_level: 'SOFT_GATE' }, // up
+      null,                                              // skip
+      { from_level: 'SOFT_GATE', to_level: 'ADVISORY' }, // down (change 1)
+    ];
+    assert.strictEqual(countDirectionChanges(entries), 1);
+  });
+
+  it('skips a primitive entry without crashing', () => {
+    const entries = [
+      { from_level: 'ADVISORY', to_level: 'SOFT_GATE' },
+      'oops',
+      { from_level: 'SOFT_GATE', to_level: 'ADVISORY' },
+    ];
+    assert.strictEqual(countDirectionChanges(entries), 1);
+  });
+});
+
 // ── detectFlipFlops ──────────────────────────────────────────────────────────
 
 describe('detectFlipFlops', () => {
@@ -146,6 +166,32 @@ describe('detectFlipFlops', () => {
 
   it('handles empty changelog', () => {
     assert.deepStrictEqual(detectFlipFlops([]), {});
+  });
+});
+
+describe('detectFlipFlops prototype-pollution keys', () => {
+  it('does not crash and groups a __proto__ model path as an own key', () => {
+    const changelog = [
+      { model: '__proto__', from_level: 'ADVISORY', to_level: 'SOFT_GATE' },
+      { model: '__proto__', from_level: 'SOFT_GATE', to_level: 'ADVISORY' },
+      { model: '__proto__', from_level: 'ADVISORY', to_level: 'SOFT_GATE' },
+      { model: '__proto__', from_level: 'SOFT_GATE', to_level: 'ADVISORY' },
+    ];
+    let result;
+    assert.doesNotThrow(() => { result = detectFlipFlops(changelog); });
+    assert.ok(Object.prototype.hasOwnProperty.call(result, '__proto__'),
+      '__proto__ model should be an own key of the result');
+    assert.strictEqual(result['__proto__'].direction_changes, 3);
+  });
+
+  it('handles a constructor model path without mis-grouping', () => {
+    const changelog = [
+      { model: 'constructor', from_level: 'ADVISORY', to_level: 'SOFT_GATE' },
+      { model: 'constructor', from_level: 'SOFT_GATE', to_level: 'ADVISORY' },
+    ];
+    let result;
+    assert.doesNotThrow(() => { result = detectFlipFlops(changelog); });
+    assert.deepStrictEqual(result, {});
   });
 });
 

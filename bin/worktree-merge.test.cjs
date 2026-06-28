@@ -186,6 +186,29 @@ describe('worktree-merge', () => {
         cleanup();
       }
     });
+
+    it('does not misclassify a failed merge of a CONFLICT-named branch as a conflict', () => {
+      const { dir, cleanup } = createTmpRepo();
+      try {
+        // Branch does not exist; its name merely contains the substring CONFLICT.
+        const result = mergeBranches(dir, ['CONFLICT-marker'], { targetBranch: 'main' });
+        assert.equal(result.branches.length, 1);
+        assert.equal(result.branches[0].branch, 'CONFLICT-marker');
+        assert.equal(result.branches[0].status, 'failed');
+      } finally {
+        cleanup();
+      }
+    });
+
+    it('treats a non-array (string) branches argument as a no-op, not char iteration', () => {
+      const { dir, cleanup } = createTmpRepo();
+      try {
+        const result = mergeBranches(dir, 'feature-1', { targetBranch: 'main' });
+        assert.deepEqual(result, { branches: [], checkpoint: null });
+      } finally {
+        cleanup();
+      }
+    });
   });
 
   describe('verifyMergedState', () => {
@@ -265,6 +288,16 @@ describe('worktree-merge', () => {
         assert.equal(results.length, 1);
         assert.equal(results[0].branch, 'to-delete');
         assert.equal(results[0].status, 'deleted');
+      } finally {
+        cleanup();
+      }
+    });
+
+    it('treats a non-array (string) branches argument as a no-op, not char iteration', () => {
+      const { dir, cleanup } = createTmpRepo();
+      try {
+        const results = cleanupWorktreeBranches(dir, 'to-delete');
+        assert.deepEqual(results, []);
       } finally {
         cleanup();
       }

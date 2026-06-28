@@ -78,9 +78,11 @@ if (allRecords === null) {
 
 // 2. Filter to PRISM tp_rate records
 const prismTpRecords = allRecords.filter(r =>
+  r && typeof r === 'object' &&
   r.formalism === 'prism' &&
-  r.metadata &&
-  r.metadata.parameter === 'tp_rate'
+  r.metadata && typeof r.metadata === 'object' &&
+  r.metadata.parameter === 'tp_rate' &&
+  typeof r.metadata.value === 'number' && Number.isFinite(r.metadata.value)
 );
 
 // 3. If all inconclusive — no actionable data

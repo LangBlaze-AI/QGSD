@@ -91,17 +91,19 @@ function evaluateGuard(guardName, context, event, machine) {
  */
 function evaluateTransitions(snapshot, event, machine) {
   // Extract current state name (handles string or object shape from XState v4/v5)
-  const currentState = typeof snapshot.value === 'string'
-    ? snapshot.value
-    : Object.keys(snapshot.value)[0];
+  const snapVal = (snapshot && snapshot.value != null) ? snapshot.value : '';
+  const currentState = typeof snapVal === 'string'
+    ? snapVal
+    : Object.keys(snapVal)[0];
 
   const context = snapshot.context || {};
+  const eventType = (event && typeof event === 'object') ? event.type : undefined;
 
   // Look up transitions for this state + event from machine config
   const machineConfig = machine.config || {};
   const states = machineConfig.states || {};
   const stateConfig = states[currentState] || {};
-  const eventTransitions = stateConfig.on ? (stateConfig.on[event.type] || stateConfig.on[event.type]) : null;
+  const eventTransitions = (stateConfig.on && eventType != null) ? stateConfig.on[eventType] : null;
 
   if (!eventTransitions) {
     // No transitions defined for this event in this state
@@ -181,7 +183,11 @@ function replayTrace(events, machine) {
 
     // Send the event to advance the actor state
     try {
-      actor.send(event);
+      // Skip null/non-object events: actor.send can schedule async work that
+      // throws after this try/catch returns (XState dereferences event.type).
+      if (event && typeof event === 'object') {
+        actor.send(event);
+      }
     } catch (_) {
       // Fail-open: if actor errors on this event, continue with remaining events
     }

@@ -56,3 +56,21 @@ test('exits non-zero and lists valid specs (scoreboard-recompute, availability-p
   assert.strictEqual(result.status, 1);
   assert.match(result.stderr, /scoreboard-recompute|availability-parsing/i);
 });
+
+test('unknown --spec that is a prototype key (constructor) still records a string check_id error result', () => {
+  const os = require('os');
+  const outPath = path.join(os.tmpdir(), 'run-audit-alloy-proto-' + process.pid + '.ndjson');
+  try { fs.unlinkSync(outPath); } catch (_) {}
+  const result = spawnSync(process.execPath, [RUN_AUDIT_ALLOY, '--spec=constructor'], {
+    encoding: 'utf8',
+    env: { ...process.env, CHECK_RESULTS_PATH: outPath },
+  });
+  assert.strictEqual(result.status, 1);
+  // Fail-open: the unknown-spec path must still write an audit record, never drop the trail.
+  const written = fs.existsSync(outPath) ? fs.readFileSync(outPath, 'utf8').trim() : '';
+  assert.ok(written.length > 0, 'expected an error check-result to be recorded for prototype-key spec');
+  const record = JSON.parse(written.split('\n')[0]);
+  assert.strictEqual(typeof record.check_id, 'string');
+  assert.strictEqual(record.check_id, 'alloy:constructor');
+  try { fs.unlinkSync(outPath); } catch (_) {}
+});

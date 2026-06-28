@@ -113,6 +113,12 @@ Implement keyword matching as the MVP approach for precedent lookup.
       assert.ok(result);
       assert.equal(result.source_file, '/path/to/debate.md');
     });
+
+    it('returns null (does not throw) when content is not a string', () => {
+      assert.equal(mod.extractPrecedentMetadata('test.md', null), null);
+      assert.equal(mod.extractPrecedentMetadata('test.md', undefined), null);
+      assert.equal(mod.extractPrecedentMetadata('test.md', 42), null);
+    });
   });
 
   describe('isPrecedentFresh', () => {
@@ -214,6 +220,16 @@ No consensus reached.
       const result = await mod.main(tmpDir, outPath);
       const hasInconclusive = result.precedents.some(p => p.consensus === 'INCONCLUSIVE');
       assert.equal(hasInconclusive, false);
+    });
+
+    it('skips directory entries ending in .md without crashing', async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prec-eisdir-'));
+      fs.mkdirSync(path.join(dir, 'notafile.md'));
+      fs.writeFileSync(path.join(dir, 'valid.md'), `# Quorum Debate\nQuestion: Should we ship?\nDate: ${new Date().toISOString().slice(0, 10)}\nConsensus: APPROVE\nRounds: 1\n\n## Outcome\nApproved.\n`);
+      const out = path.join(dir, 'out.json');
+      const result = await mod.main(dir, out);
+      assert.equal(result.precedents.length, 1);
+      fs.rmSync(dir, { recursive: true, force: true });
     });
   });
 });

@@ -24,6 +24,11 @@ const { parsePlanFrontmatter, classifyTruth } = require('./generate-phase-spec.c
  * @returns {{ generated: boolean, reason?: string, specPath?: string, truthCount?: number, classifications?: Array<{truth: string, kind: string, propName: string}> }}
  */
 function generateProposedChanges(planFilePath) {
+  if (typeof planFilePath !== 'string' ||
+      !fs.existsSync(planFilePath) ||
+      !fs.statSync(planFilePath).isFile()) {
+    return { generated: false, reason: 'not a file' };
+  }
   const content = fs.readFileSync(planFilePath, 'utf8');
   const fm = parsePlanFrontmatter(content);
   const phase = fm.phase || 'unknown';
@@ -110,7 +115,7 @@ function generateTlaCfg(specPath) {
 
   // Parse each ReqNN line to determine if it was classified as INVARIANT or PROPERTY
   // We read the classifications from the mapping block comments
-  const mappingRegex = /^\\?\*\s+(Req\d{2})\s+->\s+Truth\[(\d+)\]:\s+"(.+)"/;
+  const mappingRegex = /^\\?\*\s+(Req\d{2,})\s+->\s+Truth\[(\d+)\]:\s+"(.+)"/;
   const propNames = [];
 
   for (const line of lines) {

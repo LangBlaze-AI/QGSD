@@ -14,7 +14,10 @@
 
 const { spawnSync } = require('child_process');
 const JAVA_HEAP_MAX = process.env.NF_JAVA_HEAP_MAX || '512m';
-const ALLOY_TIMEOUT_MS = parseInt(process.env.NF_ALLOY_TIMEOUT_MS || '600000', 10); // 10min default
+const _rawAlloyTimeout = parseInt(process.env.NF_ALLOY_TIMEOUT_MS || '600000', 10); // 10min default
+const ALLOY_TIMEOUT_MS = (Number.isInteger(_rawAlloyTimeout) && _rawAlloyTimeout >= 0)
+  ? _rawAlloyTimeout
+  : 600000;
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');

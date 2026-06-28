@@ -94,3 +94,49 @@ test('LOOP-03: sensitivity-sweep-feedback.cjs exits non-zero when new threshold 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('LOOP-03: exits 0 (fail-open) when a sweep record line parses to JSON null', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sweep-feedback-null-'));
+  try {
+    const formalDir = path.join(tmpDir, '.planning', 'formal');
+    fs.mkdirSync(formalDir, { recursive: true });
+    // Corrupt NDJSON: a literal JSON null record line
+    fs.writeFileSync(path.join(formalDir, 'sensitivity-report.ndjson'), 'null\n', 'utf8');
+
+    const result = spawnSync(process.execPath, [
+      path.join(__dirname, 'sensitivity-sweep-feedback.cjs')
+    ], { encoding: 'utf8', cwd: tmpDir, timeout: 10000 });
+
+    assert.strictEqual(result.status, 0,
+      'must fail-open (exit 0) on a null NDJSON record, not crash with an uncaught TypeError');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('LOOP-03: a tp_rate record missing metadata.value does not fabricate a deviation', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sweep-feedback-noval-'));
+  try {
+    const formalDir = path.join(tmpDir, '.planning', 'formal');
+    fs.mkdirSync(formalDir, { recursive: true });
+    // Actionable PRISM tp_rate record but metadata.value is absent
+    const record = JSON.stringify({
+      tool: 'run-sensitivity-sweep', formalism: 'prism', result: 'pass',
+      check_id: 'sens:prism-tp-rate',
+      metadata: { parameter: 'tp_rate', baseline: 0.85, baseline_result: 'pass', delta: 'stable' }
+    });
+    fs.writeFileSync(path.join(formalDir, 'sensitivity-report.ndjson'), record + '\n', 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'quorum-scoreboard.md'),
+      '## Scoreboard\n| Slot | Wins | Losses |\n|------|------|--------|\n| claude-1 | 8 | 2 |\n', 'utf8');
+
+    const result = spawnSync(process.execPath, [
+      path.join(__dirname, 'sensitivity-sweep-feedback.cjs')
+    ], { encoding: 'utf8', cwd: tmpDir, timeout: 15000 });
+
+    assert.strictEqual(result.status, 0, 'must exit 0 — a value-less record is not actionable data');
+    assert.ok(!/Deviation detected/.test(result.stdout || ''),
+      'must not report a spurious deviation (and must not re-run PRISM) from a value-less record');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

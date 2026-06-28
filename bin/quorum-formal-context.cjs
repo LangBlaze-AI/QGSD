@@ -87,7 +87,9 @@ function generateVerificationResult(tlcResult) {
   }
 
   if (tlcResult.status === 'failed') {
-    const violations = tlcResult.violations || [];
+    const violations = Array.isArray(tlcResult.violations)
+      ? tlcResult.violations.filter((v) => typeof v === 'string')
+      : [];
     // Check for Java not found
     if (violations.some(v => v.includes('Java not found'))) {
       return 'INCONCLUSIVE: Java/TLC not available for verification';
