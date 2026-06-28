@@ -52,3 +52,29 @@ test('extract parses SwiftState fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract parses type-prefixed initial state (state: MyState.idle)', () => {
+  const src = `
+import SwiftState
+enum MyState: StateType { case idle; case running; case done }
+let machine = StateMachine<MyState, NoEvent>(state: MyState.idle)
+machine.addRoute(.idle => .running)
+machine.addRoute(.running => .done)
+`;
+  const tmpFile = path.join(os.tmpdir(), 'swift-state-typed-' + Date.now() + '.swift');
+  fs.writeFileSync(tmpFile, src, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.strictEqual(ir.initial, 'idle');
+    assert.ok(ir.stateNames.includes('idle'));
+    assert.strictEqual(ir.transitions.length, 2);
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract throws a clear error for non-string filePath', () => {
+  assert.throws(() => extract(null), /filePath must be a non-empty string/);
+  assert.throws(() => extract(undefined), /filePath must be a non-empty string/);
+  assert.throws(() => extract(42), /filePath must be a non-empty string/);
+});

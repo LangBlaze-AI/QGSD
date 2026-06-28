@@ -19,6 +19,9 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('SwiftState extract: filePath must be a non-empty string');
+  }
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
 
@@ -30,7 +33,7 @@ function extract(filePath, options = {}) {
 
   // Extract initial state: StateMachine<State, Event>(state: .idle)
   // or StateMachine<MyState, MyEvent>(state: .idle)
-  const initMatch = content.match(/StateMachine\s*<[^>]+>\s*\(\s*state\s*:\s*\.(\w+)\s*\)/);
+  const initMatch = content.match(/StateMachine\s*<[^>]+>\s*\(\s*state\s*:\s*(?:\w+\s*)?\.(\w+)\s*\)/);
   if (initMatch) {
     initial = initMatch[1];
     stateSet.add(initial);

@@ -65,3 +65,31 @@ test('extract parses stateless4j fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract resolves identifiers that collide with Object.prototype members', () => {
+  const protoFixture = `
+import com.github.oxo42.stateless4j.StateMachineConfig;
+import com.github.oxo42.stateless4j.StateMachine;
+
+public class Proto {
+    StateMachineConfig<State, Trigger> config = new StateMachineConfig<>();
+    config.configure(State.constructor)
+        .permit(Trigger.toString, State.Done);
+    StateMachine<State, Trigger> sm = new StateMachine<>(State.constructor, config);
+}
+`;
+  const tmpFile = path.join(os.tmpdir(), 'stateless4j-proto-' + Date.now() + '.java');
+  fs.writeFileSync(tmpFile, protoFixture, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.strictEqual(ir.initial, 'constructor');
+    assert.ok(ir.stateNames.includes('constructor'));
+    assert.ok(ir.stateNames.includes('Done'));
+    assert.strictEqual(ir.transitions.length, 1);
+    assert.strictEqual(ir.transitions[0].fromState, 'constructor');
+    assert.strictEqual(ir.transitions[0].event, 'toString');
+    assert.strictEqual(ir.transitions[0].target, 'Done');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

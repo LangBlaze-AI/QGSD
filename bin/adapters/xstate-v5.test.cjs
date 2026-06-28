@@ -78,3 +78,31 @@ test('extract on real nf-workflow.machine.ts produces valid IR', () => {
   assert.ok(ir.transitions.length > 0, 'Should have transitions');
   assert.ok(ir.stateNames.includes(ir.initial), 'initial should be in stateNames');
 });
+
+test('extract treats a null state value as a leaf instead of crashing', () => {
+  const fixture = `
+exports.machine = {
+  config: {
+    id: 'm',
+    initial: 'green',
+    states: {
+      green: { on: { TIMER: { target: 'done' } } },
+      done: null
+    }
+  }
+};
+`;
+  const tmpFile = path.join(os.tmpdir(), 'xstate-v5-nullstate-' + Date.now() + '.js');
+  fs.writeFileSync(tmpFile, fixture, 'utf8');
+  try {
+    let ir;
+    assert.doesNotThrow(() => { ir = extract(tmpFile); });
+    assert.strictEqual(ir.framework, 'xstate-v5');
+    assert.ok(ir.stateNames.includes('done'), 'null state should still be listed');
+    assert.strictEqual(ir.finalStates.length, 0, 'null state is not final');
+    assert.strictEqual(ir.transitions.length, 1, 'only green has a transition');
+    assert.strictEqual(ir.transitions[0].target, 'done');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

@@ -52,3 +52,32 @@ test('extract parses qmuntal/stateless fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract treats prototype-named identifiers (constructor/toString) as literal state names', () => {
+  const fixture = `
+package main
+import "github.com/qmuntal/stateless"
+const (
+    triggerNext = "next"
+)
+func main() {
+    sm := stateless.NewStateMachine(constructor)
+    sm.Configure(constructor).Permit(triggerNext, toString)
+}
+`;
+  const tmpFile = path.join(os.tmpdir(), 'stateless-proto-' + Date.now() + '.go');
+  fs.writeFileSync(tmpFile, fixture, 'utf8');
+  try {
+    let ir;
+    assert.doesNotThrow(() => { ir = extract(tmpFile); });
+    assert.strictEqual(ir.initial, 'constructor');
+    assert.ok(ir.stateNames.includes('constructor'));
+    assert.ok(ir.stateNames.includes('toString'));
+    assert.strictEqual(ir.transitions.length, 1);
+    assert.strictEqual(ir.transitions[0].fromState, 'constructor');
+    assert.strictEqual(ir.transitions[0].event, 'next');
+    assert.strictEqual(ir.transitions[0].target, 'toString');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

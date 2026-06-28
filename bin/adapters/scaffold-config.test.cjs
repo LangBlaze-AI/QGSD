@@ -59,3 +59,26 @@ test('scaffoldConfig handles IR with no guards', () => {
   assert.deepStrictEqual(config.guards, {});
   assert.deepStrictEqual(config.vars, {});
 });
+
+test('scaffoldConfig handles null / non-object ir', () => {
+  assert.deepStrictEqual(scaffoldConfig(null), { guards: {}, vars: {} });
+  assert.deepStrictEqual(scaffoldConfig(undefined), { guards: {}, vars: {} });
+  assert.deepStrictEqual(scaffoldConfig('not-an-ir'), { guards: {}, vars: {} });
+});
+
+test('scaffoldConfig tolerates missing/non-array transitions and null entries', () => {
+  // missing transitions key
+  const a = scaffoldConfig({ ctxVars: ['x'] });
+  assert.deepStrictEqual(a.guards, {});
+  assert.ok(a.vars.x);
+  // null entry inside transitions array
+  const b = scaffoldConfig({ transitions: [null, { guard: 'g' }], ctxVars: [] });
+  assert.ok(b.guards.g);
+  assert.deepStrictEqual(b.vars, {});
+});
+
+test('scaffoldConfig tolerates missing/non-array ctxVars', () => {
+  const config = scaffoldConfig({ transitions: [{ guard: 'g' }] });
+  assert.ok(config.guards.g);
+  assert.deepStrictEqual(config.vars, {});
+});

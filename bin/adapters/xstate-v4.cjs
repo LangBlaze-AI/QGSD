@@ -23,7 +23,8 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
-  const { userVars = {} } = options;
+  const opts = options && typeof options === 'object' ? options : {};
+  const userVars = opts.userVars && typeof opts.userVars === 'object' ? opts.userVars : {};
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) {
     throw new Error('File not found: ' + absInput);

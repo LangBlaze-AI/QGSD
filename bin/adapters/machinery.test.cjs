@@ -47,3 +47,26 @@ test('extract parses Machinery fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract throws a clear error for non-string/empty filePath, not an opaque TypeError', () => {
+  for (const bad of [undefined, null, 42, {}, '']) {
+    assert.throws(
+      () => extract(bad),
+      /requires a non-empty file path/,
+      `expected clean error for ${String(bad)}`
+    );
+  }
+});
+
+test('extract throws a clear error for a directory path, not raw EISDIR', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'machinery-dir-'));
+  try {
+    assert.throws(
+      () => extract(dir),
+      (e) => e.code !== 'EISDIR' && /not a file/i.test(e.message),
+      'expected a clean Not-a-file error, not raw EISDIR'
+    );
+  } finally {
+    fs.rmdirSync(dir);
+  }
+});

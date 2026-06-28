@@ -30,6 +30,10 @@ function extract(filePath, options = {}) {
 
   const content = fs.readFileSync(absInput, 'utf8');
   const parsed = JSON.parse(content);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
+      || !parsed.states || typeof parsed.states !== 'object' || Array.isArray(parsed.states)) {
+    throw new Error('Stately: invalid machine — expected an object with a "states" object');
+  }
 
   const machineId = parsed.id || path.basename(filePath, '.json');
   const initial = String(parsed.initial);
@@ -41,7 +45,7 @@ function extract(filePath, options = {}) {
 
   const transitions = [];
   for (const [stateName, stateDef] of Object.entries(parsed.states)) {
-    if (!stateDef.on) continue;
+    if (!stateDef || !stateDef.on) continue;
     for (const [eventName, transVal] of Object.entries(stateDef.on)) {
       const branches = Array.isArray(transVal) ? transVal : [transVal];
       for (const branch of branches) {

@@ -19,6 +19,9 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('statig adapter: filePath must be a non-empty string');
+  }
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
 
@@ -29,10 +32,10 @@ function extract(filePath, options = {}) {
   let initial = '';
 
   // Extract initial state from #[state_machine(initial = "State::Idle")] or #[state_machine(initial = "idle")]
-  const smAttrMatch = content.match(/#\[state_machine\s*\(\s*([^)]+)\)/);
+  const smAttrMatch = content.match(/#\[state_machine\s*\(\s*(.+?)\)\s*\]/);
   if (smAttrMatch) {
     const attrs = smAttrMatch[1];
-    const initialMatch = attrs.match(/initial\s*=\s*["'](?:\w+::)?(\w+)["']/);
+    const initialMatch = attrs.match(/initial\s*=\s*["'](?:\w+::)?(\w+)(?:\s*\([^)]*\))?["']/);
     if (initialMatch) {
       initial = initialMatch[1];
       stateSet.add(initial);
@@ -42,13 +45,13 @@ function extract(filePath, options = {}) {
   // Extract #[transition] attributes:
   // #[transition(from = "StateA", to = "StateB", event = "EventName")]
   // #[transition(from = "State::A", to = "State::B", event = "E")]
-  const transPattern = /#\[transition\s*\(\s*([^)]+)\)/g;
+  const transPattern = /#\[transition\s*\(\s*(.+?)\)\s*\]/g;
   let tm;
   while ((tm = transPattern.exec(content)) !== null) {
     const attrs = tm[1];
 
-    const fromMatch = attrs.match(/from\s*=\s*["'](?:\w+::)?(\w+)["']/);
-    const toMatch = attrs.match(/to\s*=\s*["'](?:\w+::)?(\w+)["']/);
+    const fromMatch = attrs.match(/from\s*=\s*["'](?:\w+::)?(\w+)(?:\s*\([^)]*\))?["']/);
+    const toMatch = attrs.match(/to\s*=\s*["'](?:\w+::)?(\w+)(?:\s*\([^)]*\))?["']/);
     const eventMatch = attrs.match(/event\s*=\s*["'](\w+)["']/);
 
     const fromState = fromMatch ? fromMatch[1] : '';
@@ -78,7 +81,12 @@ function extract(filePath, options = {}) {
   const enumPattern = /enum\s+State\s*\{([^}]+)\}/g;
   let enm;
   while ((enm = enumPattern.exec(content)) !== null) {
-    const variants = enm[1];
+    // Strip data payloads `(...)`, struct payloads `{...}`, and discriminant
+    // values `= 0` so only variant identifiers remain.
+    const variants = enm[1]
+      .replace(/\([^)]*\)/g, '')
+      .replace(/\{[^}]*\}/g, '')
+      .replace(/=\s*[^,]+/g, '');
     const variantPattern = /(\w+)/g;
     let vm;
     while ((vm = variantPattern.exec(variants)) !== null) {

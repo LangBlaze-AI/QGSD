@@ -23,7 +23,10 @@ function extract(filePath, options = {}) {
   const content = fs.readFileSync(absInput, 'utf8');
 
   // Parse const blocks to build name->value mapping
-  const constMap = {};
+  // Object.create(null) avoids inherited Object.prototype members (constructor,
+  // toString, valueOf, __proto__) leaking through resolve() for identifiers that
+  // are not declared as consts.
+  const constMap = Object.create(null);
   const constPattern = /(\w+)\s*=\s*"(\w+)"/g;
   let cm;
   while ((cm = constPattern.exec(content)) !== null) {

@@ -67,3 +67,32 @@ test('extract parses Spring Statemachine fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract throws a clean error for a directory path (not raw EISDIR)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spring-sm-dir-'));
+  try {
+    assert.throws(
+      () => extract(dir),
+      (err) => {
+        assert.notStrictEqual(err.code, 'EISDIR', 'should not leak raw EISDIR');
+        assert.ok(/not a file|file not found/i.test(err.message));
+        return true;
+      }
+    );
+  } finally {
+    fs.rmdirSync(dir);
+  }
+});
+
+test('extract throws a clean error for a non-string filePath', () => {
+  for (const bad of [undefined, null, 123]) {
+    assert.throws(
+      () => extract(bad),
+      (err) => {
+        assert.notStrictEqual(err.code, 'ERR_INVALID_ARG_TYPE', 'should not leak raw ERR_INVALID_ARG_TYPE');
+        assert.ok(/filePath|file path|expected.*string/i.test(err.message));
+        return true;
+      }
+    );
+  }
+});

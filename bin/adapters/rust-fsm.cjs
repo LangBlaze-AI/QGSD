@@ -20,6 +20,7 @@ function detect(filePath, content) {
 function extract(filePath, options = {}) {
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
+  if (!fs.statSync(absInput).isFile()) throw new Error('Not a file: ' + absInput);
 
   const content = fs.readFileSync(absInput, 'utf8');
 
@@ -58,7 +59,16 @@ function extract(filePath, options = {}) {
     const block = content.slice(bodyStart, pos);
 
     // Machine name and initial state: MachineName(InitialState)
-    const machineMatch = block.match(/(\w+)\s*\(\s*(\w+)\s*\)/);
+    // Scan and skip the derive(...) attribute so a single-trait derive
+    // (e.g. derive(Clone)) is never mistaken for the machine declaration.
+    const machineDeclPattern = /(\w+)\s*\(\s*(\w+)\s*\)/g;
+    let machineMatch = null;
+    let mdm;
+    while ((mdm = machineDeclPattern.exec(block)) !== null) {
+      if (mdm[1] === 'derive') continue;
+      machineMatch = mdm;
+      break;
+    }
     if (machineMatch && !initial) {
       initial = machineMatch[2];
       stateSet.add(initial);

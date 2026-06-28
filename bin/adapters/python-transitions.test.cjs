@@ -45,3 +45,54 @@ test('extract parses Python transitions fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract throws clean error for non-string filePath', () => {
+  assert.throws(() => extract(null), /filePath must be a non-empty string/);
+  assert.throws(() => extract(undefined), /filePath must be a non-empty string/);
+  assert.throws(() => extract(42), /filePath must be a non-empty string/);
+});
+
+test('extract does not match prefixed *states variables', () => {
+  const content = `
+from transitions import Machine
+ui_states = ['hidden']
+states = ['idle', 'processing', 'done', 'archived']
+transitions = [
+    { 'trigger': 'start', 'source': 'idle', 'dest': 'processing' }
+]
+machine = Machine(model, states=states, transitions=transitions, initial='idle')
+`;
+  const tmpFile = path.join(os.tmpdir(), 'py-transitions-prefix-' + Date.now() + '.py');
+  fs.writeFileSync(tmpFile, content, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.ok(ir.stateNames.includes('archived'), 'should capture archived from the real states list');
+    assert.ok(ir.stateNames.includes('done'), 'should capture done from the real states list');
+    assert.ok(!ir.stateNames.includes('hidden'), 'should not capture hidden from ui_states');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract parses list/tuple-format transitions', () => {
+  const content = `
+from transitions import Machine
+states = ['idle', 'processing', 'done']
+transitions = [
+    ['start', 'idle', 'processing'],
+    ['finish', 'processing', 'done']
+]
+machine = Machine(model, states=states, transitions=transitions, initial='idle')
+`;
+  const tmpFile = path.join(os.tmpdir(), 'py-transitions-list-' + Date.now() + '.py');
+  fs.writeFileSync(tmpFile, content, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.strictEqual(ir.transitions.length, 2);
+    assert.strictEqual(ir.transitions[0].event, 'start');
+    assert.strictEqual(ir.transitions[0].fromState, 'idle');
+    assert.strictEqual(ir.transitions[0].target, 'processing');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

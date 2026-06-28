@@ -41,16 +41,20 @@ function extract(filePath, options = {}) {
   const finalStates = [];
   const transitions = [];
 
+  const seenStates = new WeakSet();
   function collectStates(stateList) {
     if (!Array.isArray(stateList)) return;
     for (const s of stateList) {
-      if (!s || !s.name) continue;
+      if (!s || typeof s !== 'object' || !s.name) continue;
+      if (seenStates.has(s)) continue;
+      seenStates.add(s);
       stateNames.push(s.name);
       if (s.type === 'final') finalStates.push(s.name);
 
       // Collect transitions from this state
       if (Array.isArray(s.transitions)) {
         for (const t of s.transitions) {
+          if (!t || typeof t !== 'object') continue;
           transitions.push({
             fromState: s.name,
             event: t.event || 'auto',

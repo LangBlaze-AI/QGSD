@@ -18,8 +18,12 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('Invalid filePath: expected a non-empty string, received ' + (filePath === null ? 'null' : typeof filePath));
+  }
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
+  if (!fs.statSync(absInput).isFile()) throw new Error('Not a file: ' + absInput);
 
   const content = fs.readFileSync(absInput, 'utf8');
 
