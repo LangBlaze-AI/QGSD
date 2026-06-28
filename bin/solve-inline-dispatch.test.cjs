@@ -45,6 +45,27 @@ test('runDtoC handles empty broken_claims array', () => {
   assert.equal(res.broken_claims_count, 0);
 });
 
+test('runDtoC does not crash when broken_claims is a non-array', () => {
+  const res = runDtoC({ d_to_c: { residual: 1, detail: { broken_claims: 'oops' } } });
+  assert.equal(res.status, 'skipped');
+  assert.equal(res.broken_claims_count, 0);
+  assert.equal(res.table, '');
+});
+
+test('runDtoC does not crash when broken_claims contains null entries', () => {
+  const res = runDtoC({ d_to_c: { residual: 1, detail: { broken_claims: [null, { doc_file: 'a.md', line: 1, type: 't', value: 'v', reason: 'r' }] } } });
+  assert.equal(res.status, 'ok');
+  assert.equal(res.broken_claims_count, 2);
+  assert.ok(res.table.includes('a.md'));
+});
+
+test('runDtoC does not crash when claim fields are non-string', () => {
+  const res = runDtoC({ d_to_c: { residual: 1, detail: { broken_claims: [{ doc_file: 'a.md', line: 7, type: 'count', value: 42, reason: 'mismatch' }] } } });
+  assert.equal(res.status, 'ok');
+  assert.equal(res.broken_claims_count, 1);
+  assert.ok(res.table.includes('42'));
+});
+
 // ── Integration test: script runs with zero residual ─────────────────────────
 
 test('script outputs valid JSON with zero residual via --input', () => {

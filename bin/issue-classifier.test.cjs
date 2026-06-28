@@ -267,3 +267,32 @@ test('empty report: exits 0, writes 0 issues', () => {
   assert.deepEqual(fixes.issues, []);
   assert.ok(stdout.includes('0 issues'));
 });
+
+// ─── Adversarial: non-object / malformed report shapes (fail-open) ────────────
+
+test('report.json is literal null: exits 0 with empty issues (fail-safe)', () => {
+  const tmpDir = makeTmpDir();
+  const telemetryDir = path.join(tmpDir, '.planning', 'telemetry');
+  fs.mkdirSync(telemetryDir, { recursive: true });
+  fs.writeFileSync(path.join(telemetryDir, 'report.json'), 'null', 'utf8');
+  const { exitCode } = run(tmpDir);
+  assert.equal(exitCode, 0);
+  const fixes = readFixes(tmpDir);
+  assert.deepEqual(fixes.issues, []);
+});
+
+test('mcp.servers with null stats entry: exits 0, no crash', () => {
+  const tmpDir = makeTmpDir();
+  writeReport(tmpDir, { mcp: { servers: { 'srv': null } } });
+  const { exitCode } = run(tmpDir);
+  assert.equal(exitCode, 0);
+  const fixes = readFixes(tmpDir);
+  assert.deepEqual(fixes.issues, []);
+});
+
+test('mcp.alwaysFailing with non-string entry: exits 0, no crash', () => {
+  const tmpDir = makeTmpDir();
+  writeReport(tmpDir, { mcp: { alwaysFailing: [null] } });
+  const { exitCode } = run(tmpDir);
+  assert.equal(exitCode, 0);
+});

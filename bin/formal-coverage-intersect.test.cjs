@@ -215,3 +215,24 @@ test('detects intersection against real project scope.json files', () => {
   assert.strictEqual(json.intersections_found, true);
   assert.ok(json.modules.some(m => m.name === 'quorum'), 'Should find quorum module');
 });
+
+// ─── Test 11: skips scope.json that is valid JSON `null` without crashing ───
+test('skips scope.json that is valid JSON null without crashing (fail-open)', () => {
+  const tmpDir = createTmpProject([
+    // createTmpProject does JSON.stringify(null) -> writes the literal "null"
+    { name: 'null-mod', scope: null },
+    {
+      name: 'valid',
+      scope: { source_files: ['hooks/*.js'], concepts: [], requirements: [] }
+    }
+  ]);
+
+  // 'null-mod' sorts before 'valid', so the null module is scanned first and
+  // must NOT abort the run before the valid module is reached.
+  const result = run(['--files', 'hooks/nf-stop.js'], tmpDir);
+  assert.strictEqual(result.status, 0, 'Expected exit 0 — null module skipped, valid matched (currently crashes with exit 1)');
+  const json = JSON.parse(result.stdout);
+  assert.strictEqual(json.intersections_found, true);
+  assert.ok(json.modules.some(m => m.name === 'valid'), 'Should still find the valid module');
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});

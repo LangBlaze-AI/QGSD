@@ -86,7 +86,10 @@ function computeLayerMaturity(modelPath, specModules) {
 function main() {
   // Read registry
   const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
-  const models = registry.models;
+  const models = (registry && typeof registry.models === 'object' && registry.models !== null && !Array.isArray(registry.models))
+    ? registry.models
+    : {};
+  registry.models = models;
   const modelPaths = Object.keys(models);
 
   // Discover spec modules with invariants.md
@@ -107,6 +110,10 @@ function main() {
   const maturityDist = { 0: 0, 1: 0 };
 
   for (const modelPath of modelPaths) {
+    const entry = models[modelPath];
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      continue; // skip corrupt/non-object registry entries instead of crashing
+    }
     const layer = classifyModel(modelPath);
     const layerMaturity = computeLayerMaturity(modelPath, specModules);
     const gateMat = 'ADVISORY';

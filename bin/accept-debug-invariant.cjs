@@ -66,6 +66,16 @@ if (!sessionId) {
   process.exit(1);
 }
 
+// Validate property name is a plain TLA identifier (no regex metacharacters)
+const PROPERTY_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+if (!PROPERTY_NAME_RE.test(propertyName)) {
+  process.stderr.write(
+    'Error: --property-name must be a TLA identifier (letters, digits, underscore; ' +
+    'starting with a letter or underscore)\n'
+  );
+  process.exit(1);
+}
+
 // Validate session-id format: debug-sess-<unix-timestamp-seconds>-<8-char-hex>
 const SESSION_ID_RE = /^debug-sess-\d+-[0-9a-f]{8}$/;
 if (!SESSION_ID_RE.test(sessionId)) {
@@ -87,7 +97,8 @@ if (!fs.existsSync(resolvedTarget)) {
 const specContent = fs.readFileSync(resolvedTarget, 'utf8');
 
 // ── Check for duplicate property name ─────────────────────────────────────
-const duplicateRe = new RegExp('^PROPERTY\\s+' + propertyName + '\\b', 'm');
+const escapedName = propertyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const duplicateRe = new RegExp('^PROPERTY\\s+' + escapedName + '\\b', 'm');
 if (duplicateRe.test(specContent)) {
   process.stderr.write('Error: PROPERTY ' + propertyName + ' already exists in spec\n');
   process.exit(1);
@@ -129,6 +140,11 @@ if (!fs.existsSync(registryPath)) {
     registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
   } catch (err) {
     process.stderr.write('[accept-debug-invariant] Warning: cannot parse registry — skipping update: ' + err.message + '\n');
+    registry = null;
+  }
+
+  if (registry !== null && (typeof registry !== 'object' || Array.isArray(registry))) {
+    process.stderr.write('[accept-debug-invariant] Warning: registry is not a JSON object — skipping registry update\n');
     registry = null;
   }
 

@@ -20,14 +20,16 @@ const path = require('path');
 // classifyDivergence: given a TTrace record, classify the root cause.
 // Returns { specBugConfidence, implBugConfidence, failingGuard, recommendation, evidence }.
 function classifyDivergence(ttrace) {
-  const { event, actualState, expectedState, guardEvaluations, divergenceType } = ttrace;
+  const t = (ttrace && typeof ttrace === 'object') ? ttrace : {};
+  const { event, actualState, expectedState, guardEvaluations, divergenceType } = t;
   let specBugConfidence = 50;  // start at 50/50
   let implBugConfidence = 50;
   let failingGuard = null;
   const evidence = [];
 
   // Evidence 1: Are there guard evaluations where a guard failed?
-  const failedGuards = (guardEvaluations || []).filter(g => !g.passed);
+  const failedGuards = (Array.isArray(guardEvaluations) ? guardEvaluations : [])
+    .filter(g => g && typeof g === 'object' && !g.passed);
   if (failedGuards.length > 0) {
     failingGuard = failedGuards[0].guardName;
     evidence.push(`Guard "${failingGuard}" evaluated to false`);
@@ -78,7 +80,8 @@ function classifyDivergence(ttrace) {
 // analyzeTrace: full attribution for one TTrace record.
 // Returns structured analysis object.
 function analyzeTrace(ttrace, machine, walker) {
-  const { event, actualState, expectedState, divergenceType } = ttrace;
+  const t = (ttrace && typeof ttrace === 'object') ? ttrace : {};
+  const { event, actualState, expectedState, divergenceType } = t;
   const classification = classifyDivergence(ttrace);
   return {
     event_action:         event?.action || 'unknown',

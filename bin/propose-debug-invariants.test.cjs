@@ -80,3 +80,29 @@ test('LOOP-04: propose-debug-invariants.cjs exits 0 when debug artifact does not
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('LOOP-04: mineTransitions captures chained transitions (A -> B -> C yields the B->C hint)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'propose-invariants-chain-'));
+  try {
+    const planningDir = path.join(tmpDir, '.planning', 'quick');
+    fs.mkdirSync(planningDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(planningDir, 'quorum-debug-latest.md'),
+      'State transition: IDLE -> DECIDING -> COMPLETE\n',
+      'utf8'
+    );
+
+    const result = spawnSync(process.execPath, [
+      path.join(__dirname, 'propose-debug-invariants.cjs'),
+      '--non-interactive'
+    ], { encoding: 'utf8', cwd: tmpDir, timeout: 10000 });
+
+    assert.strictEqual(result.status, 0, 'must exit 0 (fail-open)');
+    assert.ok(result.stdout.includes('TransitionHint_IDLE_to_DECIDING'),
+      'must propose the first transition IDLE->DECIDING');
+    assert.ok(result.stdout.includes('TransitionHint_DECIDING_to_COMPLETE'),
+      'must ALSO propose the chained transition DECIDING->COMPLETE (currently dropped)');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

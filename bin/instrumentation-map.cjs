@@ -32,10 +32,16 @@ const OBSERVE_GLOB = 'bin/observe-handler-';
  * Looks for appendFileSync calls near conformance-events and extracts action types.
  */
 function scanFile(filePath) {
+  if (typeof filePath !== 'string' || filePath.length === 0) return [];
   const absPath = path.join(ROOT, filePath);
-  if (!fs.existsSync(absPath)) return [];
-
-  const lines = fs.readFileSync(absPath, 'utf8').split('\n');
+  let lines;
+  try {
+    const stat = fs.statSync(absPath);
+    if (!stat.isFile()) return [];
+    lines = fs.readFileSync(absPath, 'utf8').split('\n');
+  } catch {
+    return [];
+  }
   const emissionPoints = [];
 
   for (let i = 0; i < lines.length; i++) {

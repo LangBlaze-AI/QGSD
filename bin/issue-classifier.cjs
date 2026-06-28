@@ -31,7 +31,7 @@ const FIXES_PATH    = path.join(TELEMETRY_DIR, 'pending-fixes.json');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function slug(str) {
-  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return String(str == null ? '' : str).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 function writeEmpty(reason) {
@@ -50,6 +50,10 @@ try {
   report = JSON.parse(fs.readFileSync(REPORT_PATH, 'utf8'));
 } catch (err) {
   writeEmpty('Failed to parse report.json: ' + err.message);
+}
+
+if (!report || typeof report !== 'object' || Array.isArray(report)) {
+  writeEmpty('report.json is not an object');
 }
 
 const mcp            = report.mcp            || {};
@@ -85,7 +89,7 @@ if (circuitBreaker.active === true) {
 
 // ─── Rule 3: High hang count (80 pts) ─────────────────────────────────────────
 for (const [serverName, stats] of Object.entries(mcp.servers || {})) {
-  if ((stats.hangCount || 0) > 5) {
+  if (stats && typeof stats === 'object' && (stats.hangCount || 0) > 5) {
     issues.push({
       id:          'mcp-high-hangs-' + slug(serverName),
       priority:    80,

@@ -277,3 +277,27 @@ describe('config validation - budget', () => {
     assert.equal(config.budget.downgrade_pct, 85);
   });
 });
+
+// --- detectOscillation adversarial (BT-1) ---
+
+describe('detectOscillation adversarial', () => {
+  it('returns false (no crash) when recent history entries are null', () => {
+    assert.doesNotThrow(() => detectOscillation([null, null, null]));
+    assert.equal(detectOscillation([null, null, null]), false);
+  });
+
+  it('returns false (no crash) when recent history entries are non-objects', () => {
+    assert.equal(detectOscillation(['a', 'b', 'c']), false);
+  });
+});
+
+// --- computeBudgetStatus invalid usedPct (BT-2) ---
+
+describe('computeBudgetStatus invalid usedPct', () => {
+  it('does not propagate NaN for non-numeric usedPct', () => {
+    const result = computeBudgetStatus(undefined, { session_limit_tokens: 100000 }, {});
+    assert.equal(result.active, true);
+    assert.ok(!Number.isNaN(result.estimatedTokens), 'estimatedTokens must not be NaN');
+    assert.ok(!Number.isNaN(result.budgetUsedPct), 'budgetUsedPct must not be NaN');
+  });
+});

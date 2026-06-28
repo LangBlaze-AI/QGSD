@@ -164,3 +164,48 @@ describe('integration', () => {
     assert.ok(stdout.includes('Found 0 violations'));
   });
 });
+
+// ---------------------------------------------------------------------------
+// ESM dynamic and side-effect import detection (DP-1)
+// ---------------------------------------------------------------------------
+
+describe('ESM dynamic and side-effect import detection', () => {
+  it('detects dynamic import() of openai', () => {
+    const file = writeFixture('dyn.mjs', "const O = await import('openai');");
+    const violations = scanFile(file);
+    assert.equal(violations.length, 1);
+    assert.equal(violations[0].sdk, 'openai');
+  });
+
+  it('detects side-effect import of openai', () => {
+    const file = writeFixture('side.mjs', "import 'openai';");
+    const violations = scanFile(file);
+    assert.equal(violations.length, 1);
+    assert.equal(violations[0].sdk, 'openai');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Template-literal require detection (DP-2)
+// ---------------------------------------------------------------------------
+
+describe('template-literal require detection', () => {
+  it('detects require with backtick quotes', () => {
+    const file = writeFixture('tmpl.cjs', 'const O = require(`openai`);');
+    const violations = scanFile(file);
+    assert.equal(violations.length, 1);
+    assert.equal(violations[0].sdk, 'openai');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isInScope type safety (DP-3)
+// ---------------------------------------------------------------------------
+
+describe('isInScope type safety', () => {
+  it('returns false for non-string input instead of throwing', () => {
+    assert.equal(isInScope(null), false);
+    assert.equal(isInScope(undefined), false);
+    assert.equal(isInScope(42), false);
+  });
+});

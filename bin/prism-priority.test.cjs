@@ -103,6 +103,31 @@ describe('rankFailureModes', () => {
   });
 });
 
+describe('rankFailureModes — prototype-pollution check_id', () => {
+  test('uses default impact for __proto__ / constructor check_id', () => {
+    const results = [
+      { check_id: '__proto__', result: 'fail', summary: 'evil', timestamp: '', metadata: {} },
+      { check_id: 'constructor', result: 'fail', summary: 'evil2', timestamp: '', metadata: {} },
+    ];
+    const ranked = rankFailureModes(results);
+    const proto = ranked.find(r => r.check_id === '__proto__');
+    const ctor  = ranked.find(r => r.check_id === 'constructor');
+    assert.strictEqual(proto.impact, 5, '__proto__ check_id should fall back to default impact 5');
+    assert.strictEqual(proto.priority, 5.0, 'priority must be a finite number, not NaN');
+    assert.ok(!Number.isNaN(proto.priority), 'priority must not be NaN');
+    assert.strictEqual(ctor.impact, 5, 'constructor check_id should fall back to default impact 5');
+    assert.ok(!Number.isNaN(ctor.priority), 'priority must not be NaN');
+  });
+});
+
+describe('rankFailureModes — non-array input', () => {
+  test('returns empty array for null/undefined/non-array input', () => {
+    assert.deepStrictEqual(rankFailureModes(null), []);
+    assert.deepStrictEqual(rankFailureModes(undefined), []);
+    assert.deepStrictEqual(rankFailureModes({}), []);
+  });
+});
+
 // ── formatPrioritySignal tests ───────────────────────────────────────────────
 
 describe('formatPrioritySignal', () => {

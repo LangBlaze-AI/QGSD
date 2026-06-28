@@ -15,6 +15,7 @@ const { formatAge } = require('./observe-utils.cjs');
  * @returns {Promise<object>} Standard schema result
  */
 async function handlePrometheus(sourceConfig, options) {
+  if (!sourceConfig || typeof sourceConfig !== 'object') sourceConfig = {};
   const label = sourceConfig.label || 'Prometheus';
   const endpoint = (sourceConfig.endpoint || '').replace(/\/$/, '');
   const fetchFn = (options && options.fetchFn) || globalThis.fetch;
@@ -72,6 +73,7 @@ function mapAlertsResult(data, sourceConfig, label) {
   const alerts = (data && data.data && Array.isArray(data.data.alerts)) ? data.data.alerts : [];
 
   const issues = alerts.map((alert, idx) => {
+    if (!alert || typeof alert !== 'object') alert = {};
     const labels = alert.labels || {};
     const annotations = alert.annotations || {};
     const alertname = labels.alertname || `alert-${idx}`;
@@ -134,6 +136,7 @@ function mapQueryResult(data, sourceConfig, label) {
   } else {
     // Vector: result is array of { metric: {...}, value: [ts, "val"] }
     issues = (Array.isArray(result) ? result : []).map((item, idx) => {
+      if (!item || typeof item !== 'object') item = {};
       const metric = item.metric || {};
       const metricName = metric.__name__ || 'unknown_metric';
       const value = Array.isArray(item.value) ? item.value[1] : '0';

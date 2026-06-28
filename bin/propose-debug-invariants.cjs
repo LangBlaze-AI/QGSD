@@ -28,6 +28,7 @@ function mineTransitions(lines) {
     re.lastIndex = 0;
     while ((m = re.exec(lines[i])) !== null) {
       const from = m[1], to = m[2];
+      re.lastIndex -= to.length; // allow the shared token to start the next transition (chained A -> B -> C)
       const key = from + '_' + to;
       if (seen.has(key)) continue;
       seen.add(key);

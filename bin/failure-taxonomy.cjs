@@ -33,6 +33,9 @@ const TIMEOUT_THRESHOLD_MS = 60000;
  * - degradation: metrics trending worse (reserved; falls back to logic_violation when no baseline)
  */
 function classifyFailure(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return { category: 'logic_violation', reason: 'Logic violation: missing or malformed check-result entry' };
+  }
   // Check for crash indicators
   if (entry.metadata && entry.metadata.stack_trace) {
     return { category: 'crash', reason: 'Stack trace present in metadata' };
@@ -49,7 +52,7 @@ function classifyFailure(entry) {
 
   // Check for drift (trace formalism with divergences)
   if (entry.formalism === 'trace') {
-    const divMatch = entry.summary && entry.summary.match(/(\d+)\s+divergence/);
+    const divMatch = entry.summary && String(entry.summary).match(/(\d+)\s+divergence/);
     if (divMatch) {
       return { category: 'drift', reason: `Trace divergence: ${divMatch[1]} divergence(s) detected` };
     }
@@ -61,7 +64,7 @@ function classifyFailure(entry) {
 
   // Default: logic_violation (counterexample, assertion failure, etc.)
   return { category: 'logic_violation', reason: entry.summary
-    ? `Logic violation: ${entry.summary.substring(0, 100)}`
+    ? `Logic violation: ${String(entry.summary).substring(0, 100)}`
     : 'Logic violation: check-result failure without specific categorization' };
 }
 

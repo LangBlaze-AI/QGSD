@@ -116,3 +116,56 @@ describe('build-layer-manifest integration', () => {
     fs.writeFileSync(REGISTRY_PATH, registryBackup, 'utf8');
   });
 });
+
+describe('build-layer-manifest adversarial: registry shape', () => {
+  const os = require('os');
+  it('does not crash when registry has no models key', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'blm-'));
+    const fdir = path.join(tmp, '.planning', 'formal');
+    fs.mkdirSync(fdir, { recursive: true });
+    fs.writeFileSync(path.join(fdir, 'model-registry.json'),
+      JSON.stringify({ version: 1 }), 'utf8');
+    let err = null;
+    try {
+      execFileSync('node', ['bin/build-layer-manifest.cjs'], {
+        cwd: ROOT,
+        env: { ...process.env, PROJECT_ROOT: tmp },
+        stdio: 'pipe',
+      });
+    } catch (e) { err = e; }
+    assert.strictEqual(err, null,
+      'script must not crash on registry missing a models key');
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(fdir, 'layer-manifest.json'), 'utf8'));
+    assert.strictEqual(manifest.summary.total_models, 0);
+  });
+});
+
+describe('build-layer-manifest adversarial: model entry shape', () => {
+  const os = require('os');
+  it('does not crash on null or non-object model entries', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'blm-'));
+    const fdir = path.join(tmp, '.planning', 'formal');
+    fs.mkdirSync(fdir, { recursive: true });
+    fs.writeFileSync(path.join(fdir, 'model-registry.json'),
+      JSON.stringify({ models: {
+        '.planning/formal/tla/Foo.tla': null,
+        'bar.als': 'oops',
+        '.planning/formal/tla/Good.tla': { description: 'ok' },
+      } }), 'utf8');
+    let err = null;
+    try {
+      execFileSync('node', ['bin/build-layer-manifest.cjs'], {
+        cwd: ROOT,
+        env: { ...process.env, PROJECT_ROOT: tmp },
+        stdio: 'pipe',
+      });
+    } catch (e) { err = e; }
+    assert.strictEqual(err, null,
+      'script must not crash on null/non-object model entries');
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(fdir, 'layer-manifest.json'), 'utf8'));
+    // the one valid TLA model is still classified
+    assert.strictEqual(manifest.layers.L3.length, 1);
+  });
+});

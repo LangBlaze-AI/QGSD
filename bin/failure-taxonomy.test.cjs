@@ -98,3 +98,42 @@ describe('failure-taxonomy integration', () => {
     assert.ok(result.total_failures >= 0, `Expected 0+ failures/errors, got ${result.total_failures}`);
   });
 });
+
+describe('failure-taxonomy null/malformed entry hardening', () => {
+  it('does not crash on null entry and returns a valid category', () => {
+    let result;
+    assert.doesNotThrow(() => { result = classifyFailure(null); });
+    assert.ok(
+      ['crash', 'timeout', 'logic_violation', 'drift', 'degradation'].includes(result.category),
+      `Invalid category for null entry: ${result && result.category}`
+    );
+  });
+
+  it('does not crash on undefined or non-object entry', () => {
+    assert.doesNotThrow(() => classifyFailure(undefined));
+    assert.doesNotThrow(() => classifyFailure('not-an-object'));
+  });
+});
+
+describe('failure-taxonomy non-string summary hardening', () => {
+  it('does not crash on numeric summary in default branch', () => {
+    const entry = { result: 'fail', formalism: 'tla', runtime_ms: 100, summary: 12345 };
+    let result;
+    assert.doesNotThrow(() => { result = classifyFailure(entry); });
+    assert.strictEqual(result.category, 'logic_violation');
+  });
+
+  it('does not crash on array summary in default branch', () => {
+    const entry = { result: 'fail', formalism: 'tla', summary: ['a', 'b'] };
+    assert.doesNotThrow(() => classifyFailure(entry));
+  });
+});
+
+describe('failure-taxonomy trace branch non-string summary hardening', () => {
+  it('does not crash on numeric summary for trace formalism', () => {
+    const entry = { result: 'fail', formalism: 'trace', summary: 6369 };
+    let result;
+    assert.doesNotThrow(() => { result = classifyFailure(entry); });
+    assert.strictEqual(result.category, 'drift');
+  });
+});

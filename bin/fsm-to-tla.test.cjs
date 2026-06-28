@@ -59,3 +59,14 @@ test('--scaffold-config produces JSON with guards and vars', () => {
   assert.ok(config.guards, 'Should have guards key');
   assert.ok(config.vars, 'Should have vars key');
 });
+
+test('--framework with unknown id exits cleanly with a TAG message (no raw stack trace)', () => {
+  const result = spawnSync(
+    process.execPath,
+    [FSM_TO_TLA, 'src/machines/nf-workflow.machine.ts', '--framework=bogus'],
+    { encoding: 'utf8', cwd: PROJECT_ROOT }
+  );
+  assert.strictEqual(result.status, 1);
+  assert.match(result.stderr, /\[fsm-to-tla\]/, 'should emit a TAG-prefixed friendly error');
+  assert.ok(!/\n\s+at getAdapter/.test(result.stderr), 'should NOT print a raw stack trace');
+});
