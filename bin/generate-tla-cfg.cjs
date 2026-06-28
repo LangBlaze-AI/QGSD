@@ -32,7 +32,9 @@ const LIVENESS_AGENTS = 3;   // N for MCliveness — smaller for tractable liven
 
 // ── Extract MaxDeliberation from the XState machine ───────────────────────────
 const machineFile = path.join(ROOT, 'src', 'machines', 'nf-workflow.machine.ts');
-if (!fs.existsSync(machineFile)) {
+let machineStat = null;
+try { machineStat = fs.statSync(machineFile); } catch (_e) { machineStat = null; }
+if (!machineStat || !machineStat.isFile()) {
   process.stderr.write('[generate-tla-cfg] XState machine not found: ' + machineFile + '\n');
   process.exit(1);
 }
@@ -116,6 +118,8 @@ if (DRY) {
   process.stdout.write('\n--- MCsafety.cfg ---\n' + safetyCfg);
   process.stdout.write('\n--- MCliveness.cfg ---\n' + livenessCfg);
 } else {
+  fs.mkdirSync(path.dirname(safetyPath),   { recursive: true });
+  fs.mkdirSync(path.dirname(livenessPath), { recursive: true });
   fs.writeFileSync(safetyPath,   safetyCfg,   'utf8');
   fs.writeFileSync(livenessPath, livenessCfg, 'utf8');
   process.stdout.write('[generate-tla-cfg] Written: .planning/formal/tla/MCsafety.cfg\n');

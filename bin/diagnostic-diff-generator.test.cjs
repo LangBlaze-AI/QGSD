@@ -175,3 +175,33 @@ test('generateStateDiff: identifies first divergence index correctly', () => {
   const result = generateStateDiff(statesA, statesB);
   assert.strictEqual(result.summary.first_divergence_index, 2);
 });
+
+test('generateStateDiff: fails open on null/undefined sequences (no fieldFilter)', () => {
+  // No fieldFilter path must not crash on non-array inputs
+  const r1 = generateStateDiff(null, [{ x: 0 }]);
+  assert.strictEqual(r1.aligned_length, 0);
+  assert.strictEqual(r1.per_state_diffs.length, 0);
+  assert.strictEqual(r1.summary.first_divergence_index, null);
+  assert.strictEqual(r1.length_mismatch, true);
+
+  const r2 = generateStateDiff(undefined, undefined);
+  assert.strictEqual(r2.aligned_length, 0);
+  assert.strictEqual(r2.per_state_diffs.length, 0);
+
+  const r3 = generateStateDiff([{ x: 0 }], null);
+  assert.strictEqual(r3.aligned_length, 0);
+  assert.strictEqual(r3.length_mismatch, true);
+});
+
+test('formatDiffAsMarkdown: tolerates diffResult missing summary', () => {
+  const malformed = {
+    per_state_diffs: [
+      { index: 0, changes: [{ key: 'x', oldValue: 1, newValue: 2 }] }
+    ]
+    // no summary, no aligned_length, no length_mismatch
+  };
+  const markdown = formatDiffAsMarkdown(malformed);
+  assert(markdown.includes('## State Divergence Report'));
+  assert(markdown.includes('### State 0'));
+  assert(markdown.includes('| x | `1` | `2` |'));
+});

@@ -75,6 +75,7 @@ function registerAllHandlers() {
  * @returns {Promise<object>} { written, updated, errors, merged, linked, observations, results, sourceCount }
  */
 async function refreshDebtLedger(opts = {}) {
+  if (!opts || typeof opts !== 'object') opts = {};
   const { loadObserveConfig } = require(_nfBin('observe-config.cjs'));
   const { writeObservationsToDebt } = require(_nfBin('observe-debt-writer.cjs'));
 

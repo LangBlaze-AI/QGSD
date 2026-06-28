@@ -44,6 +44,20 @@ describe('parseMarkdownTable', () => {
     assert.equal(result.length, 2, 'Should skip malformed line');
   });
 
+  it('preserves rows that contain an empty interior cell', () => {
+    const input = `
+| # | Source | Name | Type | Coverage | Proposed Metric | Metric Type |
+|---|--------|------|------|----------|-----------------|-------------|
+| 1 |  | TypeOK | invariant | uncovered | \`nf_typeok\` | counter |
+`;
+    const result = parseMarkdownTable(input);
+    assert.equal(result.length, 1, 'row with empty source cell should still parse');
+    assert.equal(result[0].id, 1);
+    assert.equal(result[0].source, '');
+    assert.equal(result[0].name, 'TypeOK');
+    assert.equal(result[0].type, 'invariant');
+  });
+
   it('strips backticks from proposed_metric', () => {
     const input = `
 | # | Source | Name | Type | Coverage | Proposed Metric | Metric Type |
@@ -76,6 +90,15 @@ describe('parseMarkdownTable', () => {
 `;
     const result = parseMarkdownTable(input);
     assert.deepEqual(result[0].linked_l2_states, []);
+  });
+});
+
+describe('parseMarkdownTable hardening', () => {
+  it('returns [] for non-string input instead of throwing', () => {
+    assert.deepEqual(parseMarkdownTable(null), []);
+    assert.deepEqual(parseMarkdownTable(undefined), []);
+    assert.deepEqual(parseMarkdownTable(42), []);
+    assert.deepEqual(parseMarkdownTable({}), []);
   });
 });
 

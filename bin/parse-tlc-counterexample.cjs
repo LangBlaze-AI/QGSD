@@ -41,13 +41,17 @@ function parseITFTrace(traceJsonPath) {
     throw new Error(`Malformed JSON in ITF file: ${err.message}`);
   }
 
-  // Normalize special ITF values in states
-  const states = (trace.states || []).map(state => normalizeITFValue(state));
+  // Normalize special ITF values in states.
+  // Guard: a valid-JSON-but-non-object trace (`null`, a number, a string, an
+  // array) or a non-array `states` must degrade to an empty trace, not crash.
+  const isTraceObject = trace !== null && typeof trace === 'object' && !Array.isArray(trace);
+  const rawStates = isTraceObject && Array.isArray(trace.states) ? trace.states : [];
+  const states = rawStates.map(state => normalizeITFValue(state));
 
   return {
     states,
-    loopPoint: trace.loop !== undefined ? trace.loop : null,
-    violated_invariant: trace.violated_invariant || trace.violated || null,
+    loopPoint: isTraceObject && trace.loop !== undefined ? trace.loop : null,
+    violated_invariant: (isTraceObject && (trace.violated_invariant || trace.violated)) || null,
     trace_length: states.length
   };
 }

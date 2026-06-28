@@ -97,6 +97,15 @@ describe('getModelRecommendation', () => {
     assert.equal(rec.tier, 'sonnet');
     assert.equal(rec.thinking_budget, 8000);
   });
+
+  it('falls back to moderate for prototype-key complexity (no inherited-member leak)', () => {
+    for (const key of ['__proto__', 'constructor', 'toString', 'valueOf', 'hasOwnProperty']) {
+      const rec = getModelRecommendation(key, {});
+      assert.equal(rec.tier, 'sonnet', `tier for ${key}`);
+      assert.equal(rec.thinking_budget, 16000, `budget for ${key}`);
+      assert.ok(rec.description && rec.description.length > 0, `description for ${key}`);
+    }
+  });
 });
 
 describe('readTaskEnvelope', () => {

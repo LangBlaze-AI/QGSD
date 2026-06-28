@@ -72,14 +72,18 @@ function filterRequirementsByFocus(focusPhrase, { root = process.cwd() } = {}) {
   const matched = new Set();
 
   for (const r of requirements) {
-    const id = (r.id || r.requirement_id || '').toLowerCase();
-    const category = (r.category || '').toLowerCase();
-    const text = (r.text || r.description || '').toLowerCase();
-    const background = (r.background || '').toLowerCase();
+    if (!r || typeof r !== 'object') continue;
+    const id = String(r.id || r.requirement_id || '').toLowerCase();
+    const category = String(r.category || '').toLowerCase();
+    const text = String(r.text || r.description || '').toLowerCase();
+    const background = String(r.background || '').toLowerCase();
 
     // Look up the category group name for this requirement's raw category
     const rawCategory = r.category_raw || r.category || '';
-    const groupName = (categoryGroups[rawCategory] || '').toLowerCase();
+    const groupRaw = Object.prototype.hasOwnProperty.call(categoryGroups, rawCategory)
+      ? categoryGroups[rawCategory]
+      : '';
+    const groupName = (typeof groupRaw === 'string' ? groupRaw : '').toLowerCase();
 
     let score = 0;
 

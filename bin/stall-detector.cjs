@@ -28,9 +28,10 @@ function detectStalledSlots(cwd, config) {
     const data = JSON.parse(fs.readFileSync(failuresPath, 'utf8'));
     if (!Array.isArray(data) || data.length === 0) return [];
 
-    // Group records by slot
-    const bySlot = {};
+    // Group records by slot (null prototype so slot names like '__proto__'/'constructor' are ordinary keys)
+    const bySlot = Object.create(null);
     for (const record of data) {
+      if (!record || typeof record !== 'object') continue;
       const slot = record.slot || record.slot_name || 'unknown';
       if (!bySlot[slot]) bySlot[slot] = [];
       bySlot[slot].push(record);
@@ -73,7 +74,8 @@ function shouldEscalate(stalledSlots, config, cwd) {
   const stallCfg = (config && config.stall_detection) || {};
   const threshold = stallCfg.consecutive_threshold || 2;
 
-  const filtered = stalledSlots.filter(s => s.consecutiveTimeouts >= threshold);
+  const list = Array.isArray(stalledSlots) ? stalledSlots : [];
+  const filtered = list.filter(s => s && s.consecutiveTimeouts >= threshold);
 
   if (filtered.length === 0) {
     return { escalate: false, reason: 'below_threshold', stalledSlots: [] };

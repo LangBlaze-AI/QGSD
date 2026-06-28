@@ -117,6 +117,13 @@ describe('dispatchSource', () => {
     await dispatchSource({ type: 'test', label: 'T' }, { sinceOverride: '24h' }, 5);
     assert.equal(receivedOptions.sinceOverride, '24h');
   });
+
+  it('returns the standard error schema instead of throwing on null sourceConfig', async () => {
+    const result = await dispatchSource(null, {}, 5);
+    assert.equal(result.status, 'error');
+    assert.equal(result.source_type, 'unknown');
+    assert.deepEqual(result.issues, []);
+  });
 });
 
 describe('dispatchAll', () => {
@@ -172,5 +179,19 @@ describe('dispatchAll', () => {
   it('returns empty array for empty sources', async () => {
     const results = await dispatchAll([], {});
     assert.deepEqual(results, []);
+  });
+
+  it('does not let a null source entry crash the whole batch (OBS-08 fail-open)', async () => {
+    registerHandler('a', async () => ({
+      source_label: 'A', source_type: 'a', status: 'ok', issues: [{ id: 'a-1' }]
+    }));
+
+    const results = await dispatchAll([null, { type: 'a', label: 'A', timeout: 5 }], {});
+
+    assert.equal(results.length, 2);
+    assert.equal(results[0].status, 'error');
+    assert.deepEqual(results[0].issues, []);
+    assert.equal(results[1].status, 'ok');
+    assert.equal(results[1].source_label, 'A');
   });
 });

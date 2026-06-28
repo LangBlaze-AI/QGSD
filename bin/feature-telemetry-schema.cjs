@@ -75,6 +75,8 @@ function validateFeatureEvent(event) {
     errors.push('Missing required field: duration_ms');
   } else if (typeof event.duration_ms !== 'number') {
     errors.push('duration_ms must be a number');
+  } else if (!Number.isFinite(event.duration_ms)) {
+    errors.push('duration_ms must be a finite number');
   } else if (event.duration_ms < 0) {
     errors.push('duration_ms must be non-negative');
   }
@@ -84,7 +86,7 @@ function validateFeatureEvent(event) {
     if (typeof event.bug_link !== 'object') {
       errors.push('bug_link must be an object');
     } else {
-      if (!event.bug_link.issue_url || typeof event.bug_link.issue_url !== 'string') {
+      if (typeof event.bug_link.issue_url !== 'string' || event.bug_link.issue_url.trim() === '') {
         errors.push('bug_link.issue_url must be a non-empty string');
       }
       if (!event.bug_link.detection_type || !VALID_DETECTION_TYPES.includes(event.bug_link.detection_type)) {

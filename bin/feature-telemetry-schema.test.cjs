@@ -172,6 +172,26 @@ describe('feature-telemetry-schema', () => {
       assert.equal(result.valid, false);
       assert.ok(result.errors.some(e => e.includes('detection_type')));
     });
+
+    it('rejects NaN duration_ms', () => {
+      const result = validateFeatureEvent(validEvent({ duration_ms: NaN }));
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.some(e => e.includes('duration_ms')));
+    });
+
+    it('rejects Infinity duration_ms', () => {
+      const result = validateFeatureEvent(validEvent({ duration_ms: Infinity }));
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.some(e => e.includes('duration_ms')));
+    });
+
+    it('catches bug_link with whitespace-only issue_url', () => {
+      const result = validateFeatureEvent(validEvent({
+        bug_link: { issue_url: '   ', detection_type: 'detected' },
+      }));
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.some(e => e.includes('issue_url')));
+    });
   });
 
   describe('createFeatureEvent', () => {

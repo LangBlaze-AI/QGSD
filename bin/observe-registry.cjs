@@ -49,9 +49,10 @@ function listHandlers() {
  * @returns {Promise<object>} Standard schema result { source_label, source_type, status, issues[], error? }
  */
 async function dispatchSource(sourceConfig, options, timeoutSeconds) {
+  const cfg = (sourceConfig && typeof sourceConfig === 'object') ? sourceConfig : {};
   const timeout = timeoutSeconds ?? 10;
-  const label = sourceConfig.label || sourceConfig.type || 'unknown';
-  const type = sourceConfig.type || 'unknown';
+  const label = cfg.label || cfg.type || 'unknown';
+  const type = cfg.type || 'unknown';
 
   const handlerFn = getHandler(type);
   if (!handlerFn) {
@@ -65,7 +66,7 @@ async function dispatchSource(sourceConfig, options, timeoutSeconds) {
   }
 
   try {
-    const handlerPromise = handlerFn(sourceConfig, options || {});
+    const handlerPromise = handlerFn(cfg, options || {});
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error(`Timeout after ${timeout}s`)), timeout * 1000)
     );
@@ -95,7 +96,7 @@ async function dispatchAll(sources, options) {
   // A non-array `sources` (corrupt/empty config) → no dispatches, not a `.map` crash.
   const list = Array.isArray(sources) ? sources : [];
   const promises = list.map(source =>
-    dispatchSource(source, options, source.timeout)
+    dispatchSource(source, options, (source && typeof source === 'object') ? source.timeout : undefined)
   );
 
   const settled = await Promise.allSettled(promises);

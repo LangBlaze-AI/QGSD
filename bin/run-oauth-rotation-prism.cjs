@@ -127,11 +127,11 @@ if (result.error) {
   process.exit(1);
 }
 
-const passed = (result.status || 0) === 0;
+const passed = result.signal == null && (result.status || 0) === 0;
 const _runtimeMs = Date.now() - _startMs;
 const tags = [];
 if (_runtimeMs > 300000) tags.push('timeout-risk');
 else if (_runtimeMs > 120000) tags.push('slow-verify');
 tags.push('low-confidence'); // OAuth rotation always insufficient data
 try { writeCheckResult({ tool: 'run-oauth-rotation-prism', formalism: 'prism', result: passed ? 'pass' : 'fail', check_id: 'prism:oauth-rotation', surface: 'prism', property: 'OAuth token rotation probability — successful rotation under expiry and concurrency', runtime_ms: _runtimeMs, summary: (passed ? 'pass' : 'fail') + ': prism:oauth-rotation in ' + _runtimeMs + 'ms', triage_tags: tags, requirement_ids: getRequirementIds('prism:oauth-rotation'), observation_window: { window_start: new Date().toISOString(), window_end: new Date().toISOString(), n_traces: 0, n_events: 0, window_days: 0 }, metadata: {} }); } catch (e) { process.stderr.write('[run-oauth-rotation-prism] Warning: failed to write check result: ' + e.message + '\n'); }
-process.exit(result.status || 0);
+process.exit(passed ? 0 : (result.status || 1));

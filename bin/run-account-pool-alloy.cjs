@@ -68,7 +68,7 @@ if (versionResult.error || versionResult.status !== 0) {
   process.exit(1);
 }
 const versionOutput = versionResult.stdout + versionResult.stderr;
-const versionMatch  = versionOutput.match(/(?:openjdk\s+|java version\s+[""]?)(\d+)/i);
+const versionMatch  = versionOutput.match(/(?:openjdk|java)(?:\s+version)?\s+"?(\d+)/i);
 const javaMajor     = versionMatch ? parseInt(versionMatch[1], 10) : 0;
 if (javaMajor < 17) {
   process.stderr.write(

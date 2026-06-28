@@ -270,3 +270,37 @@ test('deduplicateEntries', async (t) => {
     assert.strictEqual(result.entries.length, 1);
   });
 });
+
+// ── adversarial hardening tests ──────────────────────────────────────
+
+test('deduplicateEntries does not crash when an entry has no string title (Phase 2)', () => {
+  const a = makeEntry({ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', fingerprint: 'uniquefp00000001' });
+  delete a.title; // adversarial: title missing on a ledger entry
+  const b = makeEntry({ id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', fingerprint: 'uniquefp00000002', title: 'Some real title' });
+  // distinct fingerprints => both reach the Levenshtein phase
+  let result;
+  assert.doesNotThrow(() => { result = deduplicateEntries([a, b]); });
+  assert.strictEqual(result.entries.length, 2);
+  assert.strictEqual(result.mergeCount, 0);
+});
+
+test('deduplicateEntries skips null/non-object elements without crashing', () => {
+  const valid = makeEntry({ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', fingerprint: 'samefingerprint1' });
+  let result;
+  assert.doesNotThrow(() => { result = deduplicateEntries([null, valid]); });
+  assert.ok(Array.isArray(result.entries));
+  // the one well-formed entry survives
+  assert.ok(result.entries.some(e => e && e.id === 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'));
+});
+
+test('mergeDebtEntries returns the present entry when the other is null', () => {
+  const a = makeEntry({ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', occurrences: 5 });
+  let merged;
+  assert.doesNotThrow(() => { merged = mergeDebtEntries(a, null); });
+  assert.strictEqual(merged.id, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+  assert.strictEqual(merged.occurrences, 5);
+  // symmetric
+  let merged2;
+  assert.doesNotThrow(() => { merged2 = mergeDebtEntries(null, a); });
+  assert.strictEqual(merged2.id, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+});

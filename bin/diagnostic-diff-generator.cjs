@@ -26,8 +26,8 @@ function generateStateDiff(statesA, statesB, options = {}) {
   const { fieldFilter } = options;
 
   // Apply field filter if provided
-  const filteredA = fieldFilter ? extractStateFields(statesA, fieldFilter) : statesA;
-  const filteredB = fieldFilter ? extractStateFields(statesB, fieldFilter) : statesB;
+  const filteredA = fieldFilter ? extractStateFields(statesA, fieldFilter) : (Array.isArray(statesA) ? statesA : []);
+  const filteredB = fieldFilter ? extractStateFields(statesB, fieldFilter) : (Array.isArray(statesB) ? statesB : []);
 
   const alignedLength = Math.min(filteredA.length, filteredB.length);
   const lengthMismatch = filteredA.length !== filteredB.length;
@@ -89,7 +89,7 @@ function formatDiffAsMarkdown(diffResult) {
   }
 
   const { summary, per_state_diffs, aligned_length, length_mismatch } = diffResult;
-  const { total_changes, changed_fields, first_divergence_index } = summary;
+  const { total_changes = 0, changed_fields = [], first_divergence_index = null } = summary || {};
 
   let markdown = '## State Divergence Report\n\n';
 

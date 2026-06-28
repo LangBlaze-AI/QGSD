@@ -116,6 +116,31 @@ test('parseITFTrace: throws on malformed JSON', () => {
   }
 });
 
+test('parseITFTrace: handles JSON null trace without crashing', () => {
+  const tmpPath = path.join('/tmp', `test-null-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  fs.writeFileSync(tmpPath, 'null', 'utf8');
+  try {
+    const result = parseITFTrace(tmpPath);
+    assert.deepStrictEqual(result.states, []);
+    assert.strictEqual(result.trace_length, 0);
+    assert.strictEqual(result.loopPoint, null);
+    assert.strictEqual(result.violated_invariant, null);
+  } finally {
+    cleanupTemp(tmpPath);
+  }
+});
+
+test('parseITFTrace: handles non-array states without crashing', () => {
+  const tmpPath = createTempITF({ states: { '0': { x: 0 } }, loop: 0 });
+  try {
+    const result = parseITFTrace(tmpPath);
+    assert.deepStrictEqual(result.states, []);
+    assert.strictEqual(result.trace_length, 0);
+  } finally {
+    cleanupTemp(tmpPath);
+  }
+});
+
 test('normalizeITFValue: converts bigint encoding to string', () => {
   const value = { '#bigint': '123456789' };
   const result = normalizeITFValue(value);

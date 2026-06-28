@@ -29,9 +29,18 @@ const { linkFormalRefs } = require('./formal-ref-linker.cjs');
  * @returns {object} { written, updated, errors, merged, linked, mergeLog?, linkLog? }
  */
 function writeObservationsToDebt(observations, ledgerPath, options = {}) {
+  // Fail-open: a null/undefined/non-array observations argument must not throw
+  // "not iterable" — treat it as no observations.
+  if (!Array.isArray(observations)) observations = [];
   const resolvedPath = ledgerPath || path.resolve(process.cwd(), '.planning/formal/debt.json');
-  const ledger = readDebtLedger(resolvedPath);
+  let ledger = readDebtLedger(resolvedPath);
   const now = new Date().toISOString();
+  // Fail-open: a debt.json that parses to a non-object (null/scalar/array) must
+  // not crash the writer — normalize to an empty ledger shell up front.
+  if (!ledger || typeof ledger !== 'object' || Array.isArray(ledger)) {
+    ledger = { schema_version: '1', created_at: now, last_updated: now, debt_entries: [] };
+  }
+  if (!Array.isArray(ledger.debt_entries)) ledger.debt_entries = [];
 
   let written = 0;
   let updated = 0;
@@ -61,6 +70,7 @@ function writeObservationsToDebt(observations, ledgerPath, options = {}) {
         const existing = ledger.debt_entries[existingIdx];
         existing.occurrences = (existing.occurrences || 1) + 1;
         existing.last_seen = now;
+        if (!Array.isArray(existing.source_entries)) existing.source_entries = [];
         existing.source_entries.push({
           source_type: obs.source_type || 'unknown',
           source_id: obs.id || `obs-${Date.now()}`,

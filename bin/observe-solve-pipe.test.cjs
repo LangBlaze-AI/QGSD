@@ -56,6 +56,17 @@ describe('parseIssueSelection', () => {
   it('handles reversed ranges', () => {
     assert.deepStrictEqual(parseIssueSelection('solve 3-1', 10), [0, 1, 2]);
   });
+
+  it('does not hang on a huge range (loop bounded by maxIndex)', () => {
+    // Upper bound is enormous but maxIndex is small; must clamp, not iterate billions of times.
+    // A synchronous unbounded loop cannot be caught by node:test's timeout option, so assert
+    // both correctness and that it returns near-instantly (well under any reasonable bound).
+    const t0 = Date.now();
+    const result = parseIssueSelection('solve 1-9999999999', 5);
+    const elapsed = Date.now() - t0;
+    assert.deepStrictEqual(result, [0, 1, 2, 3, 4]);
+    assert.ok(elapsed < 1000, `expected near-instant return, took ${elapsed}ms (loop not clamped to maxIndex)`);
+  });
 });
 
 describe('buildTargetsManifest', () => {
@@ -93,6 +104,12 @@ describe('buildTargetsManifest', () => {
   it('handles null input', () => {
     const manifest = buildTargetsManifest(null);
     assert.deepStrictEqual(manifest.targets, []);
+  });
+
+  it('skips null / non-object entries instead of crashing', () => {
+    const manifest = buildTargetsManifest([null, { id: 'ok', title: 'T', severity: 'error', source_type: 'internal', issue_type: 'issue' }]);
+    assert.strictEqual(manifest.targets.length, 1);
+    assert.strictEqual(manifest.targets[0].id, 'ok');
   });
 });
 
