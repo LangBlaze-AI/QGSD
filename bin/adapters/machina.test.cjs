@@ -62,3 +62,35 @@ test('extract parses Machina.js fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract throws a clear error for non-string filePath instead of raw TypeError', () => {
+  for (const bad of [null, undefined, 123, {}, []]) {
+    assert.throws(
+      () => extract(bad),
+      (err) => err instanceof Error && err.code !== 'ERR_INVALID_ARG_TYPE' && /filePath|string|File not found/i.test(err.message),
+      `expected clean adapter error for input ${String(bad)}`
+    );
+  }
+});
+
+test('extract falls back to first discovered state when initialState is omitted', () => {
+  const noInitial = `
+const machina = require('machina');
+const m = new machina.Fsm({
+  states: {
+    idle: { start: function() { this.transition('running'); } },
+    running: { stop: function() { this.transition('idle'); } }
+  }
+});
+`;
+  const tmpFile = path.join(os.tmpdir(), 'machina-noinit-' + Date.now() + '.js');
+  fs.writeFileSync(tmpFile, noInitial, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.ok(ir.stateNames.length >= 2);
+    assert.ok(ir.initial.length > 0, 'initial should not be empty');
+    assert.ok(ir.stateNames.includes(ir.initial), 'initial must be a real state');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

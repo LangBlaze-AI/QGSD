@@ -36,3 +36,28 @@ test('extract parses JSM fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract throws clean error (not a TypeError) for non-object transition entries', () => {
+  const fixture = `module.exports = { init: "a", transitions: [ "notanobject" ] };`;
+  const tmpFile = path.join(os.tmpdir(), 'jsm-prim-trans-' + Date.now() + '.js');
+  fs.writeFileSync(tmpFile, fixture, 'utf8');
+  try {
+    assert.throws(() => extract(tmpFile), /No JSM machine config found/);
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract skips null transition entries instead of crashing', () => {
+  const fixture = `module.exports = { init: "a", transitions: [ { name: "go", from: "a", to: "b" }, null ] };`;
+  const tmpFile = path.join(os.tmpdir(), 'jsm-null-trans-' + Date.now() + '.js');
+  fs.writeFileSync(tmpFile, fixture, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.strictEqual(ir.transitions.length, 1);
+    assert.strictEqual(ir.transitions[0].fromState, 'a');
+    assert.strictEqual(ir.transitions[0].target, 'b');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

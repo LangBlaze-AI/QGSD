@@ -65,3 +65,32 @@ test('extract parses .NET Stateless fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract captures Permit after an OnEntry lambda (chain not truncated by inner parens)', () => {
+  const src = `
+using Stateless;
+public class Door
+{
+    enum State { Closed, Opened }
+    enum Trigger { Open }
+    private readonly StateMachine<State, Trigger> _machine;
+    public Door()
+    {
+        _machine = new StateMachine<State, Trigger>(State.Closed);
+        _machine.Configure(State.Closed)
+            .OnEntry(() => Log())
+            .Permit(Trigger.Open, State.Opened);
+    }
+}
+`;
+  const tmpFile = path.join(os.tmpdir(), 'dotnet-stateless-onentry-' + Date.now() + '.cs');
+  fs.writeFileSync(tmpFile, src, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.strictEqual(ir.transitions.length, 1, 'OnEntry lambda must not drop the following Permit');
+    assert.strictEqual(ir.transitions[0].target, 'Opened');
+    assert.ok(ir.stateNames.includes('Opened'), "'Opened' must be in stateNames");
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

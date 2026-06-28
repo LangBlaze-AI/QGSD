@@ -25,6 +25,7 @@ function extract(filePath, options = {}) {
 
   const stateSet = new Set();
   const transitions = [];
+  const wildcardTransitions = [];
 
   // Initial state from FSMField: FSMField(default='pending') or FSMField(default="pending")
   let initial = '';
@@ -60,7 +61,9 @@ function extract(filePath, options = {}) {
 
     if (sourceSingleMatch) {
       const src = sourceSingleMatch[1];
-      if (src !== '*') {
+      if (src === '*') {
+        wildcardTransitions.push({ event: eventName, guard, target });
+      } else {
         stateSet.add(src);
         transitions.push({
           fromState: src,
@@ -87,8 +90,17 @@ function extract(filePath, options = {}) {
     }
   }
 
+  for (const w of wildcardTransitions) {
+    for (const s of stateSet) {
+      if (s === w.target) continue;
+      transitions.push({ fromState: s, event: w.event, guard: w.guard, target: w.target, assignedKeys: [] });
+    }
+  }
+
   if (initial) stateSet.add(initial);
   const stateNames = [...stateSet];
+  // Fall back to the first discovered state when no FSMField default is declared
+  if (!initial && stateNames.length > 0) initial = stateNames[0];
 
   const ir = {
     machineId: path.basename(filePath, '.py'),

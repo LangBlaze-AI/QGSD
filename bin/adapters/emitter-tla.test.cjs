@@ -69,3 +69,22 @@ test('emitTLA uses guard expression when provided in userGuards', () => {
   });
   assert.ok(tlaContent.includes('count > 0'));
 });
+
+test('emitTLA treats null options like defaults (does not crash)', () => {
+  assert.doesNotThrow(() => {
+    emitTLA(minimalIR(), null);
+  });
+});
+
+test('emitTLA tolerates null userVars option', () => {
+  assert.doesNotThrow(() => {
+    emitTLA(minimalIR(), { dry: true, userVars: null });
+  });
+});
+
+test('emitTLA tolerates null userGuards option', () => {
+  assert.doesNotThrow(() => {
+    const { tlaContent } = emitTLA(minimalIR(), { dry: true, userGuards: null });
+    assert.ok(tlaContent.includes('FIXME: guard isReady'));
+  });
+});

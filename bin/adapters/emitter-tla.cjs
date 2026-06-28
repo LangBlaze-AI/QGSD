@@ -140,6 +140,8 @@ function genFinalStateOps(stateName, ir, ctxVars) {
  * @returns {{ tlaContent: string, cfgContent: string, tlaOutPath: string, cfgOutPath: string }}
  */
 function emitTLA(ir, options = {}) {
+  if (options == null || typeof options !== 'object' || Array.isArray(options)) options = {};
+
   // Validate IR
   const validation = validateIR(ir);
   if (!validation.valid) {
@@ -148,12 +150,15 @@ function emitTLA(ir, options = {}) {
 
   const {
     moduleName: moduleNameOpt,
-    userGuards = {},
-    userVars = {},
+    userGuards: userGuardsOpt,
+    userVars: userVarsOpt,
     outDir: outDirOpt,
     dry = false,
     sourceFile = ir.sourceFile,
   } = options;
+
+  const userGuards = userGuardsOpt && typeof userGuardsOpt === 'object' && !Array.isArray(userGuardsOpt) ? userGuardsOpt : {};
+  const userVars = userVarsOpt && typeof userVarsOpt === 'object' && !Array.isArray(userVarsOpt) ? userVarsOpt : {};
 
   const moduleName = moduleNameOpt || ir.machineId
     .split(/[-_\s]+/)

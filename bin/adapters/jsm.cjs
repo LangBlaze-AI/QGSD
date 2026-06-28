@@ -51,7 +51,7 @@ function extract(filePath, options = {}) {
   for (const v of candidates) {
     if (v && typeof v === 'object' && Array.isArray(v.transitions)) {
       const first = v.transitions[0];
-      if (first && 'name' in first && ('from' in first || 'to' in first)) {
+      if (first && typeof first === 'object' && 'name' in first && ('from' in first || 'to' in first)) {
         machineObj = v;
         break;
       }
@@ -67,6 +67,7 @@ function extract(filePath, options = {}) {
   const transitions = [];
 
   for (const t of machineObj.transitions) {
+    if (!t || typeof t !== 'object') continue;
     const fromArr = Array.isArray(t.from) ? t.from : [t.from];
     const target = String(t.to);
     stateSet.add(target);

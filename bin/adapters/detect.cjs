@@ -126,8 +126,10 @@ function detectFramework(filePath, content) {
  * @returns {Object}
  */
 function getAdapter(frameworkId) {
-  const file = ADAPTER_FILES[frameworkId];
-  if (!file) {
+  const file = Object.prototype.hasOwnProperty.call(ADAPTER_FILES, frameworkId)
+    ? ADAPTER_FILES[frameworkId]
+    : undefined;
+  if (typeof file !== 'string') {
     throw new Error('Unknown framework: "' + frameworkId + '". Available: ' + ADAPTER_IDS.join(', '));
   }
   return require(file);

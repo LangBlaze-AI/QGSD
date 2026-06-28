@@ -45,3 +45,17 @@ test('extract parses jssm fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract throws clean File-not-found error for a directory path (not EISDIR)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jssm-dir-'));
+  try {
+    assert.throws(() => extract(dir), /File not found/);
+  } finally {
+    fs.rmdirSync(dir);
+  }
+});
+
+test('extract throws clean File-not-found error for a non-string filePath', () => {
+  assert.throws(() => extract(undefined), /File not found/);
+  assert.throws(() => extract(123), /File not found/);
+});

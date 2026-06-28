@@ -34,3 +34,17 @@ test('getAdapter returns correct adapter for xstate-v5', () => {
 test('getAdapter throws for unknown framework', () => {
   assert.throws(() => getAdapter('nonexistent'), /Unknown framework/);
 });
+
+test('getAdapter throws Unknown framework for inherited-property keys (no ERR_INVALID_ARG_TYPE)', () => {
+  for (const key of ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf']) {
+    assert.throws(
+      () => getAdapter(key),
+      (err) => {
+        assert.strictEqual(err.code, undefined, `expected plain Error for "${key}", got code ${err.code}`);
+        assert.match(err.message, /Unknown framework/);
+        return true;
+      },
+      `getAdapter(${JSON.stringify(key)}) should throw a descriptive Unknown framework error`
+    );
+  }
+});
