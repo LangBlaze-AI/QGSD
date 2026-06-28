@@ -115,3 +115,27 @@ test('LOOP-02: nf-spec-regen.js exits 0 (fail-open) on malformed stdin JSON', ()
   });
   assert.strictEqual(result.status, 0, 'LOOP-02: hook must exit 0 on malformed JSON (fail-open). Not yet implemented.');
 });
+
+test('LOOP-02: auto-detection path actually fires — detectable FSM file MUST produce fsm-to-tla output (regression: cwd TDZ on line 64)', () => {
+  const fixturePath = path.join(process.cwd(), 'bin', 'adapters', 'fixtures', 'order-pipeline.py');
+  const result = runHook({
+    tool_name: 'Write',
+    tool_input: { file_path: fixturePath },
+    tool_response: {},
+    cwd: process.cwd(),
+    context_window: {}
+  });
+  assert.strictEqual(result.status, 0, 'hook must exit 0 (fail-open)');
+  // Gate-2 auto-detection (confidence ~85 for this fixture) MUST fire and produce output.
+  // Before the fix, line 64 dereferences `cwd` in its temporal dead zone, the
+  // ReferenceError is swallowed, detectedFramework stays null, and stdout is empty.
+  assert.ok(result.stdout && result.stdout.trim(),
+    'auto-detected FSM file must produce non-empty stdout (Gate-2 must not be silently dead)');
+  const parsed = JSON.parse(result.stdout);
+  assert.ok(
+    parsed.hookSpecificOutput &&
+    typeof parsed.hookSpecificOutput.additionalContext === 'string' &&
+    parsed.hookSpecificOutput.additionalContext.includes('fsm-to-tla'),
+    'additionalContext must mention fsm-to-tla for a detected FSM file'
+  );
+});

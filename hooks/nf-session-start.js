@@ -53,10 +53,10 @@ function findMemoryStore() {
 function parseStateForReminder(stateContent) {
   if (!stateContent || typeof stateContent !== 'string') return null;
 
-  const phaseMatch = stateContent.match(/Phase:\s*(.+)/);
-  const statusMatch = stateContent.match(/Status:\s*(.+)/);
-  const planMatch = stateContent.match(/Plan:\s*(.+)/);
-  const lastMatch = stateContent.match(/Last activity:\s*(.+)/);
+  const phaseMatch = stateContent.match(/Phase:[ \t]*(.+)/);
+  const statusMatch = stateContent.match(/Status:[ \t]*(.+)/);
+  const planMatch = stateContent.match(/Plan:[ \t]*(.+)/);
+  const lastMatch = stateContent.match(/Last activity:[ \t]*(.+)/);
 
   if (!phaseMatch) return null;
   if (!statusMatch) return null;
@@ -161,7 +161,7 @@ if (require.main === module) (async () => {
     const fixesPath = path.join(_hookCwd, '.planning', 'telemetry', 'pending-fixes.json');
     if (isNfRepo && fs.existsSync(fixesPath)) {
       const fixes = JSON.parse(fs.readFileSync(fixesPath, 'utf8'));
-      const issue = (fixes.issues || []).find(i => !i.surfaced && i.priority >= 50);
+      const issue = (Array.isArray(fixes.issues) ? fixes.issues : []).find(i => i && typeof i === 'object' && !i.surfaced && i.priority >= 50);
       if (issue) {
         issue.surfaced = true;
         issue.surfacedAt = new Date().toISOString();

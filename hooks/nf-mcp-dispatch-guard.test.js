@@ -201,6 +201,26 @@ test('ADVERSARIAL: slot family not in SLOT_TOOL_SUFFIX fallback behavior', () =>
   assert.strictEqual(result.stdout, '', 'stdout must be empty — not blocked');
 });
 
+// DG-1 ADVERSARIAL: null/non-object provider entry must not nuke the whole family set
+test('ADVERSARIAL: null/non-object provider entry does not nuke the family set', () => {
+  const fs = require('fs');
+  const resolveBin = require('./nf-resolve-bin');
+  const { loadKnownFamilies } = require('./nf-mcp-dispatch-guard');
+  const providersPath = resolveBin('providers.json');
+  const backup = fs.readFileSync(providersPath, 'utf8');
+  try {
+    fs.writeFileSync(providersPath, JSON.stringify({
+      providers: [null, 'not-an-object', { name: 'codex-1' }, { name: 'gemini-1' }],
+    }));
+    const families = loadKnownFamilies();
+    assert.ok(families instanceof Set, 'should still return a Set');
+    assert.strictEqual(families.has('codex'), true, 'codex family must survive a null sibling entry');
+    assert.strictEqual(families.has('gemini'), true, 'gemini family must survive a null sibling entry');
+  } finally {
+    fs.writeFileSync(providersPath, backup);
+  }
+});
+
 // Run all tests
 for (const t of tests) {
   try {

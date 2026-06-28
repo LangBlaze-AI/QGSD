@@ -46,7 +46,9 @@ function appendConformanceEvent(event) {
 // Detect if the just-completed tool call represents a clean workflow boundary
 function detectCleanBoundary(toolName, toolInput) {
   if (toolName !== 'Bash' || !toolInput) return null;
-  const input = typeof toolInput === 'string' ? toolInput : (toolInput.command || '');
+  const input = typeof toolInput === 'string'
+    ? toolInput
+    : (toolInput && typeof toolInput.command === 'string' ? toolInput.command : '');
   if (input.includes('nf-tools.cjs phase-complete')) return 'phase_complete';
   if (input.includes('nf-tools.cjs commit') && input.includes('VERIFICATION')) return 'verification_done';
   if (input.includes('nf-tools.cjs commit') && input.includes('SUMMARY')) return 'plan_complete';

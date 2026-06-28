@@ -144,6 +144,54 @@ describe('rewriteCommand skip cases', () => {
   });
 });
 
+// ─── rewriteCommand: heredoc-pipe over-skip (NEG-01) ───────
+
+describe('rewriteCommand heredoc-pipe over-skip (NEG-01)', () => {
+  it('still rewrites a real node -e that follows a cat-heredoc-piped-to-node command', () => {
+    const cmd = "cat << 'EOF' | node\ndata\nEOF\nnode -e \"if (a !== 1) console.log(a)\"";
+    const result = rewriteCommand(cmd);
+    assert.ok(result !== null, 'the trailing real node -e must still be rewritten');
+    assert.ok(result.includes("node << 'NF_EVAL'"));
+    assert.ok(result.includes('if (a !== 1) console.log(a)'));
+    // the cat-heredoc-pipe segment is left intact
+    assert.ok(result.includes("cat << 'EOF' | node"));
+  });
+});
+
+// ─── rewriteCommand: idempotency over-skip (NEG-02) ────────
+
+describe('rewriteCommand idempotency over-skip (NEG-02)', () => {
+  it('still rewrites a real node -e whose JS only references the NF_EVAL heredoc form', () => {
+    const cmd = "node -e \"var s = '<< NF_EVAL'; if (s !== 1) {}\"";
+    const result = rewriteCommand(cmd);
+    assert.ok(result !== null, 'a node -e that only mentions NF_EVAL in a string must still be rewritten');
+    assert.ok(result.includes("node << 'NF_EVAL'"));
+    assert.ok(result.includes("var s = '<< NF_EVAL'"));
+  });
+
+  it('still skips a genuinely already-rewritten heredoc (idempotency preserved)', () => {
+    assert.equal(rewriteCommand("node << 'NF_EVAL'\nconsole.log(1)\nNF_EVAL"), null);
+  });
+});
+
+// ─── rewriteCommand: delimiter collision (NEG-03) ──────────
+
+describe('rewriteCommand delimiter collision (NEG-03)', () => {
+  it('chooses a delimiter absent from the JS body so the heredoc does not self-terminate', () => {
+    const cmd = 'node -e "a();\nNF_EVAL\nb();"';
+    const result = rewriteCommand(cmd);
+    assert.ok(result !== null);
+    const m = result.match(/node << '([^']+)'\n/);
+    assert.ok(m, 'expected a heredoc opener');
+    const delim = m[1];
+    const afterOpener = result.slice(m.index + m[0].length).split('\n');
+    const closerIdx = afterOpener.indexOf(delim);
+    const body = afterOpener.slice(0, closerIdx).join('\n');
+    assert.ok(body.includes('a();') && body.includes('b();'),
+      'both statements must live inside the heredoc body, not leak past a premature terminator');
+  });
+});
+
 // ─── isInsideQuotes ────────────────────────────────────────
 
 describe('isInsideQuotes', () => {

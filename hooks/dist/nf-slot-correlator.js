@@ -50,6 +50,17 @@ function main() {
         process.exit(0);
       }
 
+      // Guard: agent_id must be a safe filename component. Reject non-strings
+      // and any path separators / traversal / null bytes that would escape the
+      // correlations directory (arbitrary file write).
+      if (typeof input.agent_id !== 'string' ||
+          input.agent_id.includes('/')  ||
+          input.agent_id.includes('\\') ||
+          input.agent_id.includes('..') ||
+          input.agent_id.includes('\0')) {
+        process.exit(0); // Fail-open: refuse unsafe correlation id
+      }
+
       const pp = require(resolveBin('planning-paths.cjs'));
       const corrPath = pp.resolve(process.cwd(), 'quorum-correlation', { agentId: input.agent_id });
 

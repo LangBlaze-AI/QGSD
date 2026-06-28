@@ -128,6 +128,56 @@ test('TC-CG-05: stdout never contains decision field — schema compliance', () 
   }
 });
 
+// TC-CG-07: console.log inside a multi-line block comment is not flagged
+test('TC-CG-07: console.log inside /* */ block comment is not flagged', () => {
+  const tempDir = setupRepo();
+  try {
+    const jsFile = path.join(tempDir, 'block.js');
+    fs.writeFileSync(jsFile, 'module.exports = {};\n', 'utf8');
+    spawnSync('git', ['add', '.'], { cwd: tempDir, timeout: 5000 });
+    spawnSync('git', ['commit', '-m', 'init'], { cwd: tempDir, timeout: 5000 });
+
+    // console.log lives only inside a /* */ block comment
+    fs.writeFileSync(
+      jsFile,
+      '/* disabled debug block\nconsole.log("debug");\n*/\nmodule.exports = {};\n',
+      'utf8'
+    );
+
+    const { stdout, stderr, exitCode } = runHook(tempDir);
+    assert.strictEqual(exitCode, 0);
+    assert.strictEqual(stdout, '');
+    assert.ok(!stderr.includes('CONSOLE.LOG WARNING'),
+      'console.log inside a /* */ block comment must not be flagged');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// TC-CG-08: console.log in a non-ASCII (git-quoted) filename is still detected
+test('TC-CG-08: console.log in a unicode-named file is detected', () => {
+  const tempDir = setupRepo();
+  try {
+    // Force the default C-quoting so the test exercises the decode path
+    // deterministically regardless of the caller's global git config.
+    spawnSync('git', ['config', 'core.quotepath', 'true'], { cwd: tempDir, timeout: 5000 });
+    const jsFile = path.join(tempDir, 'café.js');
+    fs.writeFileSync(jsFile, 'module.exports = {};\n', 'utf8');
+    spawnSync('git', ['add', '.'], { cwd: tempDir, timeout: 5000 });
+    spawnSync('git', ['commit', '-m', 'init'], { cwd: tempDir, timeout: 5000 });
+
+    fs.writeFileSync(jsFile, 'console.log("debug");\nmodule.exports = {};\n', 'utf8');
+
+    const { stdout, stderr, exitCode } = runHook(tempDir);
+    assert.strictEqual(exitCode, 0);
+    assert.strictEqual(stdout, '');
+    assert.ok(stderr.includes('CONSOLE.LOG WARNING'),
+      'console.log in a unicode-named file must still be detected');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 // TC-CG-06: non-JS files are ignored
 test('TC-CG-06: non-JS modified files are ignored', () => {
   const tempDir = setupRepo();

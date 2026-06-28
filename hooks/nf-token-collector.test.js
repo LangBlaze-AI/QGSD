@@ -302,3 +302,66 @@ test('slot resolution: falls back to transcript user message when last_assistant
   assert.equal(records[0].slot, 'opencode-1');
   assert.equal(records[0].input_tokens, 50);
 });
+
+test('non-string last_assistant_message: still writes record with valid token sums', () => {
+  const tmpDir = makeTmpDir();
+  const transcriptPath = writeTranscript(tmpDir, [
+    {
+      type: 'assistant',
+      message: { usage: { input_tokens: 50, output_tokens: 10 } },
+      isSidechain: true,
+      isApiErrorMessage: false,
+    },
+  ]);
+
+  const payload = {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'nf-quorum-slot-worker',
+    session_id: 's1',
+    agent_id: 'a1',
+    agent_transcript_path: transcriptPath,
+    last_assistant_message: 42, // non-string: resolveSlot must not throw and drop the record
+  };
+
+  const { exitCode } = runHook(payload, tmpDir);
+  assert.equal(exitCode, 0);
+
+  const records = readTokenLog(tmpDir);
+  assert.ok(records && records.length === 1, 'Record must still be written despite non-string last_assistant_message');
+  assert.equal(records[0].input_tokens, 50);
+  assert.equal(records[0].output_tokens, 10);
+  assert.equal(records[0].slot, 'a1'); // falls back to agent_id
+});
+
+test('slot resolution: transcript user content as array (real Claude format) is parsed', () => {
+  const tmpDir = makeTmpDir();
+  const transcriptPath = writeTranscript(tmpDir, [
+    {
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'text', text: 'slot: codex-1\nquestion: hi' }] },
+      isSidechain: true,
+    },
+    {
+      type: 'assistant',
+      message: { usage: { input_tokens: 50, output_tokens: 10 } },
+      isSidechain: true,
+      isApiErrorMessage: false,
+    },
+  ]);
+
+  const payload = {
+    hook_event_name: 'SubagentStop',
+    agent_type: 'nf-quorum-slot-worker',
+    session_id: 's1',
+    agent_id: 'a-xyz',
+    agent_transcript_path: transcriptPath,
+    last_assistant_message: 'Four', // no slot prefix -> forces transcript fallback
+  };
+
+  const { exitCode } = runHook(payload, tmpDir);
+  assert.equal(exitCode, 0);
+
+  const records = readTokenLog(tmpDir);
+  assert.ok(records && records.length === 1);
+  assert.equal(records[0].slot, 'codex-1'); // currently 'a-xyz' (array .match throws -> agent_id fallback)
+});

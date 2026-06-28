@@ -38,6 +38,7 @@ process.stdin.on('end', () => {
       process.exit(0);
     }
 
+    const cwd = input.cwd || process.cwd();
     const toolName = input.tool_name || '';
     const filePath = (input.tool_input && input.tool_input.file_path) || '';
 
@@ -77,7 +78,6 @@ process.stdin.on('end', () => {
       }
     }
 
-    const cwd = input.cwd || process.cwd();
     let msg = '';
 
     // For nf-workflow.machine.ts specifically, also run generate-formal-specs.cjs

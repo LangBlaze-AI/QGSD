@@ -174,6 +174,7 @@ function extractStateContext(stateContent) {
 // Parses --n N flag from a prompt string.
 // Returns N (integer >= 1) if found, or null if absent/invalid.
 function parseQuorumSizeFlag(prompt) {
+  if (typeof prompt !== 'string') return null;
   const m = prompt.match(/--n\s+(\d+)/);
   if (!m) return null;
   const n = parseInt(m[1], 10);
@@ -376,7 +377,7 @@ function deduplicateByModel(orderedSlots, agentCfg, providersList) {
   const providersMap = new Map();
   if (Array.isArray(providersList)) {
     for (const p of providersList) {
-      if (p.name && p.model) providersMap.set(p.name, p.model);
+      if (p && typeof p === 'object' && p.name && p.model) providersMap.set(p.name, p.model);
     }
   }
 

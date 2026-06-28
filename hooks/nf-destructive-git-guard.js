@@ -18,8 +18,20 @@ const DESTRUCTIVE_BLANKET_REGEX = /^\s*git\s+(stash|reset\s+--hard|clean\s+-f)/;
 const DESTRUCTIVE_CHECKOUT_DOT_REGEX = /^\s*git\s+checkout\s+--\s+\./;
 const DESTRUCTIVE_CHECKOUT_FILE_REGEX = /^\s*git\s+checkout\s+--\s+\S/;
 
+// Detects a destructive git op anywhere in a compound/chained shell command.
+function isDestructiveCommand(command) {
+  if (typeof command !== 'string') return false;
+  const segments = command.split(/(?:&&|\|\||[;|\n])/);
+  return segments.some(seg =>
+    DESTRUCTIVE_BLANKET_REGEX.test(seg) ||
+    DESTRUCTIVE_CHECKOUT_DOT_REGEX.test(seg) ||
+    DESTRUCTIVE_CHECKOUT_FILE_REGEX.test(seg)
+  );
+}
+
 // Returns git root directory or null if not a git repo
 function getGitRoot(cwd) {
+  if (cwd != null && typeof cwd !== 'string') return null; // invalid cwd -> treat as non-repo
   const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
     cwd,
     encoding: 'utf8',
@@ -31,6 +43,7 @@ function getGitRoot(cwd) {
 
 // Returns true if there are uncommitted changes (staged or unstaged)
 function hasUncommittedChanges(cwd) {
+  if (cwd != null && typeof cwd !== 'string') return false; // invalid cwd -> fail-open
   const result = spawnSync('git', ['status', '--porcelain'], {
     cwd,
     encoding: 'utf8',
@@ -98,10 +111,7 @@ function main() {
       }
 
       // Check if the command is a destructive git operation
-      const isDestructive =
-        DESTRUCTIVE_BLANKET_REGEX.test(command) ||
-        DESTRUCTIVE_CHECKOUT_DOT_REGEX.test(command) ||
-        DESTRUCTIVE_CHECKOUT_FILE_REGEX.test(command);
+      const isDestructive = isDestructiveCommand(command);
 
       if (!isDestructive) {
         process.exit(0);

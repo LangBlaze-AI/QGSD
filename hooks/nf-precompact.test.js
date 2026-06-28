@@ -271,3 +271,36 @@ test('subprocess: falls back to process.cwd() when cwd field is absent', () => {
   assert.equal(exitCode, 0);
   assert.ok(readSidecar(tmpDir), 'sidecar written into process.cwd() fallback dir');
 });
+
+// ─── formatProgressInjection unit tests (NPC-01) ─────────────────────────────
+
+const { formatProgressInjection } = require(HOOK_PATH);
+
+test('formatProgressInjection: returns null on progress missing tasks array (corrupt state)', () => {
+  // Hand-edited / corrupt progress file lacking a tasks array must not throw.
+  const result = formatProgressInjection({
+    status: 'in_progress', total_tasks: 3, plan_file: 'PLAN.md',
+    iteration_count: 1, max_iterations: 5,
+  });
+  assert.equal(result, null);
+});
+
+test('formatProgressInjection: returns null when tasks is a non-array', () => {
+  assert.equal(formatProgressInjection({ status: 'in_progress', tasks: 'oops' }), null);
+});
+
+test('formatProgressInjection: tolerates null task entries without crashing', () => {
+  const result = formatProgressInjection({
+    status: 'in_progress', total_tasks: 1, plan_file: 'PLAN.md',
+    iteration_count: 1, max_iterations: 5, tasks: [null, { status: 'pending', name: 'Do thing', number: 1 }],
+  });
+  assert.ok(result && result.includes('Do thing'));
+});
+
+// ─── extractCurrentPosition null-input unit test (NPC-02) ─────────────────────
+
+test('extractCurrentPosition: returns null on null/undefined/non-string input (no crash)', () => {
+  assert.equal(extractCurrentPosition(null), null);
+  assert.equal(extractCurrentPosition(undefined), null);
+  assert.equal(extractCurrentPosition(42), null);
+});

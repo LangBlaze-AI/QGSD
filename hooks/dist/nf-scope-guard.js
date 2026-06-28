@@ -98,14 +98,20 @@ function isFileInScope(targetPath, branchEntry) {
     return true;
   }
 
+  // Non-string target path cannot be evaluated -- fail-open (treat as in scope)
+  if (typeof targetPath !== 'string') {
+    return true;
+  }
+
   // Normalize paths: remove trailing slashes for comparison
   const normalized = targetPath.replace(/\/$/, '');
 
-  // Check if file matches any out_of_scope pattern (prefix match)
+  // Match on a path-segment boundary, not a bare string prefix, so 'bin'
+  // does NOT match 'binutils/...'.
   for (const pattern of outOfScope) {
     const normalizedPattern = String(pattern).replace(/\/$/, '');
-    // Prefix match: does the path start with this pattern?
-    if (normalized.startsWith(normalizedPattern)) {
+    if (normalizedPattern === '') continue;
+    if (normalized === normalizedPattern || normalized.startsWith(normalizedPattern + '/')) {
       // It's in the out_of_scope list, so it's OUT of scope
       return false;
     }

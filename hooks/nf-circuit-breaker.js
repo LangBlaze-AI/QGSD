@@ -145,12 +145,16 @@ function hasReversionInHashes(gitRoot, hashes, files, pairStatsOut) {
 
     errorsOnly = false;
 
-    // Parse diff: count additions and deletions (excluding file header lines)
+    // Parse diff: count additions/deletions within hunk bodies only. Skipping
+    // any line starting with --- / +++ misclassifies CONTENT lines that begin
+    // with "--"/"++" (SQL comments "-- x", markdown/YAML "---") as file headers.
     const lines = diff.split('\n');
     let additions = 0;
     let deletions = 0;
+    let inHunk = false;
     for (const line of lines) {
-      if (line.startsWith('---') || line.startsWith('+++')) continue;
+      if (line.startsWith('@@')) { inHunk = true; continue; }
+      if (!inHunk) continue; // file headers (diff/index/---/+++) precede the first hunk
       if (line.startsWith('+')) additions++;
       else if (line.startsWith('-')) deletions++;
     }
@@ -295,10 +299,14 @@ function isCleanRollback(gitRoot, hashes, files) {
   for (let i = hashes.length - 1; i >= 1; i--) {
     const diff = getCommitDiff(gitRoot, hashes[i], hashes[i - 1], files);
     if (diff === '') continue;
+    // Hunk-aware parse (see hasReversionInHashes): file headers precede the
+    // first @@, so content lines beginning with "--"/"++" are counted, not skipped.
     const lines = diff.split('\n');
     let additions = 0, deletions = 0;
+    let inHunk = false;
     for (const line of lines) {
-      if (line.startsWith('---') || line.startsWith('+++')) continue;
+      if (line.startsWith('@@')) { inHunk = true; continue; }
+      if (!inHunk) continue;
       if (line.startsWith('+')) additions++;
       else if (line.startsWith('-')) deletions++;
     }

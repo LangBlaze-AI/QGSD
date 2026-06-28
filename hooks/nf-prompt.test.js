@@ -2025,3 +2025,40 @@ test('ADV-NO-FALSE-INJECTION: prose mentioning /nf:plan-phase mid-sentence does 
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── ADVERSARIAL ROUND 3: exported-helper shape/type guards (no subprocess) ─────
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ADV-DEDUP-NULL-PROVIDER: a corrupt providers.json shape ({"providers":[null,...]})
+// flows verbatim through findProviders() into deduplicateByModel. A null/non-object
+// element must be skipped (treated as unknown provider), not crash — otherwise the
+// throw propagates to the stdin-handler catch and the entire QUORUM REQUIRED
+// injection is silently dropped.
+test('ADV-DEDUP-NULL-PROVIDER: deduplicateByModel tolerates null/non-object entries in providersList', () => {
+  const dedup = nfPrompt.deduplicateByModel;
+  const slots = [{ slot: 'codex-1', authType: 'api' }, { slot: 'gemini-1', authType: 'api' }];
+  // Corrupt providers.json shape: a null element (and a non-object) in the providers array.
+  const badProviders = [null, 42, { name: 'gemini-1', model: 'gemini-2.5' }];
+  assert.doesNotThrow(
+    () => dedup(slots, {}, badProviders),
+    'a null/non-object entry in providersList must not crash deduplicateByModel'
+  );
+  const res = dedup(slots, {}, badProviders);
+  assert.deepEqual(res.unique.map(s => s.slot), ['codex-1', 'gemini-1'], 'both distinct slots survive as unique');
+  assert.deepEqual(res.duplicates, [], 'no duplicates when models differ/unknown');
+});
+
+// ADV-PARSE-N-NONSTRING: parseQuorumSizeFlag is an exported helper called directly.
+// A non-string argument (null/undefined/number/object/array/bool) must return the
+// null sentinel (invalid/absent) rather than throwing on .match — consistent with
+// every other invalid case, so the caller falls back to risk-driven fan-out.
+test('ADV-PARSE-N-NONSTRING: parseQuorumSizeFlag returns null on non-string input (no crash)', () => {
+  const p = nfPrompt.parseQuorumSizeFlag;
+  for (const bad of [null, undefined, 42, {}, [], true]) {
+    assert.doesNotThrow(() => p(bad), `parseQuorumSizeFlag(${String(bad)}) must not throw`);
+    assert.strictEqual(p(bad), null, `non-string input ${String(bad)} must yield null (invalid/absent)`);
+  }
+  // sanity: valid string path unchanged
+  assert.strictEqual(p('/qnf:plan-phase --n 3'), 3);
+});
