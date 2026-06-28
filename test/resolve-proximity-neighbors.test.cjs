@@ -198,4 +198,47 @@ describe('resolve-proximity-neighbors', () => {
     assert.strictEqual(result.warnings.length, 0);
   });
 
+  it('skips null node values in the index without throwing', () => {
+    const idx = makeIndex({
+      'formal_module::model-a': {
+        type: 'formal_module', id: 'model-a',
+        edges: [{ to: 'concept::shared-concept', rel: 'described_by', source: 'test' }]
+      },
+      'concept::shared-concept': {
+        type: 'concept', id: 'shared-concept',
+        edges: [{ to: 'formal_module::model-b', rel: 'describes', source: 'test' }]
+      },
+      'formal_module::model-b': {
+        type: 'formal_module', id: 'model-b', edges: []
+      },
+      'formal_module::corrupt': null
+    });
+    let result;
+    assert.doesNotThrow(() => { result = resolveNeighbors(idx, 'model-a'); });
+    assert.ok(result.neighbors.find(n => n.id === 'model-b'), 'model-b should still resolve');
+  });
+
+  it('ignores edges with a missing/non-string `to` without throwing', () => {
+    const idx = makeIndex({
+      'formal_module::model-a': {
+        type: 'formal_module', id: 'model-a',
+        edges: [{ rel: 'shares_property', source: 'test' }] // no `to`
+      }
+    });
+    let result;
+    assert.doesNotThrow(() => { result = resolveNeighbors(idx, 'model-a'); });
+    assert.strictEqual(result.neighbors.length, 0);
+  });
+
+  it('buildReverseEdges handles prototype-pollution keys (__proto__) safely', () => {
+    let reverse;
+    assert.doesNotThrow(() => {
+      reverse = buildReverseEdges({
+        'A': { edges: [{ to: '__proto__', rel: 'owns', source: 'test' }] }
+      });
+    });
+    assert.ok(Array.isArray(reverse['__proto__']), 'reverse should store __proto__ as an own array key');
+    assert.strictEqual(reverse['__proto__'][0].from, 'A');
+  });
+
 });

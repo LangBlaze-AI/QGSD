@@ -142,6 +142,36 @@ describe('detectBaselineDrift', () => {
     assert.equal(result.detected, false);
     assert.equal(result.layers.length, 0);
   });
+
+  it('does not crash when modelStaleness.stale contains a null entry', () => {
+    const baseline = { r_to_f: { residual: 5 } };
+    const current = { r_to_f: { residual: 5 } };
+    const result = detectBaselineDrift(baseline, current, {
+      modelStaleness: { total_stale: 1, stale: [null, { requirements: ['REQ-1'] }] },
+    });
+    assert.equal(result.model_staleness_detected, true);
+    assert.ok(result.warning.includes('1 formal model(s) stale'));
+    assert.ok(result.warning.includes('REQ-1'));
+  });
+
+  it('does not crash when modelStaleness.stale is a non-array object', () => {
+    const baseline = { r_to_f: { residual: 5 } };
+    const current = { r_to_f: { residual: 5 } };
+    const result = detectBaselineDrift(baseline, current, {
+      modelStaleness: { total_stale: 2, stale: { 'model-a': 1 } },
+    });
+    assert.equal(result.model_staleness_detected, true);
+    assert.ok(result.warning.includes('2 formal model(s) stale'));
+  });
+
+  it('falls back to default threshold when threshold is NaN (does not silently disable detection)', () => {
+    const baseline = { r_to_f: { residual: 10 } };
+    const current = { r_to_f: { residual: 100 } }; // 900% drift
+    const result = detectBaselineDrift(baseline, current, { threshold: NaN });
+    assert.equal(result.detected, true);
+    assert.equal(result.layers.length, 1);
+    assert.equal(result.layers[0].layer, 'r_to_f');
+  });
 });
 
 // Dogfood regression: the module exported detectBaselineDrift but had no

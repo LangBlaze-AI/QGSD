@@ -6,6 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', 'bin', 'extract-annotations.cjs');
+const annotations = require('../bin/extract-annotations.cjs');
 
 /**
  * Run extract-annotations.cjs with given args and return { stdout, stderr, status }.
@@ -304,5 +305,43 @@ describe('validation mode', () => {
     assert.ok(result.stdout.includes('Total:'), 'Should include Total summary');
     assert.ok(result.stdout.includes('properties'), 'Should mention properties');
     assert.ok(result.stdout.includes('requirement links'), 'Should mention requirement links');
+  });
+});
+
+// ── Direct parser hardening (adversarial) ───────────────────────────────────
+
+describe('parse functions reject non-string input', () => {
+  test('parseTLA returns [] for null/undefined/number', () => {
+    assert.deepStrictEqual(annotations.parseTLA(null), []);
+    assert.deepStrictEqual(annotations.parseTLA(undefined), []);
+    assert.deepStrictEqual(annotations.parseTLA(42), []);
+  });
+
+  test('parseAlloy / parsePRISM / parseTestFile reject non-string input', () => {
+    assert.deepStrictEqual(annotations.parseAlloy(null), []);
+    assert.deepStrictEqual(annotations.parsePRISM(undefined), []);
+    assert.deepStrictEqual(annotations.parseTestFile({}), []);
+  });
+});
+
+describe('parseTestFile annotation association', () => {
+  test('does not bind annotation across unrelated code lines', () => {
+    const content = [
+      '// @requirement REQ-X',
+      'const foo = 1;',
+      'function bar() { return 2; }',
+      "test('unrelated test', () => {});"
+    ].join('\n');
+    const result = annotations.parseTestFile(content);
+    assert.deepStrictEqual(result, [], 'intervening code must break the annotation association');
+  });
+
+  test('still binds annotation immediately before a test', () => {
+    const content = [
+      '// @requirement REQ-Y',
+      "test('adjacent test', () => {});"
+    ].join('\n');
+    const result = annotations.parseTestFile(content);
+    assert.deepStrictEqual(result, [{ test_name: 'adjacent test', requirement_ids: ['REQ-Y'] }]);
   });
 });

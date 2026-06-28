@@ -55,6 +55,7 @@ Examples:
 
 function discoverTestFiles(dirs) {
   const testFiles = [];
+  if (!Array.isArray(dirs)) return testFiles;
   for (const dir of dirs) {
     const absDir = path.join(ROOT, dir);
     if (!fs.existsSync(absDir)) continue;
@@ -87,6 +88,7 @@ function hasExistingAnnotation(content) {
 // ── Proximity Query ─────────────────────────────────────────────────────────
 
 function querySuggestion(pi, reachFn, file) {
+  if (!pi || typeof pi !== 'object' || !pi.nodes || typeof pi.nodes !== 'object') return null;
   // Try exact node key
   let nodeKey = 'code_file::' + file;
   if (!pi.nodes[nodeKey]) {

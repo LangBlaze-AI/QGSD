@@ -151,8 +151,8 @@ async function assembleFormalContext(description, options) {
 function formatConstraintBlock(constraints) {
   if (!Array.isArray(constraints) || constraints.length === 0) return '';
 
-  const limited = constraints.slice(0, 3);
-  const lines = limited.map(c => '- ' + c.text);
+  const limited = constraints.slice(0, 3).filter(c => c && typeof c === 'object');
+  const lines = limited.map(c => '- ' + (c.text != null ? c.text : ''));
 
   return `[FORMAL CONSTRAINTS]
 The following constraints were extracted from formal models that cover this failure:
@@ -171,7 +171,7 @@ These are verified properties of the system. Do NOT propose fixes that violate t
  */
 function formatVerdictSummary(verdict, models) {
   if (verdict === 'reproduced') {
-    const reproducing = (models || []).find(m => m.reproduced);
+    const reproducing = (models || []).find(m => m && m.reproduced);
     const name = reproducing ? reproducing.name : 'unknown';
     return 'FORMAL: Bug reproduced by model ' + name;
   }

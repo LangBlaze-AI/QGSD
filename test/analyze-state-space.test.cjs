@@ -285,3 +285,27 @@ describe('cross-model decomposition', () => {
     assert.strictEqual(typeof report.summary.total_models, 'number');
   });
 });
+
+// ── Exported analyzeModel() — adversarial input ──────────────────────────────
+
+describe('analyzeModel exported API — adversarial input', () => {
+  const { analyzeModel } = require(path.join(__dirname, '..', 'bin', 'analyze-state-space.cjs'));
+
+  test('missing projectRoot fails open instead of throwing', () => {
+    let result;
+    assert.doesNotThrow(() => { result = analyzeModel('MCsafety'); },
+      'analyzeModel with no projectRoot should not throw');
+    assert.ok(result && typeof result === 'object', 'should return an object');
+    assert.ok(['MINIMAL', 'LOW', 'MODERATE', 'HIGH'].includes(result.risk_level),
+      'should return a valid conservative risk_level, got: ' + (result && result.risk_level));
+    assert.strictEqual(result.has_unbounded, false, 'conservative default has_unbounded should be false');
+    assert.strictEqual(result.estimated_states, null, 'conservative default estimated_states should be null');
+  });
+
+  test('null / non-string projectRoot fails open', () => {
+    assert.doesNotThrow(() => analyzeModel('MCsafety', null), 'null projectRoot should not throw');
+    assert.doesNotThrow(() => analyzeModel('MCsafety', 123), 'numeric projectRoot should not throw');
+    const r = analyzeModel('MCsafety', null);
+    assert.strictEqual(r.risk_level, 'MODERATE', 'invalid projectRoot should yield MODERATE conservative default');
+  });
+});

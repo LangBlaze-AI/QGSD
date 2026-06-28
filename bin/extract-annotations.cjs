@@ -36,6 +36,7 @@ const REGISTRY_PATH = path.join(ROOT, '.planning', 'formal', 'model-registry.jso
  * Property: Name == (identifier at start of line followed by ==)
  */
 function parseTLA(content) {
+  if (typeof content !== 'string') return [];
   const lines = content.split('\n');
   const results = [];
   let pendingReqs = [];
@@ -84,6 +85,7 @@ function parseTLA(content) {
  * Property: assert AssertName { or assert AssertName (on its own line)
  */
 function parseAlloy(content) {
+  if (typeof content !== 'string') return [];
   const lines = content.split('\n');
   const results = [];
   let pendingReqs = [];
@@ -117,6 +119,7 @@ function parseAlloy(content) {
  * Property: lines starting with P=?, R{, S=? or other PRISM property keywords
  */
 function parsePRISM(content) {
+  if (typeof content !== 'string') return [];
   const lines = content.split('\n');
   const results = [];
   let pendingReqs = [];
@@ -353,6 +356,7 @@ function getAllPRISMProperties(content) {
  * Intervening comments or non-blank-non-test lines break the association.
  */
 function parseTestFile(content) {
+  if (typeof content !== 'string') return [];
   const lines = content.split('\n');
   const results = [];
   let pendingReqs = [];
@@ -372,11 +376,21 @@ function parseTestFile(content) {
     }
 
     const testMatch = trimmed.match(/^(?:test|describe)\s*\(\s*['"]([^'"]+)['"]/);
-    if (testMatch && pendingReqs.length > 0) {
-      results.push({
-        test_name: testMatch[1],
-        requirement_ids: [...pendingReqs]
-      });
+    if (testMatch) {
+      if (pendingReqs.length > 0) {
+        results.push({
+          test_name: testMatch[1],
+          requirement_ids: [...pendingReqs]
+        });
+      }
+      pendingReqs = [];
+      continue;
+    }
+
+    // Intervening non-comment, non-blank line breaks the association
+    const isComment = /^\/\//.test(trimmed);
+    const isBlank = trimmed === '';
+    if (!isComment && !isBlank) {
       pendingReqs = [];
     }
   }

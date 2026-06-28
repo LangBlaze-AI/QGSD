@@ -833,6 +833,16 @@ function analyzeModelByPath(tlaRelPath, moduleToCfg) {
  * @returns {Object} Analysis result with { estimated_states, risk_level, risk_reason, has_unbounded }
  */
 function analyzeModel(configName, projectRoot) {
+  // Fail open on invalid project root — match the conservative defaults used by
+  // the parse-error / config-not-found paths rather than throwing to the caller.
+  if (typeof projectRoot !== 'string' || projectRoot.length === 0) {
+    return {
+      estimated_states: null,
+      risk_level: 'MODERATE',
+      risk_reason: 'Invalid project root — conservative default',
+      has_unbounded: false,
+    };
+  }
   // Temporarily override ROOT for this call
   const savedROOT = ROOT;
   ROOT = projectRoot;

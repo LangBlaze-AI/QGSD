@@ -180,6 +180,32 @@ describe('custom threshold', () => {
   });
 });
 
+// ── Malformed Threshold ────────────────────────────────────────────────────
+
+describe('malformed threshold', () => {
+  test('--threshold with no value falls back to default and still catches 17pp regression', () => {
+    const matrixPath = path.join(tmpDir, 'matrix.json');
+    const baselinePath = path.join(tmpDir, 'baseline.json');
+    fs.writeFileSync(matrixPath, createMatrix(10, 21, 211));
+    fs.writeFileSync(baselinePath, createMatrix(27, 57, 211));
+
+    const result = run(matrixPath, baselinePath, '--threshold');
+    assert.strictEqual(result.status, 1, 'missing threshold value must not disable the guard');
+    assert.ok(result.stdout.includes('WARN'), 'should still report the regression');
+    assert.ok(!result.stdout.includes('NaN'), 'threshold must never render as NaN');
+  });
+
+  test('--threshold abc (non-numeric) falls back to default and still catches 17pp regression', () => {
+    const matrixPath = path.join(tmpDir, 'matrix.json');
+    const baselinePath = path.join(tmpDir, 'baseline.json');
+    fs.writeFileSync(matrixPath, createMatrix(10, 21, 211));
+    fs.writeFileSync(baselinePath, createMatrix(27, 57, 211));
+
+    const result = run(matrixPath, baselinePath, '--threshold', 'abc');
+    assert.strictEqual(result.status, 1, 'non-numeric threshold must not disable the guard');
+  });
+});
+
 // ── Missing Matrix ─────────────────────────────────────────────────────────
 
 describe('missing files', () => {

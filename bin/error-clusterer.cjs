@@ -60,6 +60,7 @@ function extractErrorType(symptom) {
  */
 function clusterErrors(entries, options = {}) {
   if (!entries || entries.length === 0) return [];
+  if (!options || typeof options !== 'object') options = {};
 
   const threshold = options.threshold ?? 0.7;
   const staleAfterDays = options.staleAfterDays ?? 7;
@@ -69,6 +70,7 @@ function clusterErrors(entries, options = {}) {
   // Phase 1: Group by extracted error type
   const typeGroups = new Map();
   for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue; // skip null/non-object entries (fail-open)
     const errorType = extractErrorType(entry.symptom);
     if (!typeGroups.has(errorType)) {
       typeGroups.set(errorType, []);
@@ -90,11 +92,11 @@ function clusterErrors(entries, options = {}) {
     } else {
       subClusters = [];
       for (const entry of group) {
-        const symptom = (entry.symptom || '').toLowerCase();
+        const symptom = (typeof entry.symptom === 'string' ? entry.symptom : '').toLowerCase();
         let merged = false;
 
         for (const sc of subClusters) {
-          const repSymptom = (sc.representative.symptom || '').toLowerCase();
+          const repSymptom = (typeof sc.representative.symptom === 'string' ? sc.representative.symptom : '').toLowerCase();
           const sim = levenshteinSimilarity(symptom, repSymptom);
           if (sim >= threshold) {
             sc.members.push(entry);
@@ -140,7 +142,7 @@ function clusterErrors(entries, options = {}) {
         if (e.confidence === 'medium') avgConfidence = 'medium';
       }
 
-      const label = (bestEntry.symptom || 'Unknown error').slice(0, 80);
+      const label = (typeof bestEntry.symptom === 'string' ? bestEntry.symptom : 'Unknown error').slice(0, 80);
 
       rawClusters.push({
         errorType,

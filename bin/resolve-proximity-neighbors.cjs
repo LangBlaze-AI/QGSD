@@ -39,9 +39,9 @@ function loadProximityIndex(root) {
  * @returns {object} reverse map: { nodeKey: [{ from, rel, source }] }
  */
 function buildReverseEdges(nodes) {
-  const reverse = {};
+  const reverse = Object.create(null);
   for (const [key, node] of Object.entries(nodes)) {
-    if (!node.edges) continue;
+    if (!node || !Array.isArray(node.edges)) continue;
     for (const edge of node.edges) {
       if (!reverse[edge.to]) reverse[edge.to] = [];
       reverse[edge.to].push({ from: key, rel: edge.rel, source: edge.source });
@@ -90,7 +90,7 @@ function resolveNeighbors(index, startModuleId, options = {}) {
       const node = index.nodes[nodeKey];
       if (node && node.edges) {
         for (const edge of node.edges) {
-          if (!visited.has(edge.to)) {
+          if (edge && typeof edge.to === 'string' && !visited.has(edge.to)) {
             visited.add(edge.to);
             nextFrontier.push(edge.to);
             if (edge.to.startsWith('formal_module::')) {

@@ -168,6 +168,15 @@ describe('formatConstraintBlock', () => {
     assert.ok(block.includes('- State transitions are atomic'));
     assert.ok(block.includes('Do NOT propose fixes that violate these constraints'));
   });
+
+  it('does not crash when a constraint entry is null', () => {
+    const block = formatConstraintBlock([
+      { text: 'valid', source_model: 'M', formalism: 'tla' },
+      null
+    ]);
+    assert.ok(block.startsWith('[FORMAL CONSTRAINTS]'));
+    assert.ok(block.includes('- valid'));
+  });
 });
 
 describe('formatVerdictSummary', () => {
@@ -194,6 +203,12 @@ describe('formatVerdictSummary', () => {
     const result = formatVerdictSummary('no-model', []);
     assert.ok(result.includes('FORMAL:'));
     assert.ok(result.includes('No formal model'));
+  });
+
+  it('does not crash when a model entry is null in reproduced verdict', () => {
+    const result = formatVerdictSummary('reproduced', [null, { name: 'Real', reproduced: true }]);
+    assert.ok(result.includes('FORMAL:'));
+    assert.ok(result.includes('Real'));
   });
 });
 

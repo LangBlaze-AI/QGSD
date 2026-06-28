@@ -24,7 +24,7 @@ const { LAYER_KEYS } = require('./layer-constants.cjs');
  * @returns {{ detected: boolean, layers: Array, requirement_count_changed: boolean, model_staleness_detected: boolean, warning: string|null }}
  */
 function detectBaselineDrift(sessionStartBaseline, currentSnapshot, options) {
-  const threshold = (options && options.threshold != null) ? options.threshold : 0.10;
+  const threshold = (options && typeof options.threshold === 'number' && Number.isFinite(options.threshold)) ? options.threshold : 0.10;
   const requirementsPath = options && options.requirementsPath;
 
   const driftedLayers = [];
@@ -102,8 +102,9 @@ function detectBaselineDrift(sessionStartBaseline, currentSnapshot, options) {
   }
   if (modelStalenessDetected) {
     const staleCount = modelStaleness.total_stale;
-    const reqIds = (modelStaleness.stale || [])
-      .flatMap(s => s.requirements || [])
+    const reqIds = (Array.isArray(modelStaleness.stale) ? modelStaleness.stale : [])
+      .filter(s => s && typeof s === 'object')
+      .flatMap(s => Array.isArray(s.requirements) ? s.requirements : [])
       .filter((v, i, a) => a.indexOf(v) === i);
     const reqSuffix = reqIds.length > 0 ? ' affecting ' + reqIds.join(', ') : '';
     const msg = staleCount + ' formal model(s) stale' + reqSuffix +
