@@ -166,7 +166,9 @@ function mapSentryIssuesToSchema(mcpResult, sourceConfig) {
   const levelMap = { fatal: 'error', error: 'error', warning: 'warning', info: 'info' };
 
   try {
-    const issues = (Array.isArray(mcpResult) ? mcpResult : []).map(issue => ({
+    const issues = (Array.isArray(mcpResult) ? mcpResult : [])
+      .filter(issue => issue && typeof issue === 'object')
+      .map(issue => ({
       id: `sentry-${issue.id}`,
       title: issue.title || issue.culprit || 'Unknown Sentry issue',
       severity: levelMap[issue.level] || 'info',
@@ -248,7 +250,9 @@ function mapSentryFeedbackToSchema(mcpResult, sourceConfig) {
   const label = sourceConfig.label || 'Sentry Feedback';
 
   try {
-    const issues = (Array.isArray(mcpResult) ? mcpResult : []).map((fb, idx) => {
+    const issues = (Array.isArray(mcpResult) ? mcpResult : [])
+      .filter(fb => fb && typeof fb === 'object')
+      .map((fb, idx) => {
       const comment = fb.comments || fb.message || 'No comment';
       const truncated = comment.length > 80 ? comment.slice(0, 80) + '...' : comment;
 
@@ -312,7 +316,7 @@ function handleBash(sourceConfig, options) {
     let issues;
     if (parser === 'json') {
       const parsed = JSON.parse(output);
-      const items = Array.isArray(parsed) ? parsed : [];
+      const items = (Array.isArray(parsed) ? parsed : []).filter(item => item != null);
       issues = items.map((item, idx) => ({
         id: `bash-${idx}`,
         title: item.title || String(item),

@@ -180,7 +180,11 @@ function mineObservedInvariants() {
   // Load trace-corpus-stats.json for aggregate data
   let traceStats = null;
   if (fs.existsSync(TRACE_STATS_PATH)) {
-    traceStats = JSON.parse(fs.readFileSync(TRACE_STATS_PATH, 'utf8'));
+    try {
+      traceStats = JSON.parse(fs.readFileSync(TRACE_STATS_PATH, 'utf8'));
+    } catch {
+      traceStats = null; /* corrupt trace stats -> treat as unavailable */
+    }
   }
 
   // Load conformance-events.jsonl for sequence-based checks
@@ -366,8 +370,10 @@ function mineObservedInvariants() {
 
 function deduplicateInvariants(rawInvariants) {
   const map = new Map();
+  if (!Array.isArray(rawInvariants)) return [];
 
   for (const inv of rawInvariants) {
+    if (!inv || typeof inv !== 'object') continue;
     // For tla_cfg: deduplicate by (name, config/model)
     // For others: deduplicate by (name, source)
     const modelKey = inv.config || inv.source_file || inv.source;

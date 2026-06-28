@@ -764,3 +764,55 @@ test('frozen guard: a real frozen_at timestamp still freezes', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// AGG-01: validateEnvelope must not crash on a null/non-object requirements element
+test('validateEnvelope: null element in requirements array reports an error, does not throw', function() {
+  const envelope = {
+    schema_version: '1',
+    source: '.planning/REQUIREMENTS.md',
+    aggregated_at: '2026-03-01T20:32:24.000Z',
+    frozen_at: null,
+    content_hash: 'sha256:' + 'a'.repeat(64),
+    requirements: [null]
+  };
+  let result;
+  assert.doesNotThrow(function() { result = validateEnvelope(envelope); }, 'Should not throw on null element');
+  assert.strictEqual(result.valid, false, 'Should be invalid');
+  assert.ok(result.errors.some(function(e) { return e.indexOf('requirements[0]') === 0; }), 'Should report requirements[0] error');
+});
+
+// AGG-02: A corrupt existing requirements.json must not abort aggregation
+test('aggregateRequirements: corrupt existing output file fails open (does not throw SyntaxError)', function() {
+  const tempDir = createTempDir();
+  try {
+    const tempReqPath = path.join(tempDir, 'REQUIREMENTS.md');
+    const tempOutputPath = path.join(tempDir, 'requirements.json');
+    fs.writeFileSync(tempReqPath, '# Requirements: nForma v0.22\n\n### Requirements Envelope — ENV\n\n- [ ] **ENV-01**: A requirement\n', 'utf8');
+    fs.writeFileSync(tempOutputPath, '{not valid json', 'utf8');
+    let result;
+    assert.doesNotThrow(function() {
+      result = aggregateRequirements({ requirementsPath: tempReqPath, outputPath: tempOutputPath, deterministic: true, skipArchive: true });
+    }, 'Corrupt existing output should not throw');
+    assert.strictEqual(result.requirementCount, 1, 'Should regenerate with 1 requirement');
+  } finally {
+    cleanupTempDir(tempDir);
+  }
+});
+
+// AGG-03: existing requirements.json that is JSON null must not crash the frozen guard
+test('aggregateRequirements: existing output of JSON null does not crash frozen guard', function() {
+  const tempDir = createTempDir();
+  try {
+    const tempReqPath = path.join(tempDir, 'REQUIREMENTS.md');
+    const tempOutputPath = path.join(tempDir, 'requirements.json');
+    fs.writeFileSync(tempReqPath, '# Requirements: nForma v0.22\n\n### Requirements Envelope — ENV\n\n- [ ] **ENV-01**: A requirement\n', 'utf8');
+    fs.writeFileSync(tempOutputPath, 'null', 'utf8');
+    let result;
+    assert.doesNotThrow(function() {
+      result = aggregateRequirements({ requirementsPath: tempReqPath, outputPath: tempOutputPath, deterministic: true, skipArchive: true });
+    }, 'JSON null existing output should not throw');
+    assert.strictEqual(result.requirementCount, 1, 'Should regenerate with 1 requirement');
+  } finally {
+    cleanupTempDir(tempDir);
+  }
+});

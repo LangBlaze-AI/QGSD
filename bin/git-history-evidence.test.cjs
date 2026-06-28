@@ -149,6 +149,34 @@ describe('getTlaCrossRefs', () => {
   });
 });
 
+describe('getTlaCrossRefs prototype-key hardening', () => {
+  test('returns [] for filename colliding with an inherited Object.prototype key', () => {
+    assert.deepStrictEqual(getTlaCrossRefs('constructor', {}), []);
+    assert.deepStrictEqual(getTlaCrossRefs('__proto__', {}), []);
+    assert.deepStrictEqual(getTlaCrossRefs('hasOwnProperty', {}), []);
+  });
+
+  test('result is always an array (iterable) even for prototype-key filenames', () => {
+    const refs = getTlaCrossRefs('toString', { 'hooks/x.js': ['Spec.tla'] });
+    assert.ok(Array.isArray(refs), 'must return an array');
+    // must not throw when iterated downstream
+    assert.doesNotThrow(() => { for (const _ of refs) { /* noop */ } });
+  });
+});
+
+describe('getTlaCrossRefs empty-filename hardening', () => {
+  test('returns [] for empty-string filename instead of the first entry specs', () => {
+    const map = { 'hooks/nf-prompt.js': ['.planning/formal/tla/Prompt.tla'] };
+    assert.deepStrictEqual(getTlaCrossRefs('', map), []);
+  });
+
+  test('returns [] for non-string filename', () => {
+    const map = { 'hooks/nf-prompt.js': ['.planning/formal/tla/Prompt.tla'] };
+    assert.deepStrictEqual(getTlaCrossRefs(null, map), []);
+    assert.deepStrictEqual(getTlaCrossRefs(undefined, map), []);
+  });
+});
+
 // ── computeFileBreakdown tests ──────────────────────────────────────────────
 
 describe('computeFileBreakdown', () => {

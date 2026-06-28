@@ -40,8 +40,8 @@ function linkBugsToProperties(debtPath, registryPath) {
     return { schema_version: '1', total_bugs: 0, total_linked: 0, mappings: [] };
   }
 
-  const models = registry.models || registry;
-  const entries = debt.debt_entries || [];
+  const models = (registry && typeof registry === 'object') ? (registry.models || registry) : {};
+  const entries = (debt && typeof debt === 'object' && Array.isArray(debt.debt_entries)) ? debt.debt_entries : [];
   const mappings = [];
   let totalLinked = 0;
 
@@ -66,6 +66,7 @@ function linkBugsToProperties(debtPath, registryPath) {
     for (const [modelPath, model] of Object.entries(models)) {
       // Filter to only model paths starting with '.'
       if (!modelPath.startsWith('.')) continue;
+      if (!model || typeof model !== 'object') continue;
       const overlap = (model.requirements || []).filter(r => refs.includes(r));
       if (overlap.length > 0) {
         matching.push({
@@ -292,7 +293,7 @@ function computeConvergenceVelocity(trendPath, opts) {
   for (const key of LAYER_KEYS) {
     // Extract residual values for this layer, filter -1 (skipped) for clarity
     const values = entries
-      .map(e => (e.layers && e.layers[key] != null) ? e.layers[key] : -1)
+      .map(e => (e && e.layers && e.layers[key] != null) ? e.layers[key] : -1)
       .filter(v => v >= 0);
 
     if (values.length === 0) {

@@ -32,6 +32,23 @@ describe('validate-invariant shape guards', () => {
     assert.deepEqual(validateInvariantBatch(null), []);
   });
 
+  it('validateInvariant survives a req with valid text but missing/non-string id (no crash)', () => {
+    // text passes the shape guard, but lowValuePass deref'd id.replace(...) → TypeError
+    const r1 = validateInvariant({ text: 'The dashboard refreshes on keypress with a timestamp' });
+    assert.equal(typeof r1.verdict, 'string');
+    const r2 = validateInvariant({ id: 42, text: 'The dashboard refreshes on keypress with a timestamp' });
+    assert.equal(typeof r2.verdict, 'string');
+  });
+
+  it('validateInvariantBatch survives an element missing id (whole batch not crashed)', () => {
+    const out = validateInvariantBatch([
+      { text: 'Quorum enforcement must block plan execution when quorum is not met.' },
+      { id: 'R2', text: 'The system MUST persist state.' },
+    ]);
+    assert.equal(out.length, 2);
+    assert.equal(out[1].verdict, 'INVARIANT');
+  });
+
   it('CLI emits a clean error (not a raw SyntaxError) on a corrupt envelope', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-vi-'));
     try {
@@ -46,6 +63,28 @@ describe('validate-invariant shape guards', () => {
       assert.ok(err, 'corrupt envelope must exit non-zero');
       const stderr = String(err.stderr || '');
       assert.match(stderr, /not valid JSON/, 'must be a clean message');
+      assert.doesNotMatch(stderr, /at JSON\.parse/, 'must NOT leak a raw stack trace');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('CLI emits a clean error (not a raw SyntaxError) on a corrupt archive during --strict', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-vi-'));
+    try {
+      const envPath = path.join(dir, 'env.json');
+      fs.writeFileSync(envPath, JSON.stringify({ requirements: [{ id: 'X-01', text: 'CHANGELOG updated' }] }));
+      const archPath = path.join(dir, 'arch.json');
+      fs.writeFileSync(archPath, '{bad json');
+      let err;
+      try {
+        execFileSync(process.execPath, [SCRIPT, '--batch', '--strict', `--envelope=${envPath}`, `--archive-path=${archPath}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      } catch (e) {
+        err = e;
+      }
+      assert.ok(err, 'corrupt archive must exit non-zero');
+      const stderr = String(err.stderr || '');
+      assert.match(stderr, /archive .*not valid JSON/i, 'must be a clean message');
       assert.doesNotMatch(stderr, /at JSON\.parse/, 'must NOT leak a raw stack trace');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

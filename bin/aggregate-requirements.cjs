@@ -157,6 +157,10 @@ function validateEnvelope(obj) {
 
   // Validate each requirement
   obj.requirements.forEach((req, idx) => {
+    if (!req || typeof req !== 'object' || Array.isArray(req)) {
+      errors.push('requirements[' + idx + '] must be an object');
+      return;
+    }
     if (!req.id || typeof req.id !== 'string') {
       errors.push('requirements[' + idx + '].id must be a string');
     } else if (!/^[A-Z]+-\d+$/.test(req.id)) {
@@ -264,20 +268,29 @@ function aggregateRequirements(options) {
   // formal_models is enrichment data (not milestone-sourced) and must survive re-aggregation
   const existingFormalModels = {};
   if (fs.existsSync(outputPath)) {
-    const existing = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-    // Truthy check, not `!== null`: a fresh envelope often omits `frozen_at` (or
-    // sets it undefined), and `undefined !== null` is true — which falsely tripped
-    // the frozen guard on every absent key (dogfood). Only a real timestamp freezes.
-    if (existing.frozen_at) {
-      throw new Error('Envelope is frozen -- use amendment workflow (ENV-04)');
-    }
-    // Capture formal_models keyed by requirement id for merge-back after aggregation
-    if (Array.isArray(existing.requirements)) {
-      existing.requirements.forEach(function(req) {
-        if (req.formal_models !== undefined) {
-          existingFormalModels[req.id] = req.formal_models;
-        }
-      });
+    // Fail open on a corrupt/truncated existing file: a malformed prior envelope
+    // must not abort re-aggregation (mirrors the category-groups.json parse below).
+    let existing = null;
+    try {
+      existing = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+    } catch (_) { existing = null; }
+    // Guard the shape too: JSON null/primitive/array is not a usable prior envelope,
+    // so skip the frozen guard and formal_models carry-over rather than deref it.
+    if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+      // Truthy check, not `!== null`: a fresh envelope often omits `frozen_at` (or
+      // sets it undefined), and `undefined !== null` is true — which falsely tripped
+      // the frozen guard on every absent key (dogfood). Only a real timestamp freezes.
+      if (existing.frozen_at) {
+        throw new Error('Envelope is frozen -- use amendment workflow (ENV-04)');
+      }
+      // Capture formal_models keyed by requirement id for merge-back after aggregation
+      if (Array.isArray(existing.requirements)) {
+        existing.requirements.forEach(function(req) {
+          if (req && req.formal_models !== undefined) {
+            existingFormalModels[req.id] = req.formal_models;
+          }
+        });
+      }
     }
   }
 

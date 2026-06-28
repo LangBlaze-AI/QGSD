@@ -132,8 +132,10 @@ function lowValuePass(id, text) {
     }
   }
 
-  // Check ID-prefix rules: RDME-* and GUIDE-* are documentation by convention
-  const prefix = id.replace(/-\d+$/, '');
+  // Check ID-prefix rules: RDME-* and GUIDE-* are documentation by convention.
+  // Guard a missing/non-string id (a requirement may carry text but no id) so we
+  // don't crash the whole batch on `id.replace(...)`.
+  const prefix = typeof id === 'string' ? id.replace(/-\d+$/, '') : '';
   if (prefix === 'RDME' && /\b(section|diagram|added|near\s+top|contribution)\b/i.test(stripped)) {
     return { matched: true, reason: 'README structure — documentation layout, not system behavior', rule: 'readme_prefix' };
   }
@@ -442,7 +444,12 @@ function main() {
       const archivePath = args['archive-path'] || '.planning/formal/archived-non-invariants.json';
       let archive = { archived_at: null, reason: '', entries: [] };
       if (fs.existsSync(archivePath)) {
-        archive = JSON.parse(fs.readFileSync(archivePath, 'utf8'));
+        try {
+          archive = JSON.parse(fs.readFileSync(archivePath, 'utf8'));
+        } catch (e) {
+          console.error(`validate-invariant: archive is not valid JSON (${archivePath}): ${e.message}`);
+          process.exit(1);
+        }
       }
 
       // Add any non-invariants not yet in the archive

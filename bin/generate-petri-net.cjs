@@ -22,9 +22,8 @@ const MIN_QUORUM_SIZE = Math.ceil(QUORUM_SLOTS.length / 2);  // = 3
 
 // Optional --min-quorum=N override (makes PET-03 deadlock check exercisable at runtime)
 const minQuorumArg = process.argv.slice(2).find(a => a.startsWith('--min-quorum='));
-const effectiveMinQuorum = minQuorumArg
-  ? parseInt(minQuorumArg.split('=')[1], 10)
-  : MIN_QUORUM_SIZE;
+const parsedMinQuorum = minQuorumArg ? parseInt(minQuorumArg.split('=')[1], 10) : MIN_QUORUM_SIZE;
+const effectiveMinQuorum = Number.isFinite(parsedMinQuorum) ? parsedMinQuorum : MIN_QUORUM_SIZE;
 
 // PET-03: structural deadlock check (pure logic — before any rendering)
 // A structural deadlock occurs when the quorum transition can NEVER fire because
@@ -83,6 +82,7 @@ function buildDot(slots, minQuorum) {
  * @returns {Array<{ number: string, name: string, dependsOn: string[], completed: boolean }>}
  */
 function parseRoadmapPhases(roadmapContent) {
+  if (typeof roadmapContent !== 'string') return [];
   const lines = roadmapContent.split('\n');
   const phases = [];
   let currentPhase = null;
@@ -201,7 +201,11 @@ function buildRoadmapDot(phases) {
   lines.push('  // Transitions (rectangles) -- phases');
   for (const phase of phases) {
     const nodeId = 't_' + phase.number.replace(/[.-]/g, '_');
-    const label = phase.number + '\\n' + phase.name.substring(0, 30);
+    const safeName = String(phase.name == null ? '' : phase.name)
+      .substring(0, 30)
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"');
+    const label = phase.number + '\\n' + safeName;
     if (phase.completed) {
       lines.push('  ' + nodeId + ' [shape=rect, height=0.5, width=2.0, style=filled, fillcolor="#4CAF50", fontcolor=white, label="' + label + '"];');
     } else {

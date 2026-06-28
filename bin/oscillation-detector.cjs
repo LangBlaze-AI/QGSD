@@ -210,7 +210,8 @@ function readLastSessionActions(sessionsDir) {
  * @param {string} [options.sessionsDir] - Override path to solve-sessions directory
  * @returns {Object} The verdicts object that was written
  */
-function updateVerdicts(options = {}) {
+function updateVerdicts(options) {
+  if (!options || typeof options !== 'object') options = {};
   const root = options.root || process.cwd();
   const formalDir = path.join(root, '.planning', 'formal');
   const trendPath = options.trendPath || path.join(formalDir, 'solve-trend.jsonl');
@@ -266,7 +267,7 @@ function updateVerdicts(options = {}) {
     // Extract layer residual series, filtering out -1 (fast-mode skipped)
     const series = [];
     for (const entry of entries) {
-      const val = entry.per_layer && entry.per_layer[key];
+      const val = entry && entry.per_layer && entry.per_layer[key];
       if (typeof val === 'number' && val >= 0) {
         series.push(val);
       }

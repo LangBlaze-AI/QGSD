@@ -1053,3 +1053,78 @@ test('simulateSolutionLoop: return type includes stuck_reason, bestGatesPassing,
     cleanupTempDir(tmpDir);
   }
 });
+
+// ====== ADVERSARIAL HARDENING TESTS (gaps3) ======
+
+// Test 20: gate runner returning a non-object verdict escalates instead of crashing
+test('simulateSolutionLoop: gate runner returning null verdict escalates, does not crash', async () => {
+  const tmpDir = createTempDir();
+  process.chdir(tmpDir);
+
+  try {
+    const { reproducingModelPath, bugTracePath } = setupTestEnv(tmpDir);
+
+    const mockDeps = createMockDeps({ gateVerdictConverged: false });
+    // Dependency resolves to a non-object verdict (realistic edge path)
+    mockDeps.gateRunner.runConvergenceGates = async () => null;
+
+    const result = await simulateSolutionLoop(
+      {
+        fixIdea: 'fix idea',
+        bugDescription: 'test bug',
+        reproducingModelPath,
+        neighborModelPaths: [],
+        bugTracePath,
+        formalism: 'tla',
+        maxIterations: 2
+      },
+      mockDeps
+    );
+
+    assert.strictEqual(result.converged, false, 'should not converge');
+    assert.ok(result.escalationReason, 'should escalate cleanly instead of throwing');
+    assert.ok(typeof result.tsvPath === 'string', 'should still return a structured result');
+  } finally {
+    cleanupTempDir(tmpDir);
+  }
+});
+
+// Test 21: null input rejects with a clear validation error
+test('simulateSolutionLoop: null input rejects with clear validation error', async () => {
+  await assert.rejects(
+    () => simulateSolutionLoop(null, createMockDeps()),
+    { message: /input must be an object/ },
+    'null input should reject with an intentional validation message'
+  );
+});
+
+// Test 22: negative maxIterations does not silently no-op
+test('simulateSolutionLoop: negative maxIterations does not silently return empty', async () => {
+  const tmpDir = createTempDir();
+  process.chdir(tmpDir);
+
+  try {
+    const { reproducingModelPath, bugTracePath } = setupTestEnv(tmpDir);
+    const mockDeps = createMockDeps({ gateVerdictConverged: true });
+
+    const result = await simulateSolutionLoop(
+      {
+        fixIdea: 'fix idea',
+        bugDescription: 'test bug',
+        reproducingModelPath,
+        neighborModelPaths: [],
+        bugTracePath,
+        formalism: 'tla',
+        maxIterations: -1
+      },
+      mockDeps
+    );
+
+    assert.ok(
+      result.iterations.length >= 1 || result.escalationReason,
+      'should run at least one iteration or report a reason, not silently no-op'
+    );
+  } finally {
+    cleanupTempDir(tmpDir);
+  }
+});

@@ -150,7 +150,7 @@ function parseNDJSON(ndjsonPath) {
     }
 
     const checkId = entry.check_id;
-    if (!checkId) continue;
+    if (!checkId || typeof checkId !== 'string') continue;
 
     const runtimeMs = typeof entry.runtime_ms === 'number' ? entry.runtime_ms : null;
     const formalism = entry.formalism || null;
@@ -194,8 +194,8 @@ function main() {
 
   const stateSpaceModels = stateSpaceData ? (stateSpaceData.models || {}) : null;
 
-  // Build unified profiles from both sources
-  const profiles = {};
+  // Build unified profiles from both sources (null-proto so a '__proto__' check_id is a normal key)
+  const profiles = Object.create(null);
   const seenCheckIds = new Set();
 
   // 1. Process NDJSON entries (runtime data)
@@ -217,6 +217,7 @@ function main() {
   // 2. Process state-space models not already covered by NDJSON
   if (stateSpaceModels) {
     for (const [modelPath, modelData] of Object.entries(stateSpaceModels)) {
+      if (!modelData || typeof modelData !== 'object') continue;
       // Check if already matched via NDJSON
       let alreadyCovered = false;
       for (const checkId of seenCheckIds) {

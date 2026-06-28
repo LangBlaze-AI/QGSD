@@ -38,7 +38,7 @@ function getModelKeys(registry) {
 }
 
 function getModelLevel(model) {
-  return model.gate_maturity || 'ADVISORY';
+  return (model && typeof model === 'object' && model.gate_maturity) || 'ADVISORY';
 }
 
 /**
@@ -92,9 +92,11 @@ function validateCriteria(modelPath, model, targetLevel, checkResults, evidenceR
   if (level === 'HARD_GATE') {
     const modelLower = modelPath.toLowerCase();
     const hasPassingCheck = checkResults.some(cr => {
-      if (cr.result !== 'pass') return false;
-      const toolMatch = cr.tool && modelLower.includes(cr.tool.toLowerCase());
-      const checkIdPart = cr.check_id ? (cr.check_id.split(':')[1] || '') : '';
+      if (!cr || typeof cr !== 'object' || cr.result !== 'pass') return false;
+      const tool = typeof cr.tool === 'string' ? cr.tool : '';
+      const toolMatch = tool && modelLower.includes(tool.toLowerCase());
+      const checkId = typeof cr.check_id === 'string' ? cr.check_id : '';
+      const checkIdPart = checkId ? (checkId.split(':')[1] || '') : '';
       const checkIdMatch = checkIdPart && modelLower.includes(checkIdPart.toLowerCase());
       return toolMatch || checkIdMatch;
     });

@@ -399,3 +399,40 @@ describe('standard schema compliance', () => {
     }
   });
 });
+
+describe('mapSentryIssuesToSchema malformed-element resilience', () => {
+  it('skips null entries and keeps valid issues instead of dropping all', () => {
+    const mcpResult = [
+      null,
+      { id: '99', title: 'Real issue', level: 'error', firstSeen: new Date(Date.now() - 3600000).toISOString(), count: 1, userCount: 1 }
+    ];
+    const result = mapSentryIssuesToSchema(mcpResult, { label: 'S' });
+    assert.equal(result.status, 'ok');
+    assert.equal(result.issues.length, 1);
+    assert.equal(result.issues[0].id, 'sentry-99');
+  });
+});
+
+describe('mapSentryFeedbackToSchema malformed-element resilience', () => {
+  it('skips null feedback entries and keeps valid ones', () => {
+    const mcpResult = [null, { id: 'fb-9', comments: 'real feedback' }];
+    const result = mapSentryFeedbackToSchema(mcpResult, { label: 'FB' });
+    assert.equal(result.status, 'ok');
+    assert.equal(result.issues.length, 1);
+    assert.ok(result.issues[0].title.includes('real feedback'));
+  });
+});
+
+describe('handleBash json malformed-element resilience', () => {
+  it('skips null elements in JSON output instead of dropping all issues', () => {
+    const jsonOutput = JSON.stringify([null, { title: 'Real issue' }]);
+    const execFn = () => jsonOutput;
+    const result = handleBash(
+      { type: 'bash', label: 'JSON', command: 'echo json', parser: 'json' },
+      { execFn }
+    );
+    assert.equal(result.status, 'ok');
+    assert.equal(result.issues.length, 1);
+    assert.equal(result.issues[0].title, 'Real issue');
+  });
+});

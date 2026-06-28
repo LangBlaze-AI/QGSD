@@ -347,4 +347,49 @@ describe('feature-report', () => {
       assert.ok(report.insights.some(i => i.includes('0 uses')));
     });
   });
+
+  describe('prototype-pollution bug_link.issue_url', () => {
+    it('does not crash when issue_url is "__proto__"', () => {
+      const dir = createTempDir();
+      tempDirs.push(dir);
+
+      const events = [
+        makeEvent({
+          feature_id: 'formal_loop',
+          bug_link: { issue_url: '__proto__', detection_type: 'detected' },
+        }),
+      ];
+
+      writeEvents(dir, events);
+      let report;
+      assert.doesNotThrow(() => { report = generateReport(dir, { since: '30d' }); });
+      assert.equal(report.bug_links.length, 1);
+      assert.equal(report.bug_links[0].issue_url, '__proto__');
+      assert.ok(report.bug_links[0].features.includes('formal_loop'));
+    });
+
+    it('does not crash when issue_url is "constructor"', () => {
+      const dir = createTempDir();
+      tempDirs.push(dir);
+      writeEvents(dir, [makeEvent({
+        feature_id: 'debug_pipeline',
+        bug_link: { issue_url: 'constructor', detection_type: 'detected' },
+      })]);
+      let report;
+      assert.doesNotThrow(() => { report = generateReport(dir, { since: '30d' }); });
+      assert.equal(report.bug_links.length, 1);
+      assert.equal(report.bug_links[0].issue_url, 'constructor');
+    });
+  });
+
+  describe('null/invalid opts argument', () => {
+    it('does not crash when opts is null', () => {
+      const dir = createTempDir();
+      tempDirs.push(dir);
+      let report;
+      assert.doesNotThrow(() => { report = generateReport(dir, null); });
+      assert.equal(report.total_events, 0);
+      assert.equal(report.time_window, '30d');
+    });
+  });
 });

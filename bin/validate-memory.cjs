@@ -28,6 +28,7 @@ const os = require('os');
 // ─────────────────────────────────────────────────────────────────────────────
 
 function findMemoryPath(cwd) {
+  if (typeof cwd !== 'string') return null;
   // Claude Code auto-memory path: ~/.claude/projects/<escaped-cwd>/memory/MEMORY.md
   const escaped = cwd.replace(/\//g, '-');
   const candidates = [
@@ -48,6 +49,7 @@ function findMemoryPath(cwd) {
 
 function checkStaleCounts(memoryContent, cwd) {
   const findings = [];
+  if (typeof memoryContent !== 'string') return findings;
 
   // Check requirements count references
   // Word-boundary \b prevents false positives like "R3.2 requires" matching "2 reqs"
@@ -184,6 +186,7 @@ function checkDeadFileRefs(memoryContent, cwd) {
 
 function checkTemporalMarkers(memoryContent) {
   const findings = [];
+  if (typeof memoryContent !== 'string') return findings;
   const lines = memoryContent.split('\n');
 
   for (let i = 0; i < lines.length; i++) {
@@ -230,6 +233,7 @@ function checkTemporalMarkers(memoryContent) {
 
 function checkContradictions(memoryContent, cwd) {
   const findings = [];
+  if (typeof memoryContent !== 'string') return findings;
 
   const envelopePath = path.join(cwd, '.planning', 'formal', 'requirements.json');
   if (!fs.existsSync(envelopePath)) return findings;
@@ -293,7 +297,13 @@ function validateMemory(options = {}) {
     return { findings: [], memoryPath: null };
   }
 
-  const content = fs.readFileSync(resolvedMemoryPath, 'utf8');
+  let content;
+  try {
+    content = fs.readFileSync(resolvedMemoryPath, 'utf8');
+  } catch (_) {
+    if (!quiet) process.stderr.write('[validate-memory] Could not read MEMORY.md — skipping\n');
+    return { findings: [], memoryPath: null };
+  }
 
   const allFindings = [
     ...checkStaleCounts(content, cwd),

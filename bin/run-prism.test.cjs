@@ -598,6 +598,46 @@ test('LOOP-01: run-prism pre-step writes rates.const before PRISM is invoked', a
   }
 });
 
+test('non-numeric NF_PRISM_TIMEOUT_MS falls back to default instead of crashing with ERR_OUT_OF_RANGE', () => {
+  if (!PRISM_BIN) return;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-prism-timeout-'));
+  try {
+    const result = spawnSync(process.execPath, [RUN_PRISM], {
+      encoding: 'utf8',
+      cwd:      tmpDir,
+      env:      prismEnv({ NF_PRISM_TIMEOUT_MS: 'abc' }),
+      timeout:  60000,
+    });
+    // Before the fix, spawnSync(prismBin, …, { timeout: NaN }) throws ERR_OUT_OF_RANGE
+    // which is uncaught and printed to stderr with a stack trace.
+    assert.doesNotMatch(result.stderr || '', /ERR_OUT_OF_RANGE/,
+      'non-numeric NF_PRISM_TIMEOUT_MS must not throw ERR_OUT_OF_RANGE from spawnSync');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('check-results.ndjson as a directory does not crash cold-start with EISDIR', () => {
+  if (!PRISM_BIN) return;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-prism-eisdir-'));
+  try {
+    const formalDir = path.join(tmpDir, '.planning', 'formal');
+    fs.mkdirSync(formalDir, { recursive: true });
+    // Adversarial: a DIRECTORY named check-results.ndjson where a file is expected
+    fs.mkdirSync(path.join(formalDir, 'check-results.ndjson'), { recursive: true });
+    const result = spawnSync(process.execPath, [RUN_PRISM], {
+      encoding: 'utf8',
+      cwd:      tmpDir,
+      env:      prismEnv(),
+      timeout:  60000,
+    });
+    assert.doesNotMatch(result.stderr || '', /EISDIR/,
+      'computeColdStartState must not throw EISDIR when check-results.ndjson is a directory');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('policy.yaml conservative_priors values are used as PRISM constants when no scoreboard', () => {
   if (!PRISM_BIN) return;
   // RED phase: this test verifies that run-prism.cjs reads conservative_priors from

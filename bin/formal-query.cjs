@@ -95,11 +95,11 @@ function suggestSimilarKeys(index, key) {
 }
 
 function resolveNodeKey(index, key) {
-  if (index.nodes[key]) return key;
+  if (Object.prototype.hasOwnProperty.call(index.nodes, key)) return key;
   // Try common prefixes
   const prefixes = ['code_file::', 'requirement::', 'constant::', 'formal_module::', 'invariant::', 'formal_model::'];
   for (const prefix of prefixes) {
-    if (index.nodes[prefix + key]) return prefix + key;
+    if (Object.prototype.hasOwnProperty.call(index.nodes, prefix + key)) return prefix + key;
   }
   return null;
 }
@@ -118,7 +118,7 @@ function reach(index, startNode, maxDepth, filter) {
     for (const { key, depth } of frontier) {
       if (depth >= maxDepth) continue;
       const node = index.nodes[key];
-      if (!node) continue;
+      if (!node || !Array.isArray(node.edges)) continue;
       for (const edge of node.edges) {
         if (visited.has(edge.to)) continue;
         visited.add(edge.to);
@@ -151,7 +151,7 @@ function findPath(index, from, to) {
   while (queue.length > 0) {
     const { key, path: currentPath } = queue.shift();
     const node = index.nodes[key];
-    if (!node) continue;
+    if (!node || !Array.isArray(node.edges)) continue;
 
     for (const edge of node.edges) {
       if (visited.has(edge.to)) continue;

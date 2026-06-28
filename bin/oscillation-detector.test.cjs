@@ -357,6 +357,32 @@ describe('updateVerdicts', () => {
       assert.ok(result.layers[key], `Missing layer: ${key}`);
     }
   });
+
+  it('does not crash on a JSON null entry in the trend file', () => {
+    const lines = [];
+    for (let i = 0; i < 5; i++) {
+      lines.push(JSON.stringify(makeTrendEntry(makePerLayer({ r_to_f: 10 - i }))));
+    }
+    lines.splice(2, 0, 'null'); // valid JSON that parses to null, not a malformed line
+    fs.mkdirSync(path.dirname(trendPath), { recursive: true });
+    fs.writeFileSync(trendPath, lines.join('\n') + '\n');
+
+    let result;
+    assert.doesNotThrow(() => {
+      result = updateVerdicts({ root: tmpDir, trendPath, verdictsPath, sessionsDir });
+    });
+    assert.ok(result.layers.r_to_f, 'should still produce a verdict for r_to_f');
+  });
+
+  it('does not crash when called with null options', () => {
+    const cwd = process.cwd();
+    try {
+      process.chdir(tmpDir); // ensure default root resolves into the disposable tmp dir
+      assert.doesNotThrow(() => updateVerdicts(null));
+    } finally {
+      process.chdir(cwd);
+    }
+  });
 });
 
 // ── readLastSessionActions Tests ─────────────────────────────────────────────
