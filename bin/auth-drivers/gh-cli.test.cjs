@@ -108,6 +108,27 @@ test('parseGhStatus does not duplicate an account seen twice in output', () => {
   );
 });
 
+test('parseGhStatus does not adopt an active account from a different (non-github.com) host', () => {
+  const ENTERPRISE_OUTPUT = [
+    'ghe.corp.com',
+    '  ✓ Logged in to ghe.corp.com account corpuser (keyring)',
+    '  - Active account: true',
+    'github.com',
+    '  ✓ Logged in to github.com account alice (keyring)',
+    '  - Active account: false',
+  ].join('\n');
+
+  withMockSpawnSync(
+    () => ({ stdout: ENTERPRISE_OUTPUT, stderr: '', status: 0 }),
+    ({ parseGhStatus }) => {
+      const { accounts, active } = parseGhStatus();
+      assert.deepStrictEqual(accounts, ['alice']);
+      // active must be a listed github.com account (or null), never the enterprise user.
+      assert.strictEqual(active, null);
+    },
+  );
+});
+
 // ─── 2. list() ────────────────────────────────────────────────────────────────
 
 test('list converts parseGhStatus output to { name, active } entries', () => {
@@ -159,6 +180,27 @@ test('switch throws when gh exits non-zero', () => {
           return true;
         },
       );
+    },
+  );
+});
+
+test('switch rejects a non-string account name with a clean error (no raw ERR_INVALID_ARG_TYPE)', () => {
+  let switchCalled = false;
+  withMockSpawnSync(
+    (_cmd, args) => {
+      if (args[0] === 'auth' && args[1] === 'switch') switchCalled = true;
+      return { stdout: '', stderr: '', status: 0 };
+    },
+    (driver) => {
+      assert.throws(
+        () => driver.switch({}, undefined),
+        (err) => {
+          assert.strictEqual(err.code, undefined, `expected a controlled Error, got code ${err.code}`);
+          assert.ok(/account name/i.test(err.message), `got: ${err.message}`);
+          return true;
+        },
+      );
+      assert.strictEqual(switchCalled, false, 'spawn must not be attempted for an invalid name');
     },
   );
 });

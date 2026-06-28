@@ -115,3 +115,56 @@ describe('packFile — content escaping', () => {
     assert.equal(result, '<file path="plain.py" lang="py">def hello(): pass</file>');
   });
 });
+
+// ---------------------------------------------------------------------------
+// packFile — path attribute safety (pf-1)
+// ---------------------------------------------------------------------------
+
+describe('packFile — path attribute safety', () => {
+  it('escapes a double-quote in filePath so the XML attribute cannot be broken out of', () => {
+    const result = packFile({ filePath: 'a".js', content: 'x' });
+    assert.ok(result.includes('&quot;'), 'double-quote in path should be escaped');
+    assert.ok(!result.includes('path="a".js"'), 'raw quote must not terminate the attribute');
+  });
+
+  it('escapes angle brackets in filePath so markup cannot be injected', () => {
+    const result = packFile({ filePath: '<x>.js', content: 'y' });
+    assert.ok(result.includes('&lt;x&gt;.js'), 'angle brackets in path should be escaped');
+  });
+
+  it('leaves a normal path unchanged', () => {
+    const result = packFile({ filePath: 'src/foo.js', content: 'hello' });
+    assert.ok(result.includes('path="src/foo.js"'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectLang — non-string input (pf-2)
+// ---------------------------------------------------------------------------
+
+describe('detectLang — non-string input', () => {
+  it('returns null for null instead of throwing', () => {
+    assert.equal(detectLang(null), null);
+  });
+
+  it('returns null for undefined instead of throwing', () => {
+    assert.equal(detectLang(undefined), null);
+  });
+
+  it('returns null for a number instead of throwing', () => {
+    assert.equal(detectLang(42), null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// packFile — missing options (pf-3)
+// ---------------------------------------------------------------------------
+
+describe('packFile — missing options', () => {
+  it('does not throw when called with no arguments', () => {
+    let result;
+    assert.doesNotThrow(() => { result = packFile(); });
+    assert.equal(typeof result, 'string');
+    assert.ok(result.startsWith('<file'));
+  });
+});

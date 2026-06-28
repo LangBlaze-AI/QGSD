@@ -103,13 +103,14 @@ function computeChurnScores(commits, options) {
   const excludePatterns = opts.excludePatterns || DEFAULT_EXCLUDE_PATTERNS;
   const churnMap = new Map();
 
-  for (const commit of commits) {
-    const fileCount = commit.files.length;
+  for (const commit of (commits || [])) {
+    const fileList = (commit && Array.isArray(commit.files)) ? commit.files : [];
+    const fileCount = fileList.length;
     const weight = fileCount >= threshold
       ? 1 / Math.max(1, fileCount / threshold)
       : 1;
 
-    for (const file of commit.files) {
+    for (const file of fileList) {
       if (isExcluded(file.path, excludePatterns)) continue;
       const current = churnMap.get(file.path) || 0;
       churnMap.set(file.path, current + weight);
@@ -158,8 +159,8 @@ function loadHeatmapChurn(projectRoot) {
 const COMMENT_PREFIXES = ['//', '#', '/*', '*', '--'];
 
 function estimateComplexity(filePath, projectRoot) {
-  const fullPath = path.resolve(projectRoot, filePath);
   try {
+    const fullPath = path.resolve(projectRoot, filePath);
     const content = fs.readFileSync(fullPath, 'utf8');
     const lines = content.split('\n');
     let count = 0;
@@ -182,7 +183,7 @@ function estimateComplexity(filePath, projectRoot) {
 function normalizeMap(scoreMap) {
   if (scoreMap.size === 0) return new Map();
 
-  const values = [...scoreMap.values()];
+  const values = [...scoreMap.values()].map(v => (Number.isFinite(v) ? v : 0));
   const min = Math.min(...values);
   const max = Math.max(...values);
 
@@ -196,7 +197,8 @@ function normalizeMap(scoreMap) {
 
   const range = max - min;
   for (const [key, val] of scoreMap) {
-    normalized.set(key, (val - min) / range);
+    const v = Number.isFinite(val) ? val : min;
+    normalized.set(key, (v - min) / range);
   }
   return normalized;
 }

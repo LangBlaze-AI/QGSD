@@ -35,7 +35,7 @@ function parseGhStatus() {
     if (/Logged in to github\.com account/.test(line) && last && !accounts.includes(last)) {
       accounts.push(last);
     }
-    if (/Active account:\s*true/.test(line) && last) {
+    if (/Active account:\s*true/.test(line) && last && accounts.includes(last)) {
       active = last;
     }
   }
@@ -55,6 +55,9 @@ function list(_provider) {
  * switch(provider, name) — calls gh auth switch (non-interactive, stays in TUI).
  */
 function switchAccount(_provider, name) {
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new Error('gh auth switch: account name must be a non-empty string');
+  }
   const r = spawnSync('gh', ['auth', 'switch', '--user', name, '--hostname', 'github.com'], {
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
   });

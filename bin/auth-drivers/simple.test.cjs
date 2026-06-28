@@ -114,6 +114,28 @@ test('extractAccountName returns null when credential file has no JWT', () => {
   );
 });
 
+test('extractAccountName returns null when identity_detect pattern has no capture group', () => {
+  const tmp = path.join(os.tmpdir(), 'simple-driver-iddetect-' + Date.now() + '.txt');
+  fs.writeFileSync(tmp, 'oauth_token: abc123xyz\n');
+  const provider = { identity_detect: { file: tmp, pattern: 'oauth_token: \\w+' } };
+  try {
+    // Pattern matches but declares no capture group -> m[1] is undefined.
+    // Must return null (documented contract), not undefined.
+    assert.strictEqual(driver.extractAccountName(provider), null);
+  } finally {
+    try { fs.unlinkSync(tmp); } catch (_) {}
+  }
+});
+
+test('extractAccountName returns null when JWT email claim is not a string', () => {
+  withTempCreds(
+    { id_token: makeJwt({ email: { primary: 'user@x.com' } }) },
+    (provider) => {
+      assert.strictEqual(driver.extractAccountName(provider), null);
+    },
+  );
+});
+
 // ─── 6. add() ─────────────────────────────────────────────────────────────────
 
 test('add resolves without error (terminal already ran auth.login; nothing to capture)', async () => {

@@ -215,9 +215,9 @@ async function extractSkeleton(filePath, projectRoot, options) {
 
 function enrichSkeleton(skeleton, hotspots, cochange) {
   const hotspotMap = new Map();
-  if (hotspots && hotspots.files) {
+  if (hotspots && Array.isArray(hotspots.files)) {
     for (const f of hotspots.files) {
-      hotspotMap.set(f.path, f);
+      if (f && typeof f === 'object' && f.path !== undefined) hotspotMap.set(f.path, f);
     }
   }
 
@@ -235,9 +235,12 @@ function enrichSkeleton(skeleton, hotspots, cochange) {
   return {
     ...skeleton,
     hotspot_risk: hotspotEntry ? hotspotEntry.hotspot_score : undefined,
-    max_coupling_degree: cochangePartners.length > 0
-      ? Math.max(...cochangePartners.map(p => p.coupling_degree))
-      : undefined,
+    max_coupling_degree: (() => {
+      const degrees = (Array.isArray(cochangePartners) ? cochangePartners : [])
+        .map(p => (p && typeof p.coupling_degree === 'number' ? p.coupling_degree : NaN))
+        .filter(d => Number.isFinite(d));
+      return degrees.length > 0 ? Math.max(...degrees) : undefined;
+    })(),
   };
 }
 

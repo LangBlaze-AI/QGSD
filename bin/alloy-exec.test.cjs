@@ -14,7 +14,7 @@
 
 const { test } = require('node:test');
 const assert   = require('node:assert');
-const { parseAlloyOutcome, hasInstance } = require('./alloy-exec.cjs');
+const { parseAlloyOutcome, hasInstance, runAlloy } = require('./alloy-exec.cjs');
 
 // ── Captured fixture: a REAL Alloy-6 counterexample. ──────────────────────────
 // Source model: `run Sat {} for 3` (satisfiable) + a FALSE assertion
@@ -105,4 +105,36 @@ test('hasInstance: true only when a solution carries a non-empty instances array
   assert.strictEqual(hasInstance({ solution: [] }), false);
   assert.strictEqual(hasInstance({}), false);
   assert.strictEqual(hasInstance(null), false);
+});
+
+test('hasInstance: a null (or non-object) entry inside the solution array must not throw', () => {
+  assert.strictEqual(hasInstance({ solution: [null] }), false);
+  assert.strictEqual(hasInstance({ solution: [null, { instances: [{ values: {} }] }] }), true);
+});
+
+test('parseAlloyOutcome: a corrupt receipt with a null solution entry fails gracefully (no throw)', () => {
+  const r = parseAlloyOutcome('{"commands":{"Bad":{"type":"check","solution":[null]}}}');
+  const bad = r.commands.find(c => c.name === 'Bad');
+  assert.ok(bad, 'Bad must still be parsed');
+  assert.strictEqual(bad.instancesFound, false, 'a null solution entry carries no instance');
+  assert.strictEqual(bad.outcome, 'pass', 'check with no instance holds');
+});
+
+test('runAlloy: undefined/null opts returns a structured error, never throws (fail-open)', () => {
+  let r;
+  assert.doesNotThrow(() => { r = runAlloy(); });
+  assert.strictEqual(r.status, 'error');
+  assert.strictEqual(r.outcome, null);
+  assert.match(r.error, /jar|als|opts/i);
+
+  let r2;
+  assert.doesNotThrow(() => { r2 = runAlloy(null); });
+  assert.strictEqual(r2.status, 'error');
+});
+
+test('runAlloy: missing/non-string jarPath or alsPath returns error before spawning java', () => {
+  const r = runAlloy({ jarPath: '/some/alloy.jar' }); // alsPath missing
+  assert.strictEqual(r.status, 'error');
+  const r2 = runAlloy({ jarPath: 123, alsPath: '/x.als' }); // non-string jarPath
+  assert.strictEqual(r2.status, 'error');
 });

@@ -103,7 +103,7 @@ function computeCoChange(projectRoot, options) {
 // ---------------------------------------------------------------------------
 
 function getPartnersForFile(filePath, cochangeResult) {
-  if (!cochangeResult || !cochangeResult.fileIndex) return [];
+  if (!cochangeResult || !cochangeResult.fileIndex || typeof cochangeResult.fileIndex.get !== 'function') return [];
   return cochangeResult.fileIndex.get(filePath) || [];
 }
 
@@ -112,7 +112,8 @@ function getPartnersForFile(filePath, cochangeResult) {
 // ---------------------------------------------------------------------------
 
 function formatCoChangeXml(cochange) {
-  const entries = cochange.pairs.map(p => {
+  const pairsList = (cochange && Array.isArray(cochange.pairs)) ? cochange.pairs : [];
+  const entries = pairsList.map(p => {
     const f1 = escapeXml(p.file1);
     const f2 = escapeXml(p.file2);
     return `<pair file1="${f1}" file2="${f2}" shared_commits="${p.shared_commits}" coupling_degree="${p.coupling_degree}"/>`;

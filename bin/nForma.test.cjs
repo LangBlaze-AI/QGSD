@@ -1585,3 +1585,35 @@ test('persistence functions are exported via _pure', () => {
   assert.strictEqual(typeof _pure.SESSIONS_FILE, 'string');
   assert.ok(_pure.SESSIONS_FILE.endsWith('sessions.json'));
 });
+
+test('readProjectConfig: returns {} when config.json holds a valid non-object JSON value', () => {
+  const tmpDir = makeTmp();
+  const prevTarget = _pure.targetPath;
+  try {
+    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'config.json'), 'null', 'utf8');
+    _pure.targetPath = tmpDir;
+    const cfg = _pure.readProjectConfig();
+    assert.ok(cfg && typeof cfg === 'object' && !Array.isArray(cfg),
+      'readProjectConfig must return a plain object, never null/primitive');
+    // downstream deref (buildSettingsPaneContent / settingsFlow) must not throw
+    assert.doesNotThrow(() => { const _p = cfg.model_profile; const _o = cfg.model_overrides; });
+  } finally {
+    _pure.targetPath = prevTarget;
+    rmTmp(tmpDir);
+  }
+});
+
+test('buildScoreboardLines: tolerates a null entry in opts.providers', () => {
+  const data = { models: { alice: { score: 10, invocations: 10, tp: 10, tn: 0, fp: 0, fn: 0, impr: 0 } } };
+  const providers = [
+    { name: 'gemini-1', cli: '/usr/bin/gemini', model: 'gemini-3-pro' },
+    null,
+  ];
+  let lines;
+  assert.doesNotThrow(() => {
+    lines = _pure.buildScoreboardLines(data, { providers });
+  }, 'a null provider entry must not crash the scoreboard renderer');
+  const text = lines.join('\n');
+  assert.ok(text.includes('gemini-1'), 'valid provider rows should still render');
+});

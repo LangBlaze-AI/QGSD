@@ -135,3 +135,50 @@ describe('formatEntryByDetail', () => {
     assert.ok(result.includes('hello'));
   });
 });
+
+// ---------------------------------------------------------------------------
+// formatEntryByDetail (hardening)
+// ---------------------------------------------------------------------------
+
+describe('formatEntryByDetail (hardening)', () => {
+  it('does not crash on skeletonEntries missing a type field', () => {
+    const entry = {
+      filePath: 'src/foo.js',
+      skeletonEntries: [
+        { name: 'mystery', start: 1, end: 5 }, // no `type`
+        { type: 'function_declaration', name: 'hello', start: 6, end: 9 },
+      ],
+    };
+    let result;
+    assert.doesNotThrow(() => { result = formatEntryByDetail(entry, 'signatures'); });
+    // the well-formed entry still surfaces, the malformed one is skipped
+    assert.ok(result.includes('hello'));
+    assert.ok(!result.includes('mystery'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// allocateBudget (hardening)
+// ---------------------------------------------------------------------------
+
+describe('allocateBudget (hardening)', () => {
+  it('treats null/undefined files as empty instead of throwing', () => {
+    assert.doesNotThrow(() => allocateBudget(null, 1000));
+    const result = allocateBudget(undefined, 1000);
+    assert.equal(result.allocations.length, 0);
+    assert.equal(result.overflow, false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// compressContext (hardening)
+// ---------------------------------------------------------------------------
+
+describe('compressContext (hardening)', () => {
+  it('treats NaN budget as overflow, not a bogus compressed result', () => {
+    const files = [{ filePath: 'a.js' }, { filePath: 'b.js' }];
+    const result = compressContext(files, NaN);
+    assert.equal(result.json.repowise.budget_mode, 'overflow');
+    assert.ok(result.xml.includes('budget_mode="overflow"'));
+  });
+});

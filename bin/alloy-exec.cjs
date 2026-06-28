@@ -45,7 +45,7 @@ const DEFAULT_HEAP_MAX   = process.env.NF_JAVA_HEAP_MAX || '512m';
  */
 function hasInstance(cmd) {
   if (!cmd || !Array.isArray(cmd.solution) || cmd.solution.length === 0) return false;
-  return cmd.solution.some(sol => Array.isArray(sol.instances) && sol.instances.length > 0);
+  return cmd.solution.some(sol => sol != null && Array.isArray(sol.instances) && sol.instances.length > 0);
 }
 
 /**
@@ -178,11 +178,16 @@ function resolveJava() {
  * }}
  */
 function runAlloy(opts) {
-  const { jarPath, alsPath } = opts || {};
-  const heapMax   = opts.heapMax  || DEFAULT_HEAP_MAX;
-  const timeoutMs = opts.timeoutMs != null ? opts.timeoutMs : DEFAULT_TIMEOUT_MS;
+  const o = opts || {};
+  const { jarPath, alsPath } = o;
+  if (typeof jarPath !== 'string' || !jarPath || typeof alsPath !== 'string' || !alsPath) {
+    return { status: 'error', outcome: null, stdout: '', stderr: '',
+      error: 'runAlloy requires string opts.jarPath and opts.alsPath', receiptPath: null };
+  }
+  const heapMax   = o.heapMax  || DEFAULT_HEAP_MAX;
+  const timeoutMs = o.timeoutMs != null ? o.timeoutMs : DEFAULT_TIMEOUT_MS;
 
-  let javaExe = opts.javaExe;
+  let javaExe = o.javaExe;
   if (!javaExe) {
     const jres = resolveJava();
     if (jres.error) {
@@ -192,7 +197,7 @@ function runAlloy(opts) {
   }
 
   // Dedicated output dir so receipt.json is unambiguous and isolated.
-  let outputDir = opts.outputDir;
+  let outputDir = o.outputDir;
   let createdTemp = false;
   if (!outputDir) {
     outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-alloy-'));

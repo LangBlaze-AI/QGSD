@@ -29,6 +29,9 @@ function resolveProjectRoot() {
 
 function packContext({ files, projectRoot, signals }) {
   const sig = signals || {};
+  const fileList = (Array.isArray(files) ? files : [])
+    .filter(f => f && typeof f === 'object')
+    .map(f => ({ ...f, filePath: typeof f.filePath === 'string' ? f.filePath : '' }));
 
   const skeletonSection = sig.skeleton
     ? `<skeleton available="true">${sig.skeleton}</skeleton>`
@@ -40,7 +43,7 @@ function packContext({ files, projectRoot, signals }) {
     ? `<cochange available="true">${sig.cochange}</cochange>`
     : '<cochange available="false"/>';
 
-  const fileTags = files.map(f => packFile({ filePath: f.filePath, content: f.content, lang: f.lang }));
+  const fileTags = fileList.map(f => packFile({ filePath: f.filePath, content: f.content, lang: f.lang }));
 
   const filesSection = fileTags.length > 0
     ? `<files>\n${fileTags.join('\n')}\n</files>`
@@ -53,7 +56,7 @@ function packContext({ files, projectRoot, signals }) {
       skeleton: { available: !!sig.skeleton, data: sig.skeleton || null, ...(sig._skeletonData ? { files: sig._skeletonData } : {}) },
       hotspot: { available: !!sig.hotspot, data: sig.hotspot || null, ...(sig._hotspotData ? { summary: sig._hotspotData.summary, files: sig._hotspotData.files } : {}) },
       cochange: { available: !!sig.cochange, data: sig.cochange || null, ...(sig._cochangeData ? { summary: sig._cochangeData.summary, pairs: sig._cochangeData.pairs } : {}) },
-      files: files.map(f => ({
+      files: fileList.map(f => ({
         path: f.filePath,
         lang: f.lang !== undefined ? f.lang : (path.extname(f.filePath) ? null : null),
         content: f.content,

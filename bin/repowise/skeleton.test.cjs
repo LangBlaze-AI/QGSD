@@ -111,6 +111,35 @@ describe('enrichSkeleton', () => {
   });
 });
 
+describe('enrichSkeleton — corrupt co-change data', () => {
+  it('does not crash when a co-change partner is null', () => {
+    const skeleton = { entries: [], lang: 'js', method: 'ast', filePath: 'src/foo.js' };
+    const cochange = { fileIndex: new Map([['src/foo.js', [null, { partner: 'src/bar.ts', coupling_degree: 0.7 }]]]) };
+    const enriched = enrichSkeleton(skeleton, null, cochange);
+    assert.equal(enriched.max_coupling_degree, 0.7);
+  });
+});
+
+describe('enrichSkeleton — non-numeric coupling_degree', () => {
+  it('omits coupling_degree (never NaN) when partners lack a numeric coupling_degree', () => {
+    const skeleton = { entries: [], lang: 'js', method: 'ast', filePath: 'src/foo.js' };
+    const cochange = { fileIndex: new Map([['src/foo.js', [{ partner: 'src/bar.ts' }]]]) };
+    const enriched = enrichSkeleton(skeleton, null, cochange);
+    assert.equal(enriched.max_coupling_degree, undefined);
+    const xml = formatSkeletonXml([{ type: 'f', name: 'x', start: 1, end: 1, complexity: 1, max_coupling_degree: enriched.max_coupling_degree }]);
+    assert.ok(!xml.includes('coupling_degree="NaN"'), 'must never emit NaN coupling');
+  });
+});
+
+describe('enrichSkeleton — corrupt hotspots data', () => {
+  it('does not crash when hotspots.files contains a null entry', () => {
+    const skeleton = { entries: [], lang: 'js', method: 'ast', filePath: 'src/foo.js' };
+    const hotspots = { files: [null, { path: 'src/foo.js', hotspot_score: 0.85 }] };
+    const enriched = enrichSkeleton(skeleton, hotspots, null);
+    assert.equal(enriched.hotspot_risk, 0.85);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // formatSkeletonXml
 // ---------------------------------------------------------------------------

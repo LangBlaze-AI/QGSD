@@ -3156,10 +3156,10 @@ function classifyCandidate(candidate) {
  * @returns {{ filtered: Array, suppressed: Array, stats: {total, suppressed, passed} }}
  */
 function proximityPreFilter(candidates) {
-  const empty = { filtered: [...candidates], suppressed: [], stats: { total: candidates.length, suppressed: 0, passed: candidates.length } };
-  if (!candidates || candidates.length === 0) {
+  if (!Array.isArray(candidates) || candidates.length === 0) {
     return { filtered: [], suppressed: [], stats: { total: 0, suppressed: 0, passed: 0 } };
   }
+  const empty = { filtered: [...candidates], suppressed: [], stats: { total: candidates.length, suppressed: 0, passed: candidates.length } };
 
   try {
     const indexPath = path.join(ROOT, '.planning', 'formal', 'proximity-index.json');
@@ -4061,7 +4061,7 @@ function classifyFailingTest(testPath, traceMatrix, modelRegistry, bugGaps) {
   const bugId = crypto.createHash('sha256').update(testPath).digest('hex').slice(0, 8);
 
   // Step 1: Find requirement IDs linked to this test via traceability matrix
-  const testReqMap = traceMatrix.test_requirement_map || {};
+  const testReqMap = (traceMatrix && traceMatrix.test_requirement_map) || {};
   const reqIds = testReqMap[testPath] || [];
   if (reqIds.length === 0) {
     return { classification: 'not_covered', models: [], bug_id: bugId };
@@ -4070,7 +4070,7 @@ function classifyFailingTest(testPath, traceMatrix, modelRegistry, bugGaps) {
   // Step 2: Find formal models covering those requirements
   const reqSet = new Set(reqIds);
   const matchedModels = [];
-  const models = modelRegistry.models || {};
+  const models = (modelRegistry && modelRegistry.models) || {};
   for (const [modelPath, modelMeta] of Object.entries(models)) {
     const modelReqs = modelMeta.requirements || [];
     if (modelReqs.some(r => reqSet.has(r))) {
@@ -4082,7 +4082,7 @@ function classifyFailingTest(testPath, traceMatrix, modelRegistry, bugGaps) {
   }
 
   // Step 3: Check bug-model-gaps.json for reproduction status
-  const entries = bugGaps.entries || [];
+  const entries = (bugGaps && bugGaps.entries) || [];
   const existing = entries.find(e => e.bug_id === bugId);
   if (existing && existing.status === 'reproduced') {
     return { classification: 'covered_reproduced', models: matchedModels, bug_id: bugId };
@@ -6190,7 +6190,7 @@ function checkCleanSession() {
 function computeScannerStats(classifications) {
   const stats = {};
   for (const [scannerKey, entries] of Object.entries(classifications || {})) {
-    const values = Object.values(entries);
+    const values = (entries && typeof entries === 'object') ? Object.values(entries) : [];
     stats[scannerKey] = {
       total: values.length,
       fp: values.filter(v => v === 'fp').length,

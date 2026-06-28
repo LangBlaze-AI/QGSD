@@ -2335,6 +2335,7 @@ function buildScoreboardLines(data, opts) {
   const providerMap = new Map();
   if (opts && opts.providers) {
     for (const p of opts.providers) {
+      if (!p || typeof p !== 'object') continue;
       const cli   = (p.cli || '').split('/').pop() || '\u2014';
       const model = (p.model || '').split('/').pop() || '\u2014';
       providerMap.set(p.name, { cli, model });
@@ -2419,6 +2420,7 @@ function buildScoreboardLines(data, opts) {
     const ZERO = { score: 0, invocations: 0, tp: 0, tn: 0, fp: 0, fn: 0, impr: 0 };
 
     for (const p of opts.providers) {
+      if (!p || typeof p !== 'object') continue;
       if (p.name === orchestrator) continue;
       const cli      = (p.cli || '').split('/').pop() || '\u2014';
       const modelKey = p.model || '';
@@ -2664,7 +2666,10 @@ const AGENT_LABELS = {
 };
 
 function readProjectConfig() {
-  try { return JSON.parse(fs.readFileSync(path.join(getTargetPath(), '.planning', 'config.json'), 'utf8')); }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(getTargetPath(), '.planning', 'config.json'), 'utf8'));
+    return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  }
   catch (_) { return {}; }
 }
 function writeProjectConfig(cfg) {
