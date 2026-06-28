@@ -119,8 +119,9 @@ test('ADV-LOAD-2: corrupt global AND corrupt project → usable DEFAULT config, 
 // into the merged config, leaking garbage numeric keys ("0","1","2",...).
 // readConfigFile returns the parsed array; loadConfig does
 // `{ ...DEFAULT_CONFIG, ...projectObj }` with no Array.isArray guard, so the
-// array's indices become config keys. A non-object config should be IGNORED, not
-// shredded into the config. This test asserts the SAFE behavior and FAILS today.
+// array's indices become config keys. A non-object config must be IGNORED, not
+// shredded into the config. Regression guard: locks in the SAFE behavior so the
+// Array.isArray guard cannot regress.
 test('ADV-LOAD-3: array-typed top-level config must not spread numeric garbage keys (GAP)', async () => {
   const home = mkTempDir('nf-advload3-home-');     // empty global (no nf.json)
   const proj = mkTempDir('nf-advload3-proj-');
@@ -157,7 +158,7 @@ test('ADV-LOAD-3: array-typed top-level config must not spread numeric garbage k
 // so validProfile='constructor' and `HOOK_PROFILE_MAP['constructor'].has(...)`
 // throws "….has is not a function". The function's own contract is "unknown
 // profile → fall back to standard"; it must NOT crash for ANY unknown string.
-// Asserts the SAFE fallback and FAILS today (throws). Defense-in-depth: this
+// Regression guard: locks in the SAFE fallback (no throw). Defense-in-depth: this
 // shared gate underlies every hook; a thrown error here is a fail-CLOSED crash.
 test('ADV-SRH-1: inherited-prototype profile string falls back to standard, must not crash (GAP)', async () => {
   for (const poisoned of ['constructor', 'toString', 'hasOwnProperty', 'valueOf']) {
@@ -200,14 +201,15 @@ test('ADV-SRH-2: benign unknown profiles fall back to standard; minimal correctl
 // required fields (Stop / SessionStart / SessionEnd / PreCompact / SubagentStop)
 // the array is reported VALID. Same structurally-broken input → opposite verdicts.
 // A hook using validateHookInput as a shape gate would proceed on an array for
-// Stop. Asserts arrays are consistently rejected; FAILS today for Stop.
+// Stop. Regression guard: locks in that arrays are consistently rejected (incl. Stop).
 test('ADV-VHI-1: array payload must be rejected consistently (not "valid" for no-required-field events) (GAP)', async () => {
   // Baseline: array IS correctly rejected where a required field exists.
   assert.equal(
     validateHookInput('PreToolUse', []).valid, false,
     'array rejected for PreToolUse (missing required tool_name)'
   );
-  // GAP: the same array is accepted for an event with no required fields.
+  // Regression check: the same array must also be rejected for an event with no
+  // required fields (previously it slipped through as "valid").
   const stopVerdict = validateHookInput('Stop', []);
   assert.equal(
     stopVerdict.valid, false,

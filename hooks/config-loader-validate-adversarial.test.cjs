@@ -47,8 +47,9 @@ function quiet(fn) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GAP 1 (#283 class): a partial `quorum` object loses min_live_voters and
-// validateConfig never restores it. Downstream consensus gate reads undefined.
+// Regression guard (#283 class): a partial `quorum` object must not lose
+// min_live_voters — validateConfig restores the default after the shallow merge so
+// the downstream consensus gate never reads undefined.
 // ─────────────────────────────────────────────────────────────────────────────
 test('A1: partial quorum {maxSize} → min_live_voters restored to default after shallow merge', () => {
   // Hand-edited project nf.json: `"quorum": { "maxSize": 5 }` only.
@@ -59,10 +60,11 @@ test('A1: partial quorum {maxSize} → min_live_voters restored to default after
   assert.equal(config.quorum.maxSize, 5, 'user maxSize preserved');
   assert.equal(config.quorum.preferSub, false, 'missing preferSub restored');
 
-  // ...but min_live_voters is NOT. It is left undefined, so any consumer that
-  // trusts validateConfig (rather than re-deriving like nf-stop.getMinLiveVoters)
-  // reads `config.quorum.min_live_voters === undefined` and the consensus floor
-  // (issue #170) silently disappears.
+  // ...and min_live_voters must be restored too. The risk this guards against:
+  // if it were left undefined, any consumer that trusts validateConfig (rather than
+  // re-deriving like nf-stop.getMinLiveVoters) would read
+  // `config.quorum.min_live_voters === undefined` and the consensus floor
+  // (issue #170) would silently disappear.
   assert.equal(
     config.quorum.min_live_voters,
     DEFAULT_CONFIG.quorum.min_live_voters,
