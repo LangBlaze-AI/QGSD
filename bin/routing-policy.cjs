@@ -59,7 +59,7 @@ class PresetPolicy {
       if (hintName) {
         const hintLower = hintName.toLowerCase();
         const hinted = providers.find(
-          p => p.name.toLowerCase().includes(hintLower) && p.type === 'subprocess' && p.has_file_access === true
+          p => p && typeof p.name === 'string' && p.name.toLowerCase().includes(hintLower) && p.type === 'subprocess' && p.has_file_access === true
         );
         if (hinted) {
           return makePolicyResult({
@@ -75,7 +75,7 @@ class PresetPolicy {
     }
 
     const candidate = providers.find(
-      p => p.type === 'subprocess' && p.has_file_access === true
+      p => p && p.type === 'subprocess' && p.has_file_access === true
     );
 
     if (!candidate) {
@@ -228,7 +228,8 @@ class RiverPolicy {
     for (let i = lastIdx; i < rewards.length; i++) {
       const entry = rewards[i];
       const slotName = entry.slot;
-      if (!state.qTable[taskType][slotName]) {
+      if (slotName === '__proto__' || slotName === 'constructor' || slotName === 'prototype') continue;
+      if (!Object.prototype.hasOwnProperty.call(state.qTable[taskType], slotName)) {
         state.qTable[taskType][slotName] = { q: 0, visits: 0, lastUpdate: new Date().toISOString() };
       }
 
@@ -261,7 +262,7 @@ class RiverPolicy {
     }
 
     const eligible = providers.filter(
-      p => p.type === 'subprocess' && p.has_file_access === true
+      p => p && p.type === 'subprocess' && p.has_file_access === true
     );
     if (eligible.length === 0) {
       return makePolicyResult({ reason: 'river:no-eligible-providers' });

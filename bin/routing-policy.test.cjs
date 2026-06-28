@@ -711,3 +711,58 @@ test('selectSlotWithPolicy clears lastShadow when River has no recommendation', 
     cleanUp(rewardsPath, statePath);
   }
 });
+
+// ── Adversarial hardening TESTS ─────────────────────────────────────────────
+
+test('RiverPolicy._updateQValues does not pollute Object.prototype via slot="__proto__"', () => {
+  assert.ok(mod);
+  const rewardsPath = tmpPath('q-proto.jsonl');
+  const statePath = tmpPath('q-proto-state.json');
+  try {
+    const recorder = new mod.RewardRecorder({ rewardsPath });
+    recorder.record({ taskType: 'implement', slot: '__proto__', reward: 0.9 });
+    recorder.record({ taskType: 'implement', slot: 'codex-1', reward: 0.9 });
+
+    const policy = new mod.RiverPolicy({
+      rewardsPath,
+      statePath,
+      config: { minSamples: 1, minExplore: 1, epsilon: 0, learningRate: 0.1, decayRate: 0.01, rewardMargin: 0.01, cooldownMs: 0 },
+    });
+    policy.recommend('implement', PROVIDERS);
+
+    assert.strictEqual(
+      Object.prototype.hasOwnProperty.call(Object.prototype, 'q'),
+      false,
+      'Object.prototype.q should not be polluted'
+    );
+    assert.strictEqual(({}).q, undefined, 'plain object should not inherit a polluted q');
+  } finally {
+    delete Object.prototype.q;
+    delete Object.prototype.visits;
+    delete Object.prototype.lastUpdate;
+    cleanUp(rewardsPath, statePath);
+  }
+});
+
+test('PresetPolicy.recommend does not throw on a null provider entry', () => {
+  assert.ok(mod);
+  const policy = new mod.PresetPolicy();
+  const providers = [null, { name: 'codex-1', type: 'subprocess', has_file_access: true }];
+  let result;
+  assert.doesNotThrow(() => { result = policy.recommend('implement', providers); }, 'should not throw on null entry');
+  assert.strictEqual(result.recommendation, 'codex-1');
+  assert.strictEqual(result.reason, 'preset:first-eligible-subprocess');
+});
+
+test('PresetPolicy.recommend does not throw on a name-less provider when routingHint is given', () => {
+  assert.ok(mod);
+  const policy = new mod.PresetPolicy();
+  const providers = [
+    { type: 'subprocess', has_file_access: true }, // no name
+    { name: 'gemini-1', type: 'subprocess', has_file_access: true },
+  ];
+  let result;
+  assert.doesNotThrow(() => { result = policy.recommend('implement', providers, 'gemini-1'); }, 'should not throw on name-less entry');
+  assert.strictEqual(result.recommendation, 'gemini-1');
+  assert.strictEqual(result.reason, 'preset:routing-hint-match');
+});

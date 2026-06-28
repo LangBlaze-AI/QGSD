@@ -1123,3 +1123,58 @@ test('SECURITY: a double-underscore env key resolves per-slot via exact concat a
     'CROSS-SLOT LEAK: slotB must keep its own concrete token — no raw fallback / mis-split may apply slotA\'s value'
   );
 });
+
+// ─── HARDEN: patchCcrConfigForKey null/non-object provider entries ────────────
+
+test('patchCcrConfigForKey: skips null/non-object provider entries without crashing (fail-open)', () => {
+  const tmpDir = makeTmpDir();
+  const ccrDir = path.join(tmpDir, '.claude-code-router');
+  fs.mkdirSync(ccrDir, { recursive: true });
+  const configPath = path.join(ccrDir, 'config.json');
+  fs.writeFileSync(configPath, JSON.stringify({
+    providers: [
+      null,
+      'string-entry',
+      { name: 123, api_key: 'numeric-name' },
+      { name: 'fireworks', api_key: 'old-fw' },
+    ],
+  }));
+
+  const realHomedir = os.homedir.bind(os);
+  const mod = requireSecretsWithTmpHome(tmpDir);
+  try {
+    assert.doesNotThrow(
+      () => mod.patchCcrConfigForKey('FIREWORKS_API_KEY', 'new-fw'),
+      'null/non-object provider entries must not crash patchCcrConfigForKey'
+    );
+  } finally {
+    restoreHomedir(realHomedir);
+    clearSecretsCache();
+  }
+
+  const out = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  assert.equal(out.providers[3].api_key, 'new-fw', 'valid fireworks provider should still be patched');
+});
+
+// ─── HARDEN: whole-file JSON null fails open ──────────────────────────────────
+
+test('syncToClaudeJson: fails open (no throw) when claude.json content is literal JSON null', async () => {
+  const tmpDir = makeTmpDir();
+  writeSecrets(tmpDir, { SOME_KEY: 'some-value' });
+  writeClaudeJson(tmpDir, 'null'); // valid JSON, parses to null
+
+  const realHomedir = os.homedir.bind(os);
+  const mod = requireSecretsWithTmpHome(tmpDir);
+  try {
+    await assert.doesNotReject(
+      () => mod.syncToClaudeJson('nforma'),
+      'syncToClaudeJson must not throw when claude.json parses to null'
+    );
+  } finally {
+    restoreHomedir(realHomedir);
+    clearSecretsCache();
+  }
+
+  // The null file must be left untouched (nothing to patch).
+  assert.equal(fs.readFileSync(path.join(tmpDir, '.claude.json'), 'utf8'), 'null');
+});

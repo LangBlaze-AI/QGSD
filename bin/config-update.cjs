@@ -28,7 +28,8 @@ function getMaxIterations(projectRoot) {
     const root = projectRoot || path.join(__dirname, '..');
     const configPath = path.join(root, '.planning', 'config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    return typeof config.max_iterations === 'number' ? config.max_iterations : 3;
+    const v = config.max_iterations;
+    return (Number.isInteger(v) && v > 0) ? v : 3;
   } catch (_err) {
     // Fail-open: return default
     return 3;
@@ -93,7 +94,7 @@ function createSessionDirectory(projectRoot) {
 function parseMaxIterationsArg(argv) {
   const args = argv || process.argv;
   for (const arg of args) {
-    if (arg.startsWith('--max-iterations=')) {
+    if (typeof arg === 'string' && arg.startsWith('--max-iterations=')) {
       const value = arg.slice('--max-iterations='.length);
       const numValue = parseInt(value, 10);
       return Number.isInteger(numValue) && numValue > 0 ? numValue : null;

@@ -90,6 +90,26 @@ try {
   assert(jsonData.threshold_kb === 128, 'Default threshold should be 128KB');
   console.log('  PASS');
 
+  console.log('Test 7: invalid --threshold-kb falls back to default instead of disabling the guard...');
+  // parseInt('notanumber', 10) === NaN; THRESHOLD_KB = NaN makes the size check
+  // `sizeBytes >= NaN` always false (fail-open) and serializes threshold_kb to null.
+  const badThresholdData = runAuditJSON(['--threshold-kb', 'notanumber']);
+  assert(typeof badThresholdData.threshold_kb === 'number', 'threshold_kb must be a number');
+  assert(Number.isFinite(badThresholdData.threshold_kb) && badThresholdData.threshold_kb > 0,
+    'threshold_kb must be finite and positive');
+  assert(badThresholdData.threshold_kb === 128, 'invalid threshold should fall back to the 128 KB default');
+  console.log('  PASS');
+
+  console.log('Test 8: auditScript tolerates non-string scriptName without throwing...');
+  const { auditScript } = require(path.join(ROOT, 'bin', 'audit-agent-payloads.cjs'));
+  for (const bad of [null, undefined, 42, {}]) {
+    let res;
+    assert.doesNotThrow(() => { res = auditScript(bad); }, `auditScript(${String(bad)}) should not throw`);
+    assert(res && ['missing', 'error'].includes(res.status), 'should degrade to missing/error');
+    assert.strictEqual(res.size_bytes, 0, 'size_bytes should be 0 for invalid input');
+  }
+  console.log('  PASS');
+
   console.log('\nAll tests passed!');
   process.exit(0);
 } catch (err) {

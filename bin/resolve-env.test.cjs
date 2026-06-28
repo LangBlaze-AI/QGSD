@@ -380,3 +380,22 @@ test('SECURITY: resolveSinglePlaceholder leaves multi/embedded placeholders lite
     delete process.env._NF_SEC_VAR;
   }
 });
+
+// --- ROUND 4: prototype-chain placeholder names must not resolve --------------
+test('SECURITY: resolveSinglePlaceholder leaves inherited prototype-name placeholders literal (no object/function injection)', () => {
+  // ${__proto__}/${constructor}/${toString} are NOT own keys of process.env;
+  // the buggy `!== undefined` check picks up inherited Object.prototype members
+  // and returns a live object/function instead of the literal placeholder.
+  assert.equal(resolveSinglePlaceholder('${__proto__}'), '${__proto__}');
+  assert.equal(resolveSinglePlaceholder('${constructor}'), '${constructor}');
+  assert.equal(resolveSinglePlaceholder('${toString}'), '${toString}');
+  assert.equal(typeof resolveSinglePlaceholder('${__proto__}'), 'string', 'must never resolve to a non-string');
+  // and through the bulk path, the resolved env value must stay a literal string
+  const out = resolveEnvPlaceholders({ ANTHROPIC_AUTH_TOKEN: '${__proto__}' });
+  assert.equal(out.ANTHROPIC_AUTH_TOKEN, '${__proto__}');
+});
+
+test('SECURITY: findUnresolvedPlaceholders flags inherited-prototype-name placeholders as unresolved', () => {
+  const env = { A: '${__proto__}', B: '${constructor}', C: '${toString}' };
+  assert.deepEqual(findUnresolvedPlaceholders(env), ['A', 'B', 'C']);
+});

@@ -69,6 +69,30 @@ test('validateTraceEvent returns 2 violations for event with forbidden key and f
   assert.ok(violations.length >= 2, 'should have at least 2 violations, got: ' + violations.length);
 });
 
+test('validateTraceEvent detects forbidden pattern in a NESTED object value (no silent bypass)', () => {
+  const policy = parseRedactionPolicy(POLICY_PATH);
+  const violations = validateTraceEvent(
+    { request: { headers: { authorization: 'AKIAIOSFODNN7EXAMPLE' } } },
+    policy
+  );
+  // authorization is also a forbidden_key, and the value matches aws_access_key_id —
+  // either way a secret is nested and MUST be reported, not silently skipped.
+  assert.ok(violations.length >= 1, 'nested secret must be detected, got: ' + violations.length);
+  assert.ok(
+    violations.some(v => v.violation_type === 'forbidden_pattern' || v.violation_type === 'forbidden_key'),
+    'should report a forbidden_pattern or forbidden_key for the nested secret'
+  );
+});
+
+test('validateTraceEvent detects forbidden pattern in an ARRAY value element', () => {
+  const policy = parseRedactionPolicy(POLICY_PATH);
+  const violations = validateTraceEvent(
+    { tags: ['benign', 'AKIAIOSFODNN7EXAMPLE'] },
+    policy
+  );
+  assert.ok(violations.length >= 1, 'secret inside array element must be detected, got: ' + violations.length);
+});
+
 // ── Integration tests ─────────────────────────────────────────────────────────
 
 test('integration: exits 0 with clean trace event JSONL file', () => {
@@ -131,6 +155,26 @@ test('integration: exits 0 with non-existent trace directory (graceful no-op)', 
     );
 
     assert.strictEqual(result.status, 0, 'should exit 0 when trace directory does not exist. stderr: ' + result.stderr);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('integration: exits 0 (graceful) when --trace-dir points to a file, not a directory', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-redact-test-'));
+  const ndjsonPath = path.join(tmpDir, 'check-results.ndjson');
+
+  try {
+    const filePath = path.join(tmpDir, 'not-a-dir.txt');
+    fs.writeFileSync(filePath, 'AKIAIOSFODNN7EXAMPLE\n', 'utf8');
+
+    const result = spawnSync(
+      process.execPath,
+      [path.join(__dirname, 'check-trace-redaction.cjs'), '--trace-dir', filePath],
+      { cwd: tmpDir, encoding: 'utf8', env: { ...process.env, CHECK_RESULTS_PATH: ndjsonPath } }
+    );
+
+    assert.strictEqual(result.status, 0, 'should exit 0 gracefully when trace-dir is a file. stderr: ' + result.stderr);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

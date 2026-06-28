@@ -397,3 +397,13 @@ test('providerKeyFromUrl falls back to a hash for an invalid URL', () => {
   // Deterministic: the same invalid input yields the same key.
   assert.equal(key, providerKeyFromUrl('not a url'));
 });
+
+test('providerKeyFromUrl returns a stable key for null/undefined/non-string baseUrl instead of throwing', () => {
+  for (const bad of [null, undefined, 123, {}]) {
+    let key;
+    assert.doesNotThrow(() => { key = providerKeyFromUrl(bad); }, `should not throw for ${String(bad)}`);
+    assert.match(key, /^provider-[a-f0-9]{8}$/, `bad input ${String(bad)} should hash to provider-<hash>`);
+  }
+  // Deterministic per-input.
+  assert.equal(providerKeyFromUrl(null), providerKeyFromUrl(null));
+});

@@ -137,6 +137,21 @@ describe('writeCache + readCache', () => {
     const result = readCache('nonexistent', tmpDir);
     assert.equal(result, null);
   });
+
+  it('readCache returns null when created is missing or invalid', () => {
+    const entry = makeEntry({ created: 'not-a-date' });
+    const key = 'badcreated';
+    writeCache(key, entry, tmpDir);
+    assert.equal(readCache(key, tmpDir), null);
+  });
+
+  it('readCache returns null when ttl_ms is missing', () => {
+    const entry = makeEntry();
+    delete entry.ttl_ms;
+    const key = 'nottl';
+    writeCache(key, entry, tmpDir);
+    assert.equal(readCache(key, tmpDir), null);
+  });
 });
 
 describe('isCacheValid', () => {
@@ -201,5 +216,24 @@ describe('computeCacheKey adversarial', () => {
     const key1 = computeCacheKey(prompt1, '', slots, [], 'HEAD1');
     const key2 = computeCacheKey(prompt2, '', slots, [], 'HEAD1');
     assert.notEqual(key1, key2, 'different large inputs must produce different keys');
+  });
+});
+
+describe('computeCacheKey null-slot hardening', () => {
+  it('does not throw when slots contains a null entry', () => {
+    const slots = [{ slot: 'codex-1' }, null];
+    let key;
+    assert.doesNotThrow(() => {
+      key = computeCacheKey('p', 'c', slots, [], 'H');
+    }, 'computeCacheKey must not throw on a null slot element');
+    assert.ok(typeof key === 'string' && key.length === 64, 'key should still be a 64-char hex string');
+  });
+
+  it('does not throw when slots is a non-array truthy value', () => {
+    let key;
+    assert.doesNotThrow(() => {
+      key = computeCacheKey('p', 'c', { slot: 'x' }, [], 'H');
+    });
+    assert.ok(typeof key === 'string' && key.length === 64);
   });
 });

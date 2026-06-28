@@ -42,8 +42,8 @@ function confirmPairing(pairing, registry) {
   pairing.resolved_by = 'human';
 
   let added = false;
-  const models = registry.models || {};
-  if (models[pairing.model]) {
+  const models = (registry && registry.models) || {};
+  if (Object.prototype.hasOwnProperty.call(models, pairing.model)) {
     const reqs = models[pairing.model].requirements || [];
     if (!reqs.includes(pairing.requirement)) {
       reqs.push(pairing.requirement);

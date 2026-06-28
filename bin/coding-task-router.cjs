@@ -47,7 +47,7 @@ try {
  * @param {string}   [opts.context]   - Optional additional context
  * @returns {string} Structured prompt string
  */
-function buildCodingPrompt({ task, repoDir, files, constraints, context }) {
+function buildCodingPrompt({ task, repoDir, files, constraints, context } = {}) {
   const lines = [];
 
   lines.push('=== TASK ===');
@@ -150,10 +150,14 @@ function parseCodingResult(rawOutput) {
 function selectSlot(taskType, providers) {
   if (!Array.isArray(providers)) return null;
 
+  // Drop null / non-object entries so one corrupt provider can't crash the
+  // legacy path or poison the policy layer into returning null.
+  const safe = providers.filter(p => p && typeof p === 'object');
+
   // Delegate to policy layer if available (fail-open to legacy behavior)
   if (routingPolicy) {
     try {
-      const result = routingPolicy.selectSlotWithPolicy(taskType, providers);
+      const result = routingPolicy.selectSlotWithPolicy(taskType, safe);
       return result.slot;
     } catch (_) {
       // Fall through to legacy logic
@@ -161,7 +165,7 @@ function selectSlot(taskType, providers) {
   }
 
   // Legacy fallback — identical to original behavior
-  const candidate = providers.find(
+  const candidate = safe.find(
     p => p.type === 'subprocess' && p.has_file_access === true
   );
 

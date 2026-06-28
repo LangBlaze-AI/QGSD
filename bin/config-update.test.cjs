@@ -167,3 +167,36 @@ test('Integration: updateMaxIterations and getMaxIterations round-trip', () => {
   // Cleanup
   fs.rmSync(tmpDir, { recursive: true });
 });
+
+// Test: getMaxIterations falls back to default 3 for invalid numeric values
+test('getMaxIterations falls back to 3 for non-positive or non-integer config values', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'config-update-'));
+  const planningDir = path.join(tmpDir, '.planning');
+  fs.mkdirSync(planningDir, { recursive: true });
+  const cfgPath = path.join(planningDir, 'config.json');
+
+  fs.writeFileSync(cfgPath, JSON.stringify({ max_iterations: 0 }, null, 2) + '\n');
+  assert.strictEqual(getMaxIterations(tmpDir), 3, 'zero should fall back to default');
+
+  fs.writeFileSync(cfgPath, JSON.stringify({ max_iterations: -5 }, null, 2) + '\n');
+  assert.strictEqual(getMaxIterations(tmpDir), 3, 'negative should fall back to default');
+
+  fs.writeFileSync(cfgPath, JSON.stringify({ max_iterations: 2.5 }, null, 2) + '\n');
+  assert.strictEqual(getMaxIterations(tmpDir), 3, 'non-integer should fall back to default');
+
+  fs.rmSync(tmpDir, { recursive: true });
+});
+
+// Test: parseMaxIterationsArg tolerates non-string argv entries
+test('parseMaxIterationsArg skips non-string argv entries without throwing', () => {
+  assert.strictEqual(
+    parseMaxIterationsArg(['node', 'script.js', undefined, '--max-iterations=4']),
+    4,
+    'should ignore non-string entries and still find the flag'
+  );
+  assert.strictEqual(
+    parseMaxIterationsArg(['node', 'script.js', 42, null]),
+    null,
+    'should return null (not throw) when no string flag present'
+  );
+});

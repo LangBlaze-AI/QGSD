@@ -84,6 +84,15 @@ test('buildCodingPrompt with no optional fields produces valid prompt', () => {
   assert.ok(prompt.includes('=== OUTPUT FORMAT ==='), 'missing OUTPUT FORMAT section');
 });
 
+test('buildCodingPrompt does not throw on missing opts object (null-input)', () => {
+  assert.ok(mod, 'module not loaded');
+  assert.doesNotThrow(() => mod.buildCodingPrompt(), 'should not throw with no args');
+  const prompt = mod.buildCodingPrompt();
+  assert.ok(prompt.includes('=== TASK ==='), 'missing TASK section');
+  assert.ok(prompt.includes('(no task specified)'), 'should fall back to placeholder task');
+  assert.ok(prompt.includes('=== OUTPUT FORMAT ==='), 'missing OUTPUT FORMAT section');
+});
+
 // ── parseCodingResult TESTS ─────────────────────────────────────────────────
 
 test('parseCodingResult extracts structured fields from well-formed output', () => {
@@ -182,6 +191,17 @@ test('selectSlot returns null for non-array input', () => {
   assert.ok(mod, 'module not loaded');
   assert.strictEqual(mod.selectSlot('fix', null), null);
   assert.strictEqual(mod.selectSlot('fix', undefined), null);
+});
+
+test('selectSlot skips null/non-object provider entries and still selects a valid one', () => {
+  assert.ok(mod, 'module not loaded');
+  const providers = [
+    null,
+    'garbage',
+    { name: 'codex-1', type: 'subprocess', has_file_access: true },
+  ];
+  const result = mod.selectSlot('implement', providers);
+  assert.strictEqual(result, 'codex-1', 'a single corrupt entry must not drop valid providers');
 });
 
 // ── INTEGRATION TESTS: Full prompt-build -> parse round-trip ────────────────

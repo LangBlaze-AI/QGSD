@@ -27,8 +27,11 @@ const { spawnSync } = require('node:child_process');
  * @returns {string} Full hex SHA-256 digest
  */
 function computeCacheKey(prompt, context, slots, configQuorumActive, gitHead) {
-  const sortedSlotNames = (slots || [])
+  const sortedSlotNames = (Array.isArray(slots) ? slots : [])
+    .filter(s => s && typeof s === 'object')
     .map(s => s.slot)
+    .filter(s => s != null)
+    .map(String)
     .sort()
     .join(',');
 
@@ -89,8 +92,10 @@ function readCache(cacheKey, cacheDir) {
     // Must have completed field (pending entries are cache misses)
     if (!entry.completed) return null;
 
-    // TTL check
-    const age = Date.now() - new Date(entry.created).getTime();
+    // TTL check — reject entries with missing/invalid created or ttl
+    const createdMs = new Date(entry.created).getTime();
+    if (!Number.isFinite(createdMs) || typeof entry.ttl_ms !== 'number') return null;
+    const age = Date.now() - createdMs;
     if (age > entry.ttl_ms) return null;
 
     return entry;

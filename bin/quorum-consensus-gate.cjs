@@ -376,15 +376,18 @@ function buildFailureDomainClusters(slotRates, providersPath) {
   // Build name → provider mapping
   const slotProvider = {};
   for (const entry of providers) {
-    if (entry.name && entry.provider) {
+    if (entry && entry.name && entry.provider) {
       slotProvider[entry.name] = entry.provider;
     }
   }
 
-  // Group active slots by provider
+  // Group active slots by provider. Slots with no provider mapping are
+  // genuinely independent (no shared failure domain) -- do NOT bucket them
+  // together, or the correlated clusterPMF over-correlates them.
   const clusters = {};
   for (const slot of activeSlots) {
-    const group = slotProvider[slot] || '_independent';
+    const group = slotProvider[slot];
+    if (!group) continue;
     if (!clusters[group]) clusters[group] = [];
     clusters[group].push(slot);
   }

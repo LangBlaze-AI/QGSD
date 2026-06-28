@@ -597,3 +597,68 @@ test('resolves within 3 seconds (no-hang contract) on missing secrets', () => {
   assert.equal(exitCode, 0, 'should exit 0');
   assert.ok(elapsed < 3000, `should finish within 3s, took ${elapsed}ms`);
 });
+
+// ─── Test 25 (CSC-1): provider named "constructor" must not match via inherited prop ───
+
+test('does not match/corrupt a provider named "constructor" (inherited-prop via `in`)', () => {
+  const tmpDir = makeTmpDir();
+  installCli(tmpDir);
+  plantSecrets(tmpDir, { akash: 'ak-key' });
+  writeConfig(tmpDir, {
+    providers: [
+      { name: 'constructor', api_key: 'keep-me' },
+      { name: 'akashml',     api_key: 'old'     },
+    ],
+  });
+
+  const { exitCode, stdout } = run(tmpDir);
+  assert.equal(exitCode, 0);
+  assert.ok(
+    stdout.includes('Populated 1 provider key(s)'),
+    `expected only akashml patched, got: ${stdout}`
+  );
+
+  const cfg = readConfig(tmpDir);
+  assert.equal(cfg.providers[0].api_key, 'keep-me', 'provider named "constructor" must not be matched/corrupted');
+  assert.equal(cfg.providers[1].api_key, 'ak-key', 'akashml should be patched');
+});
+
+// ─── Test 26 (CSC-2): non-string truthy provider name is skipped, not crashed ───
+
+test('skips a provider whose name is a non-string truthy value instead of crashing', () => {
+  const tmpDir = makeTmpDir();
+  installCli(tmpDir);
+  plantSecrets(tmpDir, { akash: 'ak-key' });
+  // name as a number — provider.name.toLowerCase() throws under current code
+  const raw = JSON.stringify({
+    providers: [
+      { name: 123,       api_key: 'numeric-name' },
+      { name: 'akashml', api_key: 'old'          },
+    ],
+  }, null, 2);
+  writeConfig(tmpDir, raw);
+
+  const { exitCode, stdout } = run(tmpDir);
+  assert.equal(exitCode, 0, 'a non-string name must not abort the whole config write');
+  assert.ok(stdout.includes('Populated 1 provider key(s)'), stdout);
+
+  const cfg = readConfig(tmpDir);
+  assert.equal(cfg.providers[0].api_key, 'numeric-name', 'numeric-name provider untouched');
+  assert.equal(cfg.providers[1].api_key, 'ak-key', 'akashml should be patched');
+});
+
+// ─── Test 27 (CSC-3): config.json that is literally `null` exits gracefully ───
+
+test('exits 1 gracefully (no Unexpected error) when config.json is literally null', () => {
+  const tmpDir = makeTmpDir();
+  installCli(tmpDir);
+  plantSecrets(tmpDir, { akash: 'ak-key' });
+  writeConfig(tmpDir, 'null');
+
+  const { exitCode, stderr } = run(tmpDir);
+  assert.equal(exitCode, 1);
+  assert.ok(
+    stderr.includes('no providers array'),
+    `expected graceful "no providers array", got: ${stderr}`
+  );
+});

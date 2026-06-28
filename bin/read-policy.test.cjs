@@ -74,3 +74,30 @@ test('readPolicy: returns conservative_priors tp_rate and unavail', () => {
   assert.strictEqual(typeof policy.conservative_priors.tp_rate, 'number');
   assert.strictEqual(typeof policy.conservative_priors.unavail, 'number');
 });
+
+test('readPolicy: throws descriptive error (not raw EISDIR) when path is a directory', () => {
+  const { readPolicy } = require(READ_POLICY);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rp-dir-'));
+  try {
+    assert.throws(() => readPolicy(dir), (err) => {
+      assert.notStrictEqual(err.code, 'EISDIR', 'should not leak raw EISDIR');
+      assert.match(err.message, /not a file|read-policy/i);
+      return true;
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('readPolicy: rejects numeric field that parses to NaN (lone dot)', () => {
+  const { readPolicy } = require(READ_POLICY);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rp-nan-'));
+  const p = path.join(tmp, 'policy.yaml');
+  // tp_rate token is a lone '.', which [\d.]+ matches but parseFloat('.') === NaN
+  fs.writeFileSync(p, 'min_ci_runs: 5\nmin_quorum_rounds: 10\nmin_days: 1\nmode: warn\ntp_rate: .\nunavail: 0.15\n');
+  try {
+    assert.throws(() => readPolicy(p), /tp_rate|non-numeric|NaN/i);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});

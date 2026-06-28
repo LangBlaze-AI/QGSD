@@ -18,6 +18,14 @@ if (!keyName) {
   process.exit(1);
 }
 
+// Reject reserved object keys. `__proto__` in particular is silently dropped by
+// the JSON-backed store (store['__proto__'] = '<string>' sets the prototype, a
+// no-op, so the secret never persists) — yet the CLI would still print "Stored".
+if (keyName === '__proto__' || keyName === 'constructor' || keyName === 'prototype') {
+  console.error(`[nf] Error: "${keyName}" is a reserved key name and cannot be used as a secret key`);
+  process.exit(1);
+}
+
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,

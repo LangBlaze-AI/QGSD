@@ -21,6 +21,9 @@ function readPolicy(policyPath) {
   if (!fs.existsSync(policyPath)) {
     throw new Error('[read-policy] Policy file not found: ' + policyPath);
   }
+  if (!fs.statSync(policyPath).isFile()) {
+    throw new Error('[read-policy] Policy path is not a file: ' + policyPath);
+  }
 
   const yaml = fs.readFileSync(policyPath, 'utf8');
 
@@ -30,7 +33,11 @@ function readPolicy(policyPath) {
     if (!match) {
       throw new Error('[read-policy] Policy missing required key: ' + key);
     }
-    return asFloat ? parseFloat(match[1]) : parseInt(match[1], 10);
+    const num = asFloat ? parseFloat(match[1]) : parseInt(match[1], 10);
+    if (!Number.isFinite(num)) {
+      throw new Error('[read-policy] Policy key has non-numeric value: ' + key);
+    }
+    return num;
   };
 
   const extractStr = (key) => {

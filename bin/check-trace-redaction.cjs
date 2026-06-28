@@ -143,6 +143,12 @@ function validateTraceEvent(event, policy) {
           violations.push({ key, value, pattern_name: pattern.name, violation_type: 'forbidden_pattern' });
         }
       }
+    } else if (value && typeof value === 'object') {
+      // Recurse into nested objects/arrays so secrets and forbidden keys
+      // nested at any depth are still detected (fail-closed).
+      for (const nested of validateTraceEvent(value, policy)) {
+        violations.push(nested);
+      }
     }
   }
 
@@ -180,8 +186,14 @@ if (require.main === module) {
     process.exit(0);
   }
 
-  // Find .json and .jsonl files (non-recursive)
-  const allFiles = fs.readdirSync(traceDir);
+  // Find .json and .jsonl files (non-recursive). Fail open if the path
+  // exists but is not a readable directory (e.g. a regular file → ENOTDIR).
+  let allFiles;
+  try {
+    allFiles = fs.readdirSync(traceDir);
+  } catch (_) {
+    allFiles = [];
+  }
   const traceFiles = allFiles.filter(f => f.endsWith('.json') || f.endsWith('.jsonl'));
 
   if (traceFiles.length === 0) {

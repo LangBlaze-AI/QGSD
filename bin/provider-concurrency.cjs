@@ -60,8 +60,8 @@ function providerKeyFromUrl(baseUrl) {
     const pathPart = url.pathname.replace(/^\//, '').replace(/\//g, '-') || 'root'; // /v1 -> v1
     return `${hostPart}-${pathPart}`.toLowerCase();
   } catch (_) {
-    // Fallback for invalid URLs: hash the baseUrl
-    const hash = crypto.createHash('sha256').update(baseUrl).digest('hex').slice(0, 8);
+    // Fallback for invalid URLs (incl. null/undefined/non-string): hash a string form.
+    const hash = crypto.createHash('sha256').update(String(baseUrl)).digest('hex').slice(0, 8);
     return `provider-${hash}`;
   }
 }

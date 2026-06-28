@@ -101,6 +101,7 @@ function scanFile(filePath, content) {
  * @returns {{findings: Array, files_scanned: number, duration_ms: number}}
  */
 function scanDirectory(cwd, options = {}) {
+  options = options || {};
   const maxFiles = options.maxFiles || 500;
   const startTime = Date.now();
 
@@ -141,8 +142,8 @@ function scanDirectory(cwd, options = {}) {
   let scanned = 0;
 
   for (const relPath of files) {
-    const absPath = path.join(cwd, relPath);
     try {
+      const absPath = path.join(cwd, relPath);
       const content = fs.readFileSync(absPath, 'utf8');
       // Skip binary files (null bytes in first 512 bytes)
       if (content.slice(0, 512).includes('\0')) continue;
@@ -169,7 +170,7 @@ function scanDirectory(cwd, options = {}) {
  * @returns {string}
  */
 function formatReport(scanResult) {
-  const { findings, files_scanned, duration_ms } = scanResult;
+  const { findings, files_scanned, duration_ms } = scanResult || {};
   const lines = [];
 
   lines.push('## Security Sweep');
