@@ -1478,6 +1478,22 @@ test('TC-FOCUS-4: sweepFtoT filters gaps by focusSet (source code verification)'
   assert.ok(ftoT.includes('gapsList.filter'), 'sweepFtoT should filter gapsList');
 });
 
+// ── TC-IDEMPOTENT: report-only must not mutate solve-state.json (issue #5) ────
+
+test('TC-IDEMPOTENT-1: the solve-state.json write is guarded by !reportOnly', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'nf-solve.cjs'), 'utf8');
+  // Locate the solve-state.json write and confirm an `if (!reportOnly)` guard
+  // immediately precedes it. Report-only is documented as a no-mutation sweep; an
+  // unguarded write made the residual non-idempotent (a report run rewrote state,
+  // and the residual penalizes stale solve-state, so the next run measured lower).
+  // Anchor on the unique write expression (not the reads of the same filename).
+  const idx = src.indexOf('JSON.stringify(solveState, null, 2)');
+  assert.ok(idx !== -1, 'expected the solve-state.json write site');
+  const preceding = src.slice(Math.max(0, idx - 400), idx);
+  assert.ok(/if\s*\(\s*!reportOnly\s*\)/.test(preceding),
+    'the solve-state.json write must be guarded by `if (!reportOnly)` so a report-only sweep stays idempotent');
+});
+
 // ── TC-MISSING: Missing-file residual tests (DIAG-02) ────────────────────────
 
 test('TC-MISSING-1: missing-file returns use residual -1 not 0 (source verification)', () => {

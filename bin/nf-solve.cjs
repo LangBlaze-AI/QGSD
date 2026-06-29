@@ -6750,15 +6750,23 @@ function main() {
   const prevClean = (existingSolveState && existingSolveState.consecutive_clean_sessions) || 0;
   solveState.consecutive_clean_sessions = isCleanSession ? prevClean + 1 : 0;
 
-  try {
-    const stateDir = path.join(ROOT, '.planning', 'formal');
-    fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(stateDir, 'solve-state.json'),
-      JSON.stringify(solveState, null, 2) + '\n'
-    );
-  } catch (e) {
-    process.stderr.write(TAG + ' WARNING: could not write solve-state.json: ' + e.message + '\n');
+  // Report-only is documented as a no-mutation diagnostic sweep. Persisting
+  // solve-state.json here violated that and made the measurement non-idempotent:
+  // the residual penalizes a stale solve-state (wave_count===0), so a report run
+  // rewrote the state and the NEXT report run then measured a lower residual
+  // (issue #5 — "Residual unstable: pre=348→post=340" on no-op stability checks).
+  // Only persist when actually solving.
+  if (!reportOnly) {
+    try {
+      const stateDir = path.join(ROOT, '.planning', 'formal');
+      fs.mkdirSync(stateDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(stateDir, 'solve-state.json'),
+        JSON.stringify(solveState, null, 2) + '\n'
+      );
+    } catch (e) {
+      process.stderr.write(TAG + ' WARNING: could not write solve-state.json: ' + e.message + '\n');
+    }
   }
 
   // Step 8a: Auto-promote eligible models (PROMO-01)
