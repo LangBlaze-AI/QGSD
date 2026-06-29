@@ -362,6 +362,12 @@ if (require.main === module) {
       // 2c: Non-prefixed files (exact match on stripped name)
       const nonPrefixed = allTla.find(f => normalize(f.replace('.tla', '')) === stripped);
       if (nonPrefixed) return nonPrefixed;
+      // 2d: XState/FSM-generated convention — `MC<Module>.cfg` pairs with the
+      // transpiled `<Module>_xstate.tla` (emitted by bin/fsm-to-tla.cjs /
+      // xstate-to-tla.cjs). Without this the cfg silently falls back to NFQuorum.tla,
+      // whose constants it does not assign, breaking the formal-verify check.
+      const xstateMatch = allTla.find(f => normalize(f.replace('.tla', '')) === stripped + '_xstate');
+      if (xstateMatch) return xstateMatch;
     } catch (_) { /* fall through */ }
 
     return 'NFQuorum.tla';
