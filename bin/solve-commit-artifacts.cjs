@@ -21,6 +21,14 @@ const PATHSPECS = [
 // it can silently stage nothing — so we stage then `git reset` these paths out).
 const STAGE_EXCLUDE_PATHS = ['test/golden/'];
 
+// Ephemeral TLC trace artifacts (`<spec>_TTrace_<id>.tla` / `.bin`) are produced as a
+// side effect of every model-check run with a fresh random id each time. They are pure
+// output — never a committed input — so committing them bloats the repo and churns
+// feature branches (this autocommit has buried 100+ of them before). The chokepoint
+// hard-excludes them regardless of .gitignore completeness: even a tracked or
+// not-yet-ignored trace is un-staged here so it can never enter a solve commit.
+const ARTIFACT_EXCLUDE_RE = /_TTrace_\d+\.(tla|bin)$/;
+
 // Branches the auto-commit must never write to. Solve commits its formal-artifact
 // churn (and its own code fixes) on a working branch; committing directly to the
 // default branch pollutes it with unpushed churn and breaks branches cut from it.
@@ -81,6 +89,27 @@ function stagePaths(opts) {
       encoding: 'utf8', cwd, timeout: 15000, stdio: 'pipe',
     });
   }
+  unstageArtifacts(opts);
+}
+
+// Un-stage ephemeral TLC trace artifacts (matched by ARTIFACT_EXCLUDE_RE) that the
+// broad `git add` may have picked up. Returns the list of dropped paths. Matching on
+// the actual staged file list (rather than a pathspec glob) is deterministic across
+// nested spec dirs and avoids git pathspec-glob subtleties.
+function unstageArtifacts(opts) {
+  const cwd = (opts && opts.cwd) || ROOT;
+  const r = spawnSync('git', ['diff', '--cached', '--name-only'], {
+    encoding: 'utf8', cwd, timeout: 15000, stdio: 'pipe',
+  });
+  if (r.status !== 0 || !r.stdout) return [];
+  const drop = r.stdout.split('\n').map(s => s.trim()).filter(Boolean)
+    .filter(p => ARTIFACT_EXCLUDE_RE.test(p));
+  if (drop.length) {
+    spawnSync('git', ['reset', '-q', '--', ...drop], {
+      encoding: 'utf8', cwd, timeout: 15000, stdio: 'pipe',
+    });
+  }
+  return drop;
 }
 
 function hasStagedChanges(opts) {
@@ -130,7 +159,8 @@ function main() {
       if (r.stdout && r.stdout.trim()) {
         // Drop excluded paths from the preview so it matches what actually commits.
         const lines = r.stdout.trim().split('\n')
-          .filter(line => !STAGE_EXCLUDE_PATHS.some(ex => line.includes(ex)));
+          .filter(line => !STAGE_EXCLUDE_PATHS.some(ex => line.includes(ex)))
+          .filter(line => !ARTIFACT_EXCLUDE_RE.test(line.replace(/^add\s+'?|'$/g, '')));
         if (lines.length) console.log(lines.join('\n'));
       }
     }
@@ -181,7 +211,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  PATHSPECS, STAGE_EXCLUDE_PATHS, PROTECTED_BRANCHES, COMMIT_MSG,
+  PATHSPECS, STAGE_EXCLUDE_PATHS, ARTIFACT_EXCLUDE_RE, PROTECTED_BRANCHES, COMMIT_MSG,
   isGitRepo, currentBranch, defaultBranch, isProtectedBranch,
-  stagePaths, hasStagedChanges, doCommit,
+  stagePaths, unstageArtifacts, hasStagedChanges, doCommit,
 };

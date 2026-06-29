@@ -158,6 +158,42 @@ test('TC-COMMIT-11: stagePaths excludes test/golden/ snapshots', () => {
   }
 });
 
+test('TC-COMMIT-15: stagePaths never stages TLC trace artifacts (_TTrace_)', () => {
+  const tmp = createTempRepo();
+  try {
+    const specDir = path.join(tmp, '.planning', 'formal', 'spec', 'debug-bench-sort');
+    fs.mkdirSync(specDir, { recursive: true });
+    // a real artifact (should commit) + two trace files (must be dropped)
+    fs.writeFileSync(path.join(tmp, '.planning', 'formal', 'layer-manifest.json'), '{"v":1}');
+    fs.writeFileSync(path.join(specDir, 'bug_TTrace_1782725126.tla'), '\\* trace\n');
+    fs.writeFileSync(path.join(specDir, 'bug_TTrace_1782725126.bin'), 'BINARY');
+    stagePaths({ cwd: tmp });
+    const staged = spawnSync('git', ['diff', '--cached', '--name-only'], { encoding: 'utf8', cwd: tmp }).stdout || '';
+    assert.ok(staged.includes('layer-manifest.json'), 'real formal artifact should be staged');
+    assert.ok(!staged.includes('_TTrace_'), 'TLC trace artifacts must never be staged');
+  } finally {
+    cleanup(tmp);
+  }
+});
+
+test('TC-COMMIT-16: unstageArtifacts drops an ALREADY-TRACKED trace that was re-modified', () => {
+  const tmp = createTempRepo();
+  try {
+    // Simulate a trace that slipped into git history before the guard existed.
+    const traceRel = '.planning/formal/spec/x/bug_TTrace_1.tla';
+    fs.mkdirSync(path.join(tmp, '.planning', 'formal', 'spec', 'x'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, traceRel), 'v1\n');
+    spawnSync('git', ['add', '-f', traceRel], { encoding: 'utf8', cwd: tmp });
+    spawnSync('git', ['commit', '-m', 'legacy trace', '--no-verify'], { encoding: 'utf8', cwd: tmp });
+    fs.writeFileSync(path.join(tmp, traceRel), 'v2\n'); // modify it
+    stagePaths({ cwd: tmp });
+    const staged = spawnSync('git', ['diff', '--cached', '--name-only'], { encoding: 'utf8', cwd: tmp }).stdout || '';
+    assert.ok(!staged.includes('_TTrace_'), 'a re-modified tracked trace must still be un-staged');
+  } finally {
+    cleanup(tmp);
+  }
+});
+
 test('TC-COMMIT-12: isProtectedBranch is true on main, false on a feature branch', () => {
   const main = createTempRepoOnMain();
   const feat = createTempRepo();
