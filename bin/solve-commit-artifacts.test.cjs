@@ -194,6 +194,30 @@ test('TC-COMMIT-16: unstageArtifacts drops an ALREADY-TRACKED trace that was re-
   }
 });
 
+test('TC-COMMIT-17: a developer edit in bin/ or test/ is NEVER swept into a solve commit', () => {
+  const tmp = createTempRepo();
+  try {
+    // seed tracked bin/ + test/ source, then modify them (an in-progress dev edit)
+    fs.mkdirSync(path.join(tmp, 'bin'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, 'test'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'bin', 'tool.cjs'), 'v1\n');
+    fs.writeFileSync(path.join(tmp, 'test', 'tool.test.cjs'), 'v1\n');
+    spawnSync('git', ['add', '-A'], { encoding: 'utf8', cwd: tmp });
+    spawnSync('git', ['commit', '-m', 'seed', '--no-verify'], { encoding: 'utf8', cwd: tmp });
+    fs.writeFileSync(path.join(tmp, 'bin', 'tool.cjs'), 'v2 — work in progress\n');   // dev edit
+    fs.writeFileSync(path.join(tmp, 'test', 'new.test.cjs'), 'brand new\n');           // untracked dev file
+    // a real generated artifact the solve DID produce
+    fs.writeFileSync(path.join(tmp, '.planning', 'formal', 'layer-manifest.json'), '{"v":2}');
+    stagePaths({ cwd: tmp });
+    const staged = spawnSync('git', ['diff', '--cached', '--name-only'], { encoding: 'utf8', cwd: tmp }).stdout || '';
+    assert.ok(staged.includes('.planning/formal/layer-manifest.json'), 'generated formal artifact must still be staged');
+    assert.ok(!staged.includes('bin/'), 'a bin/ source edit must NOT be swept into a solve commit');
+    assert.ok(!staged.includes('test/'), 'a test/ file must NOT be swept into a solve commit');
+  } finally {
+    cleanup(tmp);
+  }
+});
+
 test('TC-COMMIT-12: isProtectedBranch is true on main, false on a feature branch', () => {
   const main = createTempRepoOnMain();
   const feat = createTempRepo();
