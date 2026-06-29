@@ -70,6 +70,7 @@ function checkCase(jar, c) {
   s.modelFix = runTlc(jar, modelDir, 'fix.tla', 'fix.cfg') === 'clean';
   // ④ fix in code — swap in the canonical fix, run, ALWAYS restore the buggy stub
   let buggy = null;
+  let restoreError = null;
   try {
     buggy = fs.readFileSync(stubAbs);
     fs.copyFileSync(fixedAbs, stubAbs);
@@ -77,8 +78,14 @@ function checkCase(jar, c) {
   } catch (_) {
     s.codeFix = false;
   } finally {
-    if (buggy !== null) { try { fs.writeFileSync(stubAbs, buggy); } catch (_) { /* best effort */ } }
+    if (buggy !== null) {
+      try { fs.writeFileSync(stubAbs, buggy); }
+      catch (err) { restoreError = err; }
+    }
   }
+  // A failed restore leaves the checkout mutated to the FIXED impl, which would make
+  // every later case in this workspace produce misleading results. Fail hard instead.
+  if (restoreError) throw restoreError;
 
   return { case: c.case, stages: s, holds: chainHolds(s) };
 }

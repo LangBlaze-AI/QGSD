@@ -50,7 +50,10 @@ function resolveTlaJar() {
 function classifyTlcOutput(out) {
   if (typeof out !== 'string' || out.length === 0) return 'error';
   // A genuine invariant violation (with or without a printed counterexample).
-  if (/Invariant\s+\w+\s+is violated|is violated by the initial state|Error:\s*Invariant/i.test(out)) {
+  // Must match "Invariant <name> is violated" specifically — NOT any line that merely
+  // mentions an invariant (e.g. "Error: Invariant Foo is not defined" is a broken spec,
+  // which must classify as 'error', not a real counterexample).
+  if (/(?:Error:\s*)?Invariant\s+\w+\s+is violated(?: by the initial state)?/i.test(out)) {
     return 'violated';
   }
   // A clean, completed model check with no counterexample.

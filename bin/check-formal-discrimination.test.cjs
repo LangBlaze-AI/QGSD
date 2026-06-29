@@ -22,6 +22,13 @@ test('classifyTlcOutput: parse error / junk / empty → error (never silently cl
   assert.equal(classifyTlcOutput(42), 'error');
 });
 
+test('classifyTlcOutput: a broken-spec invariant error is NOT a violation', () => {
+  // "is not defined" mentions an invariant but is a broken spec, not a counterexample.
+  // It must classify as 'error' so a broken bug-spec cannot masquerade as discriminating.
+  assert.equal(classifyTlcOutput('Error: Invariant Foo is not defined'), 'error');
+  assert.equal(classifyTlcOutput('Error: Invariant Bar substitution missing'), 'error');
+});
+
 test('isDiscriminating: only bug=violated && fix=clean counts', () => {
   assert.equal(isDiscriminating('violated', 'clean'), true);
   // The theater failure modes — a checker that does not depend on the bug:
