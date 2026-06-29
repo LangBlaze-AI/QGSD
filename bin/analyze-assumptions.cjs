@@ -433,7 +433,7 @@ function crossReference(assumptions, options = {}) {
     const ledgerPath = path.join(root, '.planning', 'formal', 'debt.json');
     const { readDebtLedger } = require('./debt-ledger.cjs');
     const ledger = readDebtLedger(ledgerPath);
-    debtEntries = ledger.debt_entries || [];
+    debtEntries = Array.isArray(ledger.debt_entries) ? ledger.debt_entries : [];
   } catch {
     // No debt ledger available
   }
@@ -454,8 +454,9 @@ function crossReference(assumptions, options = {}) {
 
     // Check debt ledger coverage
     for (const entry of debtEntries) {
+      if (!entry || typeof entry !== 'object') continue;
       // Primary match: formal_ref matches spec:{file}:{name}
-      if (entry.formal_ref) {
+      if (typeof entry.formal_ref === 'string') {
         const refPattern = `spec:${assumption.file}:${assumption.name}`;
         if (entry.formal_ref === refPattern || entry.formal_ref.includes(assumption.name)) {
           coverage = 'covered';

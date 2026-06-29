@@ -71,7 +71,7 @@ function analyzeContextNeeds(question, artifactPath, existingContext) {
   }
 
   // Analyze question keywords
-  if (question) {
+  if (typeof question === 'string' && question) {
     const q = question.toLowerCase();
     for (const [domain, keywords] of Object.entries(QUESTION_KEYWORDS)) {
       for (const kw of keywords) {
@@ -84,7 +84,7 @@ function analyzeContextNeeds(question, artifactPath, existingContext) {
   }
 
   // Analyze artifact path segments
-  if (artifactPath) {
+  if (typeof artifactPath === 'string' && artifactPath) {
     const p = artifactPath.toLowerCase();
     for (const [domain, segments] of Object.entries(PATH_SEGMENTS)) {
       for (const seg of segments) {
@@ -97,7 +97,7 @@ function analyzeContextNeeds(question, artifactPath, existingContext) {
   }
 
   // Filter out domains already present in existingContext (for second round)
-  if (existingContext) {
+  if (typeof existingContext === 'string' && existingContext) {
     const ctx = existingContext.toLowerCase();
     return results.filter(r => {
       const marker = `--- ${r.domain} ---`;
@@ -113,13 +113,14 @@ function analyzeContextNeeds(question, artifactPath, existingContext) {
  * Returns concatenated string with domain section markers.
  */
 function fetchContext(cwd, needs, charBudget) {
-  if (!needs || needs.length === 0) return '';
+  if (!Array.isArray(needs) || needs.length === 0) return '';
   if (!charBudget || charBudget <= 0) charBudget = TOKEN_BUDGET_CHARS;
 
   let result = '';
   let remaining = charBudget;
 
   for (const need of needs) {
+    if (!need || typeof need !== 'object') continue; // skip malformed needs (fail-open)
     const config = DOMAIN_CONFIG[need.domain];
     if (!config) continue; // skip unknown domains (fail-open)
 

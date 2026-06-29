@@ -43,6 +43,7 @@ function loadGroup(name) {
       return null;
     }
     if (!Array.isArray(parsed.repos)) parsed.repos = [];
+    else parsed.repos = parsed.repos.filter(r => r && typeof r === 'object' && !Array.isArray(r));
     return parsed;
   } catch (err) {
     if (err instanceof SyntaxError) {
@@ -95,7 +96,12 @@ function readMarker(repoPath) {
   try {
     const markerPath = path.join(repoPath, '.planning', MARKER_FILE);
     if (!fs.existsSync(markerPath)) return null;
-    return JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      console.error(`${TAG} Warning: marker at ${repoPath} is not an object, returning null`);
+      return null;
+    }
+    return parsed;
   } catch (err) {
     if (err instanceof SyntaxError) {
       console.error(`${TAG} Warning: malformed marker at ${repoPath}`);
@@ -190,6 +196,9 @@ function createGroup(name, repos = []) {
 
   const seenPaths = new Set();
   for (const repo of repos) {
+    if (!repo || typeof repo !== 'object' || Array.isArray(repo)) {
+      return { ok: false, error: 'Each repo must be an object with role and path' };
+    }
     if (typeof repo.role !== 'string' || repo.role.length === 0) {
       return { ok: false, error: 'Each repo must have a non-empty role string' };
     }

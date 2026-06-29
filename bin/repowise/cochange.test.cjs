@@ -125,3 +125,28 @@ describe('formatCoChangeXml', () => {
     assert.ok(xml.includes('src/c&lt;d.ts'));
   });
 });
+
+// ---------------------------------------------------------------------------
+// Adversarial / hardening
+// ---------------------------------------------------------------------------
+
+describe('formatCoChangeXml — adversarial', () => {
+  it('does not throw and emits empty <pairs> when pairs array is missing', () => {
+    assert.doesNotThrow(() => formatCoChangeXml({ summary: {}, fileIndex: new Map() }));
+    const xml = formatCoChangeXml({ summary: {}, fileIndex: new Map() });
+    assert.ok(xml.includes('<pairs>'));
+    assert.ok(xml.includes('</pairs>'));
+  });
+
+  it('does not throw on null input', () => {
+    assert.doesNotThrow(() => formatCoChangeXml(null));
+  });
+});
+
+describe('getPartnersForFile — adversarial', () => {
+  it('returns empty array when fileIndex is a plain object (JSON round-trip)', () => {
+    const roundTripped = JSON.parse(JSON.stringify({ pairs: [], summary: {}, fileIndex: new Map() }));
+    assert.doesNotThrow(() => getPartnersForFile('foo.js', roundTripped));
+    assert.deepEqual(getPartnersForFile('foo.js', roundTripped), []);
+  });
+});

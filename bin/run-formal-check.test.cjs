@@ -326,3 +326,35 @@ test('unknown module falls through to project manifest lookup', () => {
   });
   assert.ok(result.stderr.includes('unknown module'));
 });
+
+test('runProjectCheck fails open (no crash) when spec_path is missing', () => {
+  // Manifest validation only checks command/args, not spec_path, so a malformed
+  // entry can reach runProjectCheck without spec_path. path.isAbsolute(undefined)
+  // throws ERR_INVALID_ARG_TYPE OUTSIDE the spawn try/catch -> process crash.
+  let result;
+  assert.doesNotThrow(() => {
+    result = runProjectCheck({
+      module: 'no-specpath',
+      type: 'tla',
+      command: 'make',
+      args: ['check']
+    }, process.cwd());
+  }, 'runProjectCheck must not throw on missing spec_path (fail-open contract)');
+  assert.strictEqual(result.status, 'skipped');
+  assert.ok(typeof result.detail === 'string' && result.detail.length > 0);
+  assert.strictEqual(result.module, 'no-specpath');
+});
+
+test('runProjectCheck fails open when spec_path is a non-string', () => {
+  let result;
+  assert.doesNotThrow(() => {
+    result = runProjectCheck({
+      module: 'bad-specpath',
+      type: 'tla',
+      spec_path: 123,
+      command: 'make',
+      args: ['check']
+    }, process.cwd());
+  }, 'runProjectCheck must not throw on non-string spec_path');
+  assert.strictEqual(result.status, 'skipped');
+});

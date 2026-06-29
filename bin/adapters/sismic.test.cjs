@@ -55,3 +55,72 @@ test('extract parses sismic YAML fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract skips a null transition list entry instead of crashing', () => {
+  const malformed = `
+statechart:
+  name: t
+  root:
+    name: root
+    initial: green
+    states:
+      - name: green
+        transitions:
+          -
+          - event: timer
+            target: yellow
+      - name: yellow
+`;
+  const tmpFile = path.join(os.tmpdir(), 'sismic-null-tx-' + Date.now() + '.yaml');
+  fs.writeFileSync(tmpFile, malformed, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.strictEqual(ir.transitions.length, 1);
+    assert.strictEqual(ir.transitions[0].target, 'yellow');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract ignores a non-object (string) transition entry', () => {
+  const malformed = `
+statechart:
+  name: t
+  root:
+    name: root
+    initial: green
+    states:
+      - name: green
+        transitions:
+          - justastring
+`;
+  const tmpFile = path.join(os.tmpdir(), 'sismic-str-tx-' + Date.now() + '.yaml');
+  fs.writeFileSync(tmpFile, malformed, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.strictEqual(ir.transitions.length, 0);
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract does not infinite-recurse on cyclic YAML anchors', () => {
+  const cyclic = `
+statechart:
+  name: t
+  root:
+    name: root
+    initial: a
+    states: &s
+      - name: a
+        states: *s
+`;
+  const tmpFile = path.join(os.tmpdir(), 'sismic-cyclic-' + Date.now() + '.yaml');
+  fs.writeFileSync(tmpFile, cyclic, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.ok(ir.stateNames.includes('a'));
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

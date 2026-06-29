@@ -123,6 +123,7 @@ function analyzeL1(changedFiles, lineRanges, instrumentationMap) {
   const points = instrumentationMap.emission_points || [];
   const affected = [];
   for (const ep of points) {
+    if (!ep || typeof ep !== 'object') continue;
     if (!changedFiles.includes(ep.file)) continue;
     const fileRanges = lineRanges.get(ep.file);
     const impactType = isLineInRanges(ep.line_number, fileRanges) ? 'direct' : 'file_level';
@@ -152,7 +153,9 @@ function analyzeL2(l1Impact, observedFsm) {
   const transitions = [];
   const observed = observedFsm.observed_transitions || {};
   for (const [state, events] of Object.entries(observed)) {
+    if (!events || typeof events !== 'object') continue;
     for (const [event, info] of Object.entries(events)) {
+      if (!info || typeof info !== 'object') continue;
       if (affectedEvents.has(event)) {
         transitions.push({
           state,
@@ -188,7 +191,9 @@ function analyzeL3(l2Impact, hazardModel, failureModeCatalog) {
     affectedPairs.has(`${fm.state}|${fm.event}`)
   );
 
-  const maxRpn = hazards.length > 0 ? Math.max(...hazards.map(h => h.rpn)) : 0;
+  const maxRpn = hazards.length > 0
+    ? Math.max(0, ...hazards.map(h => (typeof h.rpn === 'number' && Number.isFinite(h.rpn) ? h.rpn : 0)))
+    : 0;
 
   return {
     affected_hazards: hazards.length,

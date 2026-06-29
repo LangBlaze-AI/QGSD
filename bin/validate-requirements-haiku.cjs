@@ -73,7 +73,8 @@ function callHaikuAPI(apiKey, prompt, maxTokens) {
  * @returns {string} The prompt string
  */
 function buildValidationPrompt(requirements) {
-  const reqList = requirements
+  const reqList = (Array.isArray(requirements) ? requirements : [])
+    .filter(r => r && typeof r === 'object')
     .map(r => `- ${r.id}: ${r.text}`)
     .join('\n');
 
@@ -229,6 +230,10 @@ async function validateRequirements(options = {}) {
     return { status: 'error', reason: `Failed to read envelope: ${e.message}` };
   }
 
+  if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
+    return { status: 'error', reason: `Envelope is not a valid object: ${envelopePath}` };
+  }
+
   // Check if already frozen (before SDK check)
   if (envelope.frozen_at) {
     return { status: 'already-frozen', frozen_at: envelope.frozen_at };
@@ -310,6 +315,10 @@ function freezeEnvelope(envelopePath) {
     envelope = JSON.parse(content);
   } catch (e) {
     throw new Error(`Failed to read envelope: ${e.message}`);
+  }
+
+  if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
+    throw new Error(`Envelope is not a valid object: ${envelopePath}`);
   }
 
   // Set frozen_at timestamp

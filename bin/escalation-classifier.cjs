@@ -87,8 +87,8 @@ function getLayerGitDiff(layer, root, commitCount) {
  * @param {number} context.previousResidual - Previous residual value
  * @returns {string} Prompt string
  */
-function buildClassificationPrompt(context) {
-  const deltasStr = (context.deltas || []).join(', ');
+function buildClassificationPrompt(context = {}) {
+  const deltasStr = (Array.isArray(context.deltas) ? context.deltas : []).join(', ');
 
   return `You are an oscillation classifier for the nForma consistency solver.
 
@@ -309,7 +309,7 @@ function classifyEscalation(options = {}) {
   // Read trend window and extract deltas
   const entries = readTrendWindow(trendPath, 20);
   const series = entries
-    .map(e => (e.per_layer && typeof e.per_layer[options.layer] === 'number') ? e.per_layer[options.layer] : null)
+    .map(e => (e && e.per_layer && typeof e.per_layer[options.layer] === 'number') ? e.per_layer[options.layer] : null)
     .filter(v => v !== null);
 
   const deltas = [];

@@ -414,6 +414,24 @@ test('TC-ALLOY-PARSE-4: parseAlloyDefaults handles blank lines and comments in c
   assert.equal(Object.keys(result).length, 3, 'should have exactly 3 constants despite blank lines and comments');
 });
 
+test('TC-HARDEN-1: classifyTestStrategy does not crash on truthy non-string requirement text', () => {
+  const { classifyTestStrategy } = require('./formal-test-sync.cjs');
+  assert.doesNotThrow(() => classifyTestStrategy(123), 'number input must not throw');
+  assert.doesNotThrow(() => classifyTestStrategy({ text: 'x' }), 'object input must not throw');
+  assert.doesNotThrow(() => classifyTestStrategy(['returns']), 'array input must not throw');
+  assert.equal(classifyTestStrategy(123), 'structural');
+  assert.equal(classifyTestStrategy({}), 'structural');
+  // sanity: string path still classifies
+  assert.equal(classifyTestStrategy('this returns a value'), 'behavioral');
+});
+
+test('TC-HARDEN-2: parseAlloyDefaults returns {} on null/undefined/non-string content', () => {
+  const { parseAlloyDefaults } = require('./formal-test-sync.cjs');
+  assert.deepEqual(parseAlloyDefaults(null), {}, 'null content should yield {}');
+  assert.deepEqual(parseAlloyDefaults(undefined), {}, 'undefined content should yield {}');
+  assert.deepEqual(parseAlloyDefaults(42), {}, 'numeric content should yield {}');
+});
+
 // ── TC-ENRICH: Recipe Enrichment Tests ─────────────────────────────────────
 
 test('TC-ENRICH-1: --enrich-recipes with coderlm disabled (health error)', () => {

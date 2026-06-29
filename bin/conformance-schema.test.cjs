@@ -84,3 +84,21 @@ test('no duplicate values in VALID_OUTCOMES', () => {
   const unique = new Set(schema.VALID_OUTCOMES);
   assert.equal(unique.size, schema.VALID_OUTCOMES.length, 'VALID_OUTCOMES contains duplicates');
 });
+
+test('exported enum arrays are frozen — mutation throws and does not corrupt the shared enum', () => {
+  for (const [name, arr] of [
+    ['VALID_ACTIONS', schema.VALID_ACTIONS],
+    ['VALID_PHASES', schema.VALID_PHASES],
+    ['VALID_OUTCOMES', schema.VALID_OUTCOMES],
+  ]) {
+    assert.ok(Object.isFrozen(arr), `${name} should be frozen`);
+    const before = arr.length;
+    assert.throws(() => { arr.push('__malicious__'); }, TypeError, `${name}.push should throw`);
+    assert.throws(() => { arr[0] = '__overwritten__'; }, TypeError, `${name}[0]= should throw`);
+    assert.equal(arr.length, before, `${name} length must be unchanged`);
+    assert.equal(arr.includes('__malicious__'), false, `${name} must not contain injected value`);
+  }
+  // shared reference stays intact for the next requirer
+  const schema2 = require('./conformance-schema.cjs');
+  assert.equal(schema2.VALID_ACTIONS.includes('__malicious__'), false);
+});

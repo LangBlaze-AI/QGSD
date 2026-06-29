@@ -99,3 +99,33 @@ test('evaluateTransitions: possibleTransitions includes guardName for guarded tr
     assert.ok('guardPassed' in t, 'guardPassed field required on each transition');
   }
 });
+
+test('replayTrace: null/non-object event element does not abort the whole replay (fail-open)', () => {
+  const events = [
+    { type: 'QUORUM_START', slotsAvailable: 3 },
+    null,
+    { type: 'VOTES_COLLECTED', successCount: 3 },
+  ];
+  let results;
+  assert.doesNotThrow(() => { results = replayTrace(events, nfWorkflowMachine); },
+    'replayTrace must not throw on a null event element');
+  assert.equal(results.length, 3, 'Should still produce one result per input event');
+  // The null event yields no transitions rather than crashing
+  assert.equal(results[1].walkerResult.emptyTransitions, true);
+  assert.deepEqual(results[1].walkerResult.possibleTransitions, []);
+});
+
+test('evaluateTransitions: snapshot with null value does not crash', () => {
+  let result;
+  assert.doesNotThrow(() => {
+    result = evaluateTransitions({ value: null, context: {} }, { type: 'QUORUM_START' }, nfWorkflowMachine);
+  }, 'null snapshot.value must not throw');
+  assert.equal(result.emptyTransitions, true);
+  assert.equal(result.expectedNextState, null);
+});
+
+test('evaluateTransitions: snapshot missing value field does not crash', () => {
+  assert.doesNotThrow(() => {
+    evaluateTransitions({ context: {} }, { type: 'QUORUM_START' }, nfWorkflowMachine);
+  }, 'missing snapshot.value must not throw');
+});

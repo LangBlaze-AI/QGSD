@@ -34,6 +34,7 @@ const LANG_MAP = {
  * @returns {string|null} Language identifier or null if unknown
  */
 function detectLang(filePath) {
+  if (typeof filePath !== 'string') return null;
   const ext = path.extname(filePath);
   return LANG_MAP[ext] || null;
 }
@@ -55,13 +56,14 @@ function detectLang(filePath) {
  * @param {string} [opts.lang] - Optional language override; auto-detected if omitted
  * @returns {string} Well-formed XML <file> tag string
  */
-function packFile({ filePath, content, lang }) {
+function packFile({ filePath, content, lang } = {}) {
   const detectedLang = lang !== undefined ? lang : detectLang(filePath);
   const escapedContent = escapeXml(content);
+  const escapedPath = escapeXml(filePath);
   if (detectedLang !== null) {
-    return `<file path="${filePath}" lang="${detectedLang}">${escapedContent}</file>`;
+    return `<file path="${escapedPath}" lang="${escapeXml(detectedLang)}">${escapedContent}</file>`;
   }
-  return `<file path="${filePath}">${escapedContent}</file>`;
+  return `<file path="${escapedPath}">${escapedContent}</file>`;
 }
 
 module.exports = { packFile, detectLang, LANG_MAP };

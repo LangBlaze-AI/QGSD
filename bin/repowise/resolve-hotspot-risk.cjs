@@ -45,7 +45,7 @@ function saveCachedHotspots(projectRoot, data) {
 
 function resolveHotspotRisk(changedFiles, projectRoot, options) {
   let hotspots = loadCachedHotspots(projectRoot);
-  if (!hotspots) {
+  if (!hotspots || !Array.isArray(hotspots.files)) {
     hotspots = computeHotspots(projectRoot, options);
     saveCachedHotspots(projectRoot, hotspots);
   }
@@ -59,7 +59,8 @@ function resolveHotspotRisk(changedFiles, projectRoot, options) {
   let maxScore = 0;
   let riskLevel = 'routine';
 
-  for (const filePath of changedFiles) {
+  const safeChangedFiles = Array.isArray(changedFiles) ? changedFiles : [];
+  for (const filePath of safeChangedFiles) {
     const entry = hotspotMap.get(filePath);
     if (!entry) continue;
 

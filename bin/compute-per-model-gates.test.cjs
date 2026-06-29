@@ -293,6 +293,36 @@ console.log('\n=== GPROMO-03: changelog evidence (structural) ===');
   assert(model.consecutive_pass_count < 3, 'GPROMO-03: consecutive_pass_count < 3 when not eligible due to count');
 }
 
+// ── Adversarial: null gate field must not crash ─────────────────────────────
+console.log('\n=== Adversarial: null gate field ===');
+{
+  const fixture = { './m.tla': { gate_a: null, gate_b: true, gate_c: true } };
+  let threw = false;
+  let agg;
+  try { agg = computeAggregate(fixture); } catch (_) { threw = true; }
+  assert(!threw, 'computeAggregate does not throw on null gate_a field');
+  assert(!threw && agg.gate_a.explained === 0, 'null gate_a counted as non-pass (explained=0)');
+  assert(!threw && agg.gate_a.unexplained_counts.model_gap === 1, 'null gate_a counts as model_gap');
+}
+
+// ── Adversarial: null/undefined input fails open ────────────────────────────
+console.log('\n=== Adversarial: null/undefined input ===');
+{
+  let threw = false;
+  let agg;
+  try { agg = computeAggregate(null); } catch (_) { threw = true; }
+  assert(!threw, 'computeAggregate fails open on null input');
+  assert(!threw && agg.gate_a.total === 0, 'null input yields gate_a.total = 0');
+  assert(!threw && agg.gate_b.wiring_purpose_score === 0, 'null input yields gate_b score = 0');
+}
+{
+  let threw = false;
+  let agg;
+  try { agg = computeAggregate(undefined); } catch (_) { threw = true; }
+  assert(!threw, 'computeAggregate fails open on undefined input');
+  assert(!threw && agg.gate_c.unvalidated_entries === 0, 'undefined input yields gate_c.unvalidated_entries = 0');
+}
+
 // ── Summary ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== Results ===');

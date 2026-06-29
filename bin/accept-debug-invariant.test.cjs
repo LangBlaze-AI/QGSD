@@ -206,3 +206,57 @@ test('update_source is debug in registry', async () => {
 
   console.log(`Test ran, exit code: ${result.status}`);
 });
+
+test('rejects property name with regex metacharacters without crashing', async () => {
+  const tmpDir = createTempFormalDir({
+    tla: {
+      'empty.tla': '---- MODULE Empty ----\nEXTENDS Integers\n===='
+    }
+  });
+
+  const result = runAcceptDebugTool(
+    tmpDir,
+    '.planning/formal/tla/empty.tla',
+    'Inv[', // invalid regex -> currently crashes with SyntaxError
+    'x > 0',
+    'debug-sess-1234567890-abc12345'
+  );
+
+  assert.notStrictEqual(result.status, 0, 'should reject malformed property name');
+  assert.ok(
+    !/SyntaxError|Invalid regular expression/.test(result.stderr || ''),
+    'must not leak an unhandled RegExp SyntaxError: ' + (result.stderr || '').slice(0, 200)
+  );
+});
+
+test('non-object registry JSON is skipped fail-open, spec still written', async () => {
+  const tmpDir = createTempFormalDir({
+    tla: {
+      'test.tla': '---- MODULE Test ----\nEXTENDS Integers\n===='
+    }
+  });
+
+  // Valid JSON, but a string primitive rather than an object
+  fs.writeFileSync(
+    path.join(tmpDir, '.planning', 'formal', 'model-registry.json'),
+    JSON.stringify('corrupted-but-valid-json-string'),
+    'utf8'
+  );
+
+  const result = runAcceptDebugTool(
+    tmpDir,
+    '.planning/formal/tla/test.tla',
+    'DebugInvX',
+    'x > 0',
+    'debug-sess-1234567890-abc12345'
+  );
+
+  assert.strictEqual(result.status, 0, 'spec write succeeded -> should exit 0');
+  assert.ok(
+    !/TypeError/.test(result.stderr || ''),
+    'must not throw TypeError on non-object registry: ' + (result.stderr || '').slice(0, 200)
+  );
+  const specText = fs.readFileSync(
+    path.join(tmpDir, '.planning', 'formal', 'tla', 'test.tla'), 'utf8');
+  assert.ok(/PROPERTY DebugInvX == x > 0/.test(specText), 'spec should still receive the PROPERTY');
+});

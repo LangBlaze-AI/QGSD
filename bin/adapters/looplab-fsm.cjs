@@ -19,19 +19,20 @@ function detect(filePath, content) {
 function extract(filePath, options = {}) {
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
+  if (!fs.statSync(absInput).isFile()) throw new Error('Path is not a file: ' + absInput);
 
   const content = fs.readFileSync(absInput, 'utf8');
 
   // Initial state: first arg to fsm.NewFSM("initial")
   let initial = '';
-  const initialMatch = content.match(/fsm\.NewFSM\s*\(\s*"(\w+)"/);
+  const initialMatch = content.match(/fsm\.NewFSM\s*\(\s*"([^"]+)"/);
   if (initialMatch) initial = initialMatch[1];
 
   // Events: {Name: "start", Src: []string{"idle"}, Dst: "running"}
   const stateSet = new Set();
   const transitions = [];
 
-  const eventPattern = /\{?\s*Name\s*:\s*"(\w+)"\s*,\s*Src\s*:\s*\[\]string\s*\{([^}]+)\}\s*,\s*Dst\s*:\s*"(\w+)"/g;
+  const eventPattern = /\{?\s*Name\s*:\s*"([^"]+)"\s*,\s*Src\s*:\s*\[\]string\s*\{([^}]+)\}\s*,\s*Dst\s*:\s*"([^"]+)"/g;
   let em;
   while ((em = eventPattern.exec(content)) !== null) {
     const eventName = em[1];
@@ -39,7 +40,7 @@ function extract(filePath, options = {}) {
     const dst = em[3];
     stateSet.add(dst);
 
-    const srcPattern = /"(\w+)"/g;
+    const srcPattern = /"([^"]+)"/g;
     let sm;
     while ((sm = srcPattern.exec(srcStr)) !== null) {
       const src = sm[1];

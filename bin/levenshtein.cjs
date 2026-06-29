@@ -12,6 +12,8 @@
  * @returns {number} Integer edit distance
  */
 function levenshteinDistance(a, b) {
+  if (typeof a !== 'string') a = a == null ? '' : String(a);
+  if (typeof b !== 'string') b = b == null ? '' : String(b);
   // Early exits
   if (a === b) return 0;
   if (a.length === 0) return b.length;
@@ -62,6 +64,8 @@ function levenshteinDistance(a, b) {
  * @returns {number} Similarity score between 0.0 (completely different) and 1.0 (identical)
  */
 function levenshteinSimilarity(a, b) {
+  if (typeof a !== 'string') a = a == null ? '' : String(a);
+  if (typeof b !== 'string') b = b == null ? '' : String(b);
   // Both empty = identical
   if (a.length === 0 && b.length === 0) return 1.0;
 

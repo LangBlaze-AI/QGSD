@@ -249,19 +249,27 @@ function commandUpdate(args) {
 
   const envelopePath = path.join(phaseDir, 'task-envelope.json');
 
-  // Read existing envelope or create minimal one
-  let envelope;
+  // Read existing envelope or create minimal one.
+  // Recover to a fresh minimal envelope when the file is missing, unreadable,
+  // corrupt, or not a plain object — mirroring the missing-file branch so a
+  // garbage file is never strictly worse than no file.
+  const minimalEnvelope = () => ({
+    schema_version: '1',
+    phase,
+    created_at: new Date().toISOString(),
+    risk_level: 'medium'
+  });
+  let envelope = minimalEnvelope();
   if (fs.existsSync(envelopePath)) {
-    const content = fs.readFileSync(envelopePath, 'utf8');
-    envelope = JSON.parse(content);
-  } else {
-    // Create minimal envelope structure
-    envelope = {
-      schema_version: '1',
-      phase,
-      created_at: new Date().toISOString(),
-      risk_level: 'medium'
-    };
+    try {
+      const content = fs.readFileSync(envelopePath, 'utf8');
+      const parsed = JSON.parse(content);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        envelope = parsed;
+      }
+    } catch {
+      // corrupt/unreadable file -> fall back to minimal envelope
+    }
   }
 
   // Update section

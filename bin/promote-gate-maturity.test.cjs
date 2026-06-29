@@ -378,3 +378,31 @@ describe('autoPromote', () => {
     assert.strictEqual(result.total_eligible, 0);
   });
 });
+
+// ── Hardening: corrupt-registry / corrupt-checkresults (PGM-01, PGM-02) ──────
+
+describe('checkAllModels null-entry hardening', () => {
+  it('treats a null model entry as ADVISORY instead of crashing (corrupt registry)', () => {
+    const reg = {
+      '.planning/formal/tla/good.tla': { version: 1 },
+      '.planning/formal/alloy/corrupt.als': null,
+    };
+    let result;
+    assert.doesNotThrow(() => { result = checkAllModels(reg, [], false); });
+    assert.strictEqual(result.violations.length, 0);
+    assert.strictEqual(result.total, 2);
+    assert.strictEqual(result.by_level.ADVISORY, 2);
+  });
+});
+
+describe('validateCriteria check-result hardening', () => {
+  it('does not crash on a check-result with non-string tool/check_id (corrupt ndjson)', () => {
+    const corruptChecks = [{ result: 'pass', tool: 12345, check_id: 67890 }];
+    let result;
+    assert.doesNotThrow(() => {
+      result = validateCriteria('.planning/formal/tla/QGSDQuorum.tla', { source_layer: 'L2' }, 'HARD_GATE', corruptChecks);
+    });
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.reason.includes('passing check-result'));
+  });
+});

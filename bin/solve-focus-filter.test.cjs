@@ -120,6 +120,71 @@ console.log('\nEdge cases:');
 const noRoot = filterRequirementsByFocus('quorum', { root: '/nonexistent/path' });
 assert(noRoot !== null && noRoot.size === 0, 'nonexistent root returns empty set');
 
+// 10. Adversarial: null / non-object requirement entries must not crash the loop
+console.log('\nAdversarial: null requirement entries:');
+const advDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'solve-focus-adv1-'));
+const advPlanning1 = path.join(advDir1, '.planning', 'formal');
+fs.mkdirSync(advPlanning1, { recursive: true });
+fs.writeFileSync(
+  path.join(advPlanning1, 'requirements.json'),
+  JSON.stringify({ requirements: [null, 'a-bare-string', 123, { id: 'QUORUM-99', text: 'quorum thing' }] })
+);
+let threw1 = false;
+let res1 = null;
+try {
+  res1 = filterRequirementsByFocus('quorum', { root: advDir1 });
+} catch (e) {
+  threw1 = true;
+}
+assert(!threw1, 'null/non-object requirement entries do not throw');
+assert(res1 !== null && res1.has('QUORUM-99'), 'valid requirement still matched alongside junk entries');
+fs.rmSync(advDir1, { recursive: true, force: true });
+
+// 11. Adversarial: prototype-chain key in category_raw must not crash bracket lookup
+console.log('\nAdversarial: prototype-pollution category_raw:');
+const advDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'solve-focus-adv2-'));
+const advPlanning2 = path.join(advDir2, '.planning', 'formal');
+fs.mkdirSync(advPlanning2, { recursive: true });
+for (const evilKey of ['__proto__', 'constructor', 'toString']) {
+  fs.writeFileSync(
+    path.join(advPlanning2, 'requirements.json'),
+    JSON.stringify({ requirements: [{ id: 'EVIL-01', text: 'quorum dispatch', category_raw: evilKey }] })
+  );
+  fs.writeFileSync(path.join(advPlanning2, 'category-groups.json'), '{}');
+  let threw2 = false;
+  let res2 = null;
+  try {
+    // two-token focus so the entry scores via text (text match is +1 each; threshold is 2)
+    res2 = filterRequirementsByFocus('quorum dispatch', { root: advDir2 });
+  } catch (e) {
+    threw2 = true;
+  }
+  assert(!threw2, `category_raw "${evilKey}" does not throw on group lookup`);
+  assert(res2 !== null && res2.has('EVIL-01'), `still matches by text with category_raw "${evilKey}"`);
+}
+fs.rmSync(advDir2, { recursive: true, force: true });
+
+// 12. Adversarial: non-string field values must not crash toLowerCase()
+console.log('\nAdversarial: non-string requirement fields:');
+const advDir3 = fs.mkdtempSync(path.join(os.tmpdir(), 'solve-focus-adv3-'));
+const advPlanning3 = path.join(advDir3, '.planning', 'formal');
+fs.mkdirSync(advPlanning3, { recursive: true });
+fs.writeFileSync(
+  path.join(advPlanning3, 'requirements.json'),
+  JSON.stringify({ requirements: [{ id: 12345, category: true, text: 'quorum dispatch' }] })
+);
+let threw3 = false;
+let res3 = null;
+try {
+  // two-token focus so the entry scores via text (text match is +1 each; threshold is 2)
+  res3 = filterRequirementsByFocus('quorum dispatch', { root: advDir3 });
+} catch (e) {
+  threw3 = true;
+}
+assert(!threw3, 'numeric id / boolean category do not throw');
+assert(res3 !== null && res3.has(12345), 'requirement with numeric id still matched by text');
+fs.rmSync(advDir3, { recursive: true, force: true });
+
 // ── Cleanup + Summary ──────────────────────────────────────────────────────
 
 fs.rmSync(tmpDir, { recursive: true, force: true });

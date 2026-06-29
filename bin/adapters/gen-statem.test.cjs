@@ -71,3 +71,76 @@ test('extract parses gen_statem fixture with correct counts', () => {
     fs.unlinkSync(tmpFileEx);
   }
 });
+
+test('extract does not fabricate transitions across non-transitioning Elixir clauses', () => {
+  const src = `
+defmodule Counter do
+  use GenStateMachine
+
+  def init(_) do
+    {:ok, :idle, %{}}
+  end
+
+  def handle_event(:cast, :ping, :idle, data) do
+    {:keep_state, data}
+  end
+
+  def handle_event(:cast, :start, :idle, data) do
+    {:next_state, :running, data}
+  end
+end
+`;
+  const tmpFile = path.join(os.tmpdir(), 'gen-statem-ex-lazy-' + Date.now() + '.ex');
+  fs.writeFileSync(tmpFile, src, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    const ping = ir.transitions.find(t => t.event === 'ping');
+    assert.strictEqual(ping, undefined, 'ping keeps state and must not be a transition');
+    const start = ir.transitions.find(t => t.event === 'start');
+    assert.ok(start, 'real start->running transition must be captured');
+    assert.strictEqual(start.fromState, 'idle');
+    assert.strictEqual(start.target, 'running');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract does not fabricate transitions across non-transitioning Erlang clauses', () => {
+  const src = `
+-module(gate).
+-behaviour(gen_statem).
+
+init([]) ->
+    {ok, idle, #{}}.
+
+handle_event(cast, tick, idle, Data) ->
+    {keep_state, Data};
+
+handle_event(cast, go, idle, Data) ->
+    {next_state, running, Data}.
+`;
+  const tmpFile = path.join(os.tmpdir(), 'gen-statem-erl-lazy-' + Date.now() + '.erl');
+  fs.writeFileSync(tmpFile, src, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    const tick = ir.transitions.find(t => t.event === 'tick');
+    assert.strictEqual(tick, undefined, 'tick keeps state and must not be a transition');
+    const go = ir.transitions.find(t => t.event === 'go');
+    assert.ok(go, 'real go->running transition must be captured');
+    assert.strictEqual(go.fromState, 'idle');
+    assert.strictEqual(go.target, 'running');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract rejects a non-string path with a clean error, not ERR_INVALID_ARG_TYPE', () => {
+  assert.throws(
+    () => extract(null),
+    (err) => {
+      assert.notStrictEqual(err.code, 'ERR_INVALID_ARG_TYPE', 'should not leak raw path.resolve TypeError');
+      assert.match(String(err.message), /path/i);
+      return true;
+    }
+  );
+});

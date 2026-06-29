@@ -316,6 +316,22 @@ describe('status structure', () => {
   });
 });
 
+// ── status corrupt lastquery file ────────────────────────────────────────────
+
+describe('status corrupt lastquery file', () => {
+  let tmpDir;
+  beforeEach(() => { tmpDir = makeTempDir(); lifecycle._setPaths(tmpDir); });
+  afterEach(() => { lifecycle._setPaths(); cleanupDir(tmpDir); });
+
+  it('returns null lastQueryMs (not NaN) for a non-numeric lastquery file', () => {
+    const lqPath = path.join(tmpDir, 'coderlm.lastquery');
+    fs.writeFileSync(lqPath, 'not-a-number');
+    const s = lifecycle.status();
+    assert.strictEqual(s.idle.lastQueryMs, null);
+    assert.strictEqual(s.idle.idleDurationMs, null);
+  });
+});
+
 // ── CLI dispatch ─────────────────────────────────────────────────────────────
 
 describe('CLI dispatch', () => {

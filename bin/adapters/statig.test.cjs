@@ -60,3 +60,61 @@ test('extract parses statig fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract ignores enum variant payload types and discriminants', () => {
+  const dataEnumFixture = `
+use statig::prelude::*;
+
+enum State {
+    Idle,
+    Running,
+    Failed(ErrorCode)
+}
+
+#[state_machine(initial = "State::Idle")]
+impl Machine {
+    #[transition(from = "Idle", to = "Running", event = "start")]
+    fn on_start(&self) {}
+}
+`;
+  const tmpFile = path.join(os.tmpdir(), 'statig-enumdata-' + Date.now() + '.rs');
+  fs.writeFileSync(tmpFile, dataEnumFixture, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.ok(!ir.stateNames.includes('ErrorCode'), 'payload type ErrorCode must not be a state');
+    assert.ok(ir.stateNames.includes('Failed'), 'variant name Failed must be a state');
+    assert.deepStrictEqual([...ir.stateNames].sort(), ['Failed', 'Idle', 'Running']);
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract handles statig function-form state refs State::name()', () => {
+  const fnFixture = `
+use statig::prelude::*;
+
+#[state_machine(initial = "State::idle()")]
+impl Machine {
+    #[transition(from = "State::idle()", to = "State::running()", event = "go")]
+    fn on_go(&self) {}
+}
+`;
+  const tmpFile = path.join(os.tmpdir(), 'statig-fnstate-' + Date.now() + '.rs');
+  fs.writeFileSync(tmpFile, fnFixture, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.strictEqual(ir.initial, 'idle');
+    assert.ok(ir.stateNames.includes('running'));
+    assert.strictEqual(ir.transitions.length, 1);
+    assert.strictEqual(ir.transitions[0].fromState, 'idle');
+    assert.strictEqual(ir.transitions[0].target, 'running');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract rejects non-string filePath with a clear error', () => {
+  assert.throws(() => extract(null), /statig adapter: filePath/);
+  assert.throws(() => extract(undefined), /statig adapter: filePath/);
+  assert.throws(() => extract(123), /statig adapter: filePath/);
+});

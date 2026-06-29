@@ -152,6 +152,33 @@ describe('queryRecentPhases', () => {
   });
 });
 
+describe('queryRecentPhases maxPhases boundary', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctx-stack-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns empty when maxPhases is 0 (slice(-0) must not select all)', () => {
+    append(tmpDir, { phase: 'v0.30-01', type: 'constraint', content: 'a' });
+    append(tmpDir, { phase: 'v0.30-02', type: 'constraint', content: 'b' });
+
+    const result = queryRecentPhases(tmpDir, 'v0.30-05', 0);
+    assert.deepEqual(result, []);
+  });
+
+  it('returns empty when maxPhases is NaN', () => {
+    append(tmpDir, { phase: 'v0.30-01', type: 'constraint', content: 'a' });
+
+    const result = queryRecentPhases(tmpDir, 'v0.30-05', NaN);
+    assert.deepEqual(result, []);
+  });
+});
+
 // --- queryByType tests ---
 
 describe('queryByType', () => {
@@ -291,6 +318,31 @@ describe('prune', () => {
     const result = prune(tmpDir, 5);
     assert.equal(result.removed, 0);
     assert.equal(result.remaining, 0);
+  });
+});
+
+describe('prune keepPhases boundary', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctx-stack-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('removes all entries when keepPhases is 0 (slice(-0) must not keep all)', () => {
+    append(tmpDir, { phase: 'v0.30-01', type: 'constraint', content: 'a' });
+    append(tmpDir, { phase: 'v0.30-02', type: 'constraint', content: 'b' });
+
+    const result = prune(tmpDir, 0);
+    assert.equal(result.remaining, 0);
+    assert.equal(result.removed, 2);
+
+    const filePath = getStackPath(tmpDir);
+    const raw = fs.readFileSync(filePath, 'utf8').trim();
+    assert.equal(raw, '');
   });
 });
 

@@ -191,3 +191,19 @@ must_haves:
   const result = getFormalContext(planPath, null);
   assert.strictEqual(result.evidenceBlock, null, 'evidenceBlock should be null');
 });
+
+// ── Test 12: generateVerificationResult does not crash on non-string violations
+
+test('generateVerificationResult does not crash on non-string violations', () => {
+  const result = generateVerificationResult({ status: 'failed', violations: [null, 42, { x: 1 }] });
+  assert.ok(typeof result === 'string', 'should return a string, not throw');
+  assert.ok(result.startsWith('FAIL:'), 'should still report FAIL for failed status');
+});
+
+// ── Test 13: generateVerificationResult does not crash when violations is not an array
+
+test('generateVerificationResult does not crash when violations is not an array', () => {
+  const result = generateVerificationResult({ status: 'failed', violations: 'Invariant Req01 is violated' });
+  assert.ok(typeof result === 'string', 'should return a string, not throw');
+  assert.ok(result.startsWith('FAIL:'), 'should still report FAIL for failed status');
+});

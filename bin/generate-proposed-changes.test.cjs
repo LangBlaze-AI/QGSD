@@ -224,3 +224,34 @@ must_haves:
   const expectedPath = path.join(deepDir, '.formal', 'ProposedChanges.tla');
   assert.ok(fs.existsSync(expectedPath), 'ProposedChanges.tla should exist in deeply nested .formal/ dir');
 });
+
+// ── Test 9 (GPC-1): generateProposedChanges fails cleanly on a directory path instead of throwing EISDIR
+
+test('generateProposedChanges fails cleanly on a directory path instead of throwing EISDIR', () => {
+  const dir = path.join(tmpDir, 'phasedir');
+  fs.mkdirSync(dir, { recursive: true });
+
+  // A phase DIRECTORY (what the sibling generate-phase-spec.cjs accepts) must not
+  // crash this tool with a raw EISDIR — it should return a graceful result.
+  let result;
+  assert.doesNotThrow(() => { result = generateProposedChanges(dir); });
+  assert.strictEqual(result.generated, false, 'directory input should not generate');
+});
+
+// ── Test 10 (GPC-2): generateTlaCfg emits a check for the 100th truth (3-digit ReqNN)
+
+test('generateTlaCfg emits a check for the 100th truth (3-digit ReqNN)', () => {
+  const planPath = path.join(tmpDir, 'v0.21-05-01-PLAN.md');
+  let truths = '';
+  for (let i = 0; i < 100; i++) truths += `    - "count never exceeds ${i}"\n`;
+  fs.writeFileSync(planPath, `---\nphase: v0.21-05\nplan: "01"\nmust_haves:\n  truths:\n${truths}---\n\n<objective>Test</objective>\n`, 'utf8');
+
+  const result = generateProposedChanges(planPath);
+  assert.strictEqual(result.truthCount, 100);
+
+  const { cfgPath } = generateTlaCfg(result.specPath);
+  const cfg = fs.readFileSync(cfgPath, 'utf8');
+  assert.ok(/\bReq100\b/.test(cfg), 'cfg should include a check line for Req100');
+  const reqLines = cfg.split('\n').filter(l => /^(INVARIANT|PROPERTY) Req/.test(l));
+  assert.strictEqual(reqLines.length, 100, 'cfg should have one check per truth');
+});

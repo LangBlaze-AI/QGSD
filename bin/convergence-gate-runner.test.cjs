@@ -630,3 +630,59 @@ test('HaikuUnavailableNoCorruption - session directory preserved after dependenc
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('runConvergenceGates - null entry in verdict array does not crash (shape-guard)', async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(__dirname, 'test-'));
+  const sessionDir = path.join(tempDir, '.planning', 'formal', 'cycle2-simulations', 'sessionNull');
+  fs.mkdirSync(sessionDir, { recursive: true });
+  // Valid JSON array, but element is null -> passes Array.isArray, crashes .some(v => v.converged)
+  fs.writeFileSync(path.join(sessionDir, 'gate-verdicts.json'), JSON.stringify([null]));
+
+  const mockChecker = createMockChecker({});
+
+  try {
+    const result = await runConvergenceGates(
+      {
+        consequenceModelPath: 'consequence.tla',
+        reproducingModelPath: 'reproducing.tla',
+        neighborModelPaths: []
+      },
+      {
+        bugTrace: 'bug.itf',
+        sessionId: 'sessionNull',
+        formalism: 'tla',
+        projectRoot: tempDir
+      },
+      mockChecker
+    );
+    // Existing log had 1 (malformed) entry -> new iteration is 2, and run must not crash
+    assert.strictEqual(result.iteration, 2);
+    assert.strictEqual(result.converged, true);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runConvergenceGates - undefined models rejects with clear error (not raw destructure TypeError)', async (t) => {
+  await assert.rejects(
+    () => runConvergenceGates(
+      undefined,
+      { bugTrace: 'bug.itf', sessionId: 's', formalism: 'tla', projectRoot: __dirname },
+      createMockChecker({})
+    ),
+    /models required/,
+    'Should throw a clear "models required" error, not a raw destructure TypeError'
+  );
+});
+
+test('runConvergenceGates - null config rejects with clear error', async (t) => {
+  await assert.rejects(
+    () => runConvergenceGates(
+      { consequenceModelPath: 'c.tla', reproducingModelPath: 'r.tla', neighborModelPaths: [] },
+      null,
+      createMockChecker({})
+    ),
+    /config required/,
+    'Should throw a clear "config required" error, not a raw destructure TypeError'
+  );
+});

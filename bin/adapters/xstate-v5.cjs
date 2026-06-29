@@ -83,13 +83,13 @@ function extract(filePath, options = {}) {
 
   // State list
   const stateNames = Object.keys(cfg.states);
-  const finalStates = stateNames.filter(s => cfg.states[s].type === 'final');
+  const finalStates = stateNames.filter(s => cfg.states[s] && cfg.states[s].type === 'final');
 
   // Parse transitions
   const transitions = [];
   for (const stateName of stateNames) {
     const stateDef = cfg.states[stateName];
-    if (!stateDef.on) continue;
+    if (!stateDef || !stateDef.on) continue;
 
     for (const [eventName, transVal] of Object.entries(stateDef.on)) {
       const branches = Array.isArray(transVal) ? transVal : [transVal];

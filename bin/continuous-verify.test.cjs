@@ -125,6 +125,37 @@ describe('continuous-verify', () => {
       const result = shouldTriggerVerification('Write', { file_path: 'src/utils.js' }, state);
       assert.equal(result, false);
     });
+
+    it('does not throw when state is missing accumulated_files (corrupt/legacy state)', () => {
+      const state = { version: 1, phase: 'x', runs_used: 0, max_runs: 3 };
+      let result;
+      assert.doesNotThrow(() => {
+        result = shouldTriggerVerification('Write', { file_path: 'a.js' }, state);
+      });
+      assert.equal(result, false);
+    });
+
+    it('does not throw when accumulated_files is null', () => {
+      const state = { version: 1, phase: 'x', runs_used: 0, max_runs: 3, accumulated_files: null };
+      let result;
+      assert.doesNotThrow(() => {
+        result = shouldTriggerVerification('Edit', { file_path: 'package.json' }, state);
+      });
+      // package.json is a config file, so it should still trigger
+      assert.equal(result, true);
+    });
+
+    it('does not throw on non-string file_path (number/array/object)', () => {
+      const state = initVerifyState('test');
+      let result;
+      assert.doesNotThrow(() => {
+        result = shouldTriggerVerification('Write', { file_path: 123 }, state);
+      });
+      assert.equal(result, false);
+      assert.deepStrictEqual(state.accumulated_files, []); // non-string not accumulated
+      assert.doesNotThrow(() => shouldTriggerVerification('Write', { file_path: ['x.test.js'] }, state));
+      assert.doesNotThrow(() => shouldTriggerVerification('Write', { file_path: { p: 'x' } }, state));
+    });
   });
 
   describe('evaluateCondition', () => {

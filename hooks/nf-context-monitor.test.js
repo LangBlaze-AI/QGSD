@@ -499,3 +499,21 @@ test('verification: fail-open when continuous-verify.cjs not loadable (implicit)
   });
   assert.equal(exitCode, 0, 'Hook exits 0 even when continuous-verify not loadable');
 });
+
+// ─── Non-string command type-coercion (ncm-1) ────────────────────────────────
+
+test('non-string tool_input.command does not suppress CRITICAL context warning', () => {
+  const tmpDir = makeTmpDir();
+  // Default thresholds (critical 90, compact 65) so both branches engage.
+  const { exitCode, parsed } = runHook({
+    tool_name: 'Bash',
+    context_window: { remaining_percentage: 5 }, // used = 95%, CRITICAL
+    tool_input: { command: 12345 }, // adversarial non-string command
+    cwd: tmpDir,
+  });
+  assert.equal(exitCode, 0);
+  assert.ok(parsed, 'CRITICAL warning must still be emitted despite non-string command');
+  const ctx = parsed.hookSpecificOutput.additionalContext;
+  assert.ok(ctx.includes('CRITICAL'), 'Should still emit CRITICAL context warning');
+  assert.ok(!ctx.includes('SMART COMPACT'), 'Smart compact correctly skipped for non-string command');
+});

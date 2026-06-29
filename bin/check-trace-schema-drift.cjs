@@ -29,7 +29,8 @@ const KNOWN_EMITTERS = [
  * @returns {{ status: 'pass'|'fail', reason: string, [key: string]: any }}
  */
 function checkSchemaDrift(changedFiles) {
-  const hasSchemaChange = changedFiles.some(f =>
+  const files = (Array.isArray(changedFiles) ? changedFiles : []).filter(f => typeof f === 'string');
+  const hasSchemaChange = files.some(f =>
     f === SCHEMA_FILE || f.endsWith('/' + SCHEMA_FILE) || f.includes('trace.schema.json')
   );
 
@@ -37,7 +38,7 @@ function checkSchemaDrift(changedFiles) {
     return { status: 'pass', reason: 'no-schema-change' };
   }
 
-  const validatorUpdated = changedFiles.some(f =>
+  const validatorUpdated = files.some(f =>
     f === VALIDATOR_FILE || f.includes(VALIDATOR_FILE)
   );
   // Emitter check: at least one KNOWN_EMITTER changed (can include validate-traces.cjs,
@@ -46,12 +47,12 @@ function checkSchemaDrift(changedFiles) {
   // Per spec: atomic requires validator AND an emitter. validate-traces.cjs counts as emitter only
   // when a separate hook file (nf-stop.js, nf-prompt.js, etc.) is also present.
   const NON_VALIDATOR_EMITTERS = KNOWN_EMITTERS.filter(e => e !== VALIDATOR_FILE);
-  const emitterUpdated = changedFiles.some(f =>
+  const emitterUpdated = files.some(f =>
     NON_VALIDATOR_EMITTERS.some(emitter => f === emitter || f.includes(emitter))
   );
 
   if (validatorUpdated && emitterUpdated) {
-    return { status: 'pass', reason: 'schema-change-atomic', files: changedFiles.length };
+    return { status: 'pass', reason: 'schema-change-atomic', files: files.length };
   }
 
   return {
@@ -60,7 +61,7 @@ function checkSchemaDrift(changedFiles) {
     schema_changed: true,
     validator_updated: validatorUpdated,
     emitter_updated: emitterUpdated,
-    changed_files: changedFiles,
+    changed_files: files,
   };
 }
 

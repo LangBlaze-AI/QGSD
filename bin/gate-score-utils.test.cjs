@@ -26,4 +26,15 @@ assert.strictEqual(resolveGateScore(undefined, 'b'), 0);
 // Unknown gate name
 assert.strictEqual(resolveGateScore({ wiring_evidence_score: 1 }, 'x'), 0);
 
+// GSU-01: v2 score of 0 must be preferred over stale v1 data (|| vs ?? bug)
+// Gate A: v2 present with value 0 must be preferred over v1
+assert.strictEqual(resolveGateScore({ wiring_evidence_score: 0, grounding_score: 0.5 }, 'a'), 0);
+// Gate B: v2 present with value 0 must be preferred over v1
+assert.strictEqual(resolveGateScore({ wiring_purpose_score: 0, gate_b_score: 0.4 }, 'b'), 0);
+// Gate C: v2 present with value 0 must be preferred over v1
+assert.strictEqual(resolveGateScore({ wiring_coverage_score: 0, gate_c_score: 0.3 }, 'c'), 0);
+// v1 fallback still applies when v2 absent (null/undefined), value 0 honored
+assert.strictEqual(resolveGateScore({ grounding_score: 0 }, 'a'), 0);
+assert.strictEqual(resolveGateScore({ wiring_evidence_score: null, grounding_score: 0.7 }, 'a'), 0.7);
+
 console.log('gate-score-utils.test.cjs: all assertions passed');

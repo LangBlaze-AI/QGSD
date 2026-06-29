@@ -313,6 +313,7 @@ function buildTTrace(event, actualState, expectedStateName, divergenceType, scor
 // Only quorum_start (phase=IDLE) and deliberation_round can start from IDLE legitimately.
 // All other events require session context accumulated from preceding events.
 function expectedState(event) {
+  if (!event || typeof event !== 'object') return null;
   const action = event.action || event.type;
 
   // quorum_start always starts from IDLE — the only truly standalone-valid event type
@@ -435,6 +436,16 @@ if (require.main === module) {
     let event;
     try {
       event = JSON.parse(line);
+      if (event === null || typeof event !== 'object' || Array.isArray(event)) {
+        divergences.push({
+          line,
+          reason: 'non_object_event: parsed JSON is not a conformance event object',
+          divergenceType: 'unmappable_action',
+          ...scoreboardMeta,
+          confidence,
+        });
+        continue;
+      }
       event._lineIndex = i; // internal index for standalone event keying
       parsedEvents.push(event);
     } catch (parseErr) {

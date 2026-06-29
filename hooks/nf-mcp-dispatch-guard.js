@@ -29,7 +29,7 @@ function loadKnownFamilies() {
 
     const families = new Set();
     for (const provider of providersJson.providers) {
-      if (typeof provider.name === 'string') {
+      if (provider && typeof provider.name === 'string') {
         // Strip trailing -N to derive family (e.g. "codex-1" -> "codex")
         const family = provider.name.replace(/-\d+$/, '');
         families.add(family);

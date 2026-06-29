@@ -284,16 +284,16 @@ function computeEvidenceReadiness() {
  * @returns {Object} aggregate - { gate_a: {...}, gate_b: {...}, gate_c: {...} }
  */
 function computeAggregate(perModelResults) {
-  const keys = Object.keys(perModelResults);
+  const keys = Object.keys(perModelResults || {});
   const total = keys.length;
 
   let gateAPass = 0, gateBPass = 0, gateCPass = 0;
   for (const k of keys) {
-    const m = perModelResults[k];
+    const m = perModelResults[k] || {};
     // Support both { pass, reason } objects and bare booleans (backward compat)
-    const aPass = typeof m.gate_a === 'object' ? m.gate_a.pass : m.gate_a;
-    const bPass = typeof m.gate_b === 'object' ? m.gate_b.pass : m.gate_b;
-    const cPass = typeof m.gate_c === 'object' ? m.gate_c.pass : m.gate_c;
+    const aPass = m.gate_a && typeof m.gate_a === 'object' ? m.gate_a.pass : m.gate_a;
+    const bPass = m.gate_b && typeof m.gate_b === 'object' ? m.gate_b.pass : m.gate_b;
+    const cPass = m.gate_c && typeof m.gate_c === 'object' ? m.gate_c.pass : m.gate_c;
     if (aPass) gateAPass++;
     if (bPass) gateBPass++;
     if (cPass) gateCPass++;

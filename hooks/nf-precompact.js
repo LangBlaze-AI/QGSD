@@ -43,6 +43,7 @@ const contextStack = (() => {
 // Returns the trimmed text between "## Current Position" and the next "## " header.
 // Returns null if the section is not found.
 function extractCurrentPosition(stateContent) {
+  if (typeof stateContent !== 'string') return null;
   const startMarker = '## Current Position';
   const startIdx = stateContent.indexOf(startMarker);
   if (startIdx === -1) return null;
@@ -120,11 +121,11 @@ function readExecutionProgress(cwd) {
 // Format execution progress as injection block for compaction continuation context.
 // Returns string or null. Output capped at 3200 characters.
 function formatProgressInjection(progress) {
-  if (!progress) return null;
+  if (!progress || !Array.isArray(progress.tasks)) return null;
 
-  const completed = progress.tasks.filter(t => t.status === 'complete');
+  const completed = progress.tasks.filter(t => t && t.status === 'complete');
   const completedCount = completed.length;
-  const next = progress.tasks.find(t => t.status === 'pending' || t.status === 'in_progress');
+  const next = progress.tasks.find(t => t && (t.status === 'pending' || t.status === 'in_progress'));
 
   const lines = [
     '## Execution Progress (auto-injected at compaction)',

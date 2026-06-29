@@ -384,5 +384,49 @@ describe('polyrepo.cjs', () => {
 
       fs.rmSync(env.tmpDir, { recursive: true, force: true });
     });
+
+    test('PR-READMARKER-SHAPE: non-object marker JSON returns null and setDocs fails open', () => {
+      const env = createTestEnv();
+      const markerDir = path.join(env.repoA, '.planning');
+      fs.mkdirSync(markerDir, { recursive: true });
+      // Valid JSON, wrong shape (a bare scalar instead of an object)
+      fs.writeFileSync(path.join(markerDir, 'polyrepo.json'), '42', 'utf8');
+
+      // readMarker must shape-guard like loadGroup does
+      assert.equal(polyrepo.readMarker(env.repoA), null, 'non-object marker should normalize to null');
+
+      // setDocs must fail open, not throw an uncaught TypeError on a primitive
+      let result;
+      assert.doesNotThrow(() => { result = polyrepo.setDocs(env.repoA, { user: 'docs/' }); });
+      assert.equal(result.ok, false);
+
+      fs.rmSync(env.tmpDir, { recursive: true, force: true });
+    });
+
+    test('PR-CREATE-NULLENTRY: createGroup rejects a null repo entry instead of throwing', () => {
+      // Validation crash happens before any fs write, so no real ~/.claude pollution.
+      let result;
+      assert.doesNotThrow(() => {
+        result = polyrepo.createGroup('hardening-null-entry-probe', [null]);
+      });
+      assert.equal(result.ok, false);
+      assert.match(result.error, /repo/i);
+    });
+
+    test('PR-LOADGROUP-ELEMENTSHAPE: a null repo entry in a group config does not crash list', () => {
+      const env = createTestEnv();
+      fs.writeFileSync(
+        path.join(env.polyreposDir, 'broken.json'),
+        JSON.stringify({ name: 'broken', repos: [null, { role: 'frontend', path: env.repoA, planning: true }] }),
+        'utf8'
+      );
+
+      const result = runCLI(['list', 'broken'], env.tmpDir);
+      assert.ok(!/TypeError/.test(result.stderr), `should not throw TypeError: ${result.stderr}`);
+      assert.equal(result.status, 0, `list should succeed, got ${result.status}; stderr: ${result.stderr}`);
+      assert.ok(result.stdout.includes('frontend'), 'well-formed entry should still render');
+
+      fs.rmSync(env.tmpDir, { recursive: true, force: true });
+    });
   });
 });

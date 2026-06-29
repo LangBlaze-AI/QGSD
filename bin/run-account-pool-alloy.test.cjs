@@ -43,3 +43,23 @@ test('exits non-zero and prints Alloy JAR download URL when JAR not found', () =
   assert.strictEqual(result.status, 1);
   assert.match(result.stderr, /alloy.*jar|org\.alloytools|download/i);
 });
+
+test('accepts a valid Java 17 whose `--version` prints the bare `java 17.x` format (Oracle/modern JDK)', () => {
+  if (process.platform === 'win32') { return; }  // POSIX shell-script fake only
+  const os = require('os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-fakejava-'));
+  const binDir = path.join(tmp, 'bin');
+  fs.mkdirSync(binDir, { recursive: true });
+  const fakeJava = path.join(binDir, 'java');
+  fs.writeFileSync(fakeJava, '#!/bin/sh\necho "java 17.0.11 2024-04-16 LTS"\n');
+  fs.chmodSync(fakeJava, 0o755);
+
+  const result = spawnSync(process.execPath, [RUN_ACCOUNT_POOL_ALLOY], {
+    encoding: 'utf8',
+    env: { ...process.env, JAVA_HOME: tmp },
+  });
+
+  // A valid Java 17 must clear the version gate; the regex currently misses the
+  // bare `java 17.x` format and wrongly emits the >=17 rejection.
+  assert.doesNotMatch(result.stderr, /Java >=17 required/);
+});

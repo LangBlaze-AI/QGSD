@@ -43,7 +43,7 @@ function resolveSinglePlaceholder(value) {
   const m = String(value).match(PLACEHOLDER_RE);
   if (m) {
     const envVarName = m[1];
-    if (process.env[envVarName] !== undefined) {
+    if (Object.prototype.hasOwnProperty.call(process.env, envVarName)) {
       return process.env[envVarName];
     }
   }
@@ -82,7 +82,7 @@ function findUnresolvedPlaceholders(envObj) {
   const unresolved = [];
   for (const [k, v] of Object.entries(envObj || {})) {
     const m = String(v).match(PLACEHOLDER_RE);
-    if (m && process.env[m[1]] === undefined) {
+    if (m && !Object.prototype.hasOwnProperty.call(process.env, m[1])) {
       unresolved.push(k);
     }
   }

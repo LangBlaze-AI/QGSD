@@ -220,3 +220,35 @@ test('MRF-02: formatIterationFeedback handles reproduced status', () => {
   assert.ok(output.includes('reproduced'));
   assert.ok(!output.includes('model still incomplete'));
 });
+
+test('MRF-02: formatIterationFeedback does not crash when diagnostic lacks trace_alignment', () => {
+  const iter = {
+    attempt: 1,
+    passed: true,
+    summary: 'model incomplete',
+    diagnostic: { correction_proposals: [{ id: 'p1' }] } // no trace_alignment
+  };
+  let output;
+  assert.doesNotThrow(() => { output = formatIterationFeedback(iter, false); });
+  assert.ok(output.includes('Attempt 1'));
+  assert.ok(output.includes('1 correction proposals generated (0 diverged fields)'));
+});
+
+test('MRF-02: formatIterationFeedback fail-opens on null iteration', () => {
+  let output;
+  assert.doesNotThrow(() => { output = formatIterationFeedback(null, false); });
+  assert.strictEqual(output, '');
+  assert.doesNotThrow(() => formatIterationFeedback(undefined, false));
+});
+
+test('MRF-02: non-positive maxAttempts falls back to default instead of zero iterations', () => {
+  _setDeps({
+    execFileSync: makeMockExec([{ exit: 0 }, { exit: 0 }, { exit: 0 }])
+  });
+  const result = verifyBugReproduction('/fake/model.tla', 'bug', {
+    formalism: 'tla',
+    maxAttempts: -1
+  });
+  assert.ok(result.attempts > 0, 'should run at least one attempt');
+  assert.ok(result.iterations.length > 0, 'should record at least one iteration');
+});

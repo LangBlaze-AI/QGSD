@@ -124,3 +124,40 @@ describe('integration: real data', () => {
     assert.strictEqual(typeof result.summary.coverage_gap_count, 'number');
   });
 });
+
+// ── Adversarial: malformed inputs ───────────────────────────────────────────
+
+describe('generateRiskHeatmap: malformed observedFsm', () => {
+  it('does not throw when observedFsm is null', () => {
+    assert.doesNotThrow(() => generateRiskHeatmap({ hazards: [] }, null));
+  });
+
+  it('does not throw when observedFsm is undefined', () => {
+    let r;
+    assert.doesNotThrow(() => { r = generateRiskHeatmap({ hazards: [{ state: 'A', event: 'E', to_state: 'B', rpn: 100, id: 1 }] }); });
+    assert.strictEqual(r.transitions.length, 1);
+    assert.strictEqual(r.transitions[0].coverage_gap, false);
+  });
+});
+
+describe('generateRiskHeatmap: malformed hazards entries', () => {
+  it('skips null hazard entries instead of crashing', () => {
+    const model = { hazards: [null, { state: 'A', event: 'E', to_state: 'B', rpn: 100, id: 1 }] };
+    const fsm = { model_comparison: { missing_in_model: [] } };
+    let r;
+    assert.doesNotThrow(() => { r = generateRiskHeatmap(model, fsm); });
+    assert.strictEqual(r.transitions.length, 1);
+    assert.strictEqual(r.transitions[0].state, 'A');
+  });
+});
+
+describe('generateRiskHeatmap: malformed missing_in_model entries', () => {
+  it('skips null entries in missing_in_model instead of crashing', () => {
+    const model = { hazards: [{ state: 'A', event: 'E', to_state: 'B', rpn: 100, id: 1 }] };
+    const fsm = { model_comparison: { missing_in_model: [null, { from: 'A', event: 'E' }] } };
+    let r;
+    assert.doesNotThrow(() => { r = generateRiskHeatmap(model, fsm); });
+    assert.strictEqual(r.transitions.length, 1);
+    assert.strictEqual(r.transitions[0].coverage_gap, true);
+  });
+});

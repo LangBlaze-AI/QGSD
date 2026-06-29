@@ -58,6 +58,17 @@ describe('skill-mcp-lint detector', () => {
     assert.deepEqual(v('mcp__<slot>__identity'), []);
     assert.deepEqual(v('mcp__<$AGENT>__identity'), []);
   });
+
+  it('does not crash on non-string text (Buffer from readFileSync w/o utf8, or array)', () => {
+    // fs.readFileSync(path) without an encoding returns a Buffer; Buffer.slice()
+    // returns a Buffer which has no .split(), so the line-number computation throws.
+    assert.doesNotThrow(() => findMcpToolViolations(Buffer.from('mcp__codex-1__codex'), 'f.md'));
+    assert.doesNotThrow(() => findMcpToolViolations(['mcp__copilot-1__ask'], 'f.md'));
+    // and it should still detect the violation carried in the coerced text
+    const r = findMcpToolViolations(Buffer.from('mcp__copilot-1__ask'), 'f.md');
+    assert.equal(r.length, 1);
+    assert.equal(r[0].rule, 'mcp-bad-tool');
+  });
 });
 
 describe('the live skill/workflow tree satisfies the MCP-tool standard', () => {

@@ -319,4 +319,51 @@ describe('autoClosePtoF', () => {
 
     assert.ok(writeCalled);
   });
+
+  it('skips null divergent entries without crashing (corrupt residual detail)', () => {
+    const ledgerPath = seedLedger([
+      { id: 'a', status: 'acknowledged', issue_type: 'issue', formal_ref: 'requirement:REL-01', meta: {}, title: 'test' },
+    ]);
+
+    const residual = {
+      residual: 2,
+      detail: {
+        divergent_entries: [
+          null,
+          { id: 'a', formal_ref: 'requirement:REL-01', measured: 'fail', expected: null },
+        ],
+      },
+    };
+
+    let result;
+    assert.doesNotThrow(() => {
+      result = autoClosePtoF(residual, { isNumericThreshold: () => false, ledgerPath });
+    });
+
+    // The valid entry 'a' is still flagged despite the null sibling
+    assert.ok(result.actions_taken.some(a => a.includes('Flagged a for investigation')));
+  });
+
+  it('skips null entries in ledger debt_entries without crashing (corrupt debt.json)', () => {
+    const ledgerPath = seedLedger([
+      null,
+      { id: 'b', status: 'acknowledged', issue_type: 'issue', formal_ref: 'requirement:REL-01', meta: {}, title: 'test' },
+    ]);
+
+    const residual = {
+      residual: 1,
+      detail: {
+        divergent_entries: [
+          { id: 'b', formal_ref: 'requirement:REL-01', measured: 'fail', expected: null },
+        ],
+      },
+    };
+
+    let result;
+    assert.doesNotThrow(() => {
+      result = autoClosePtoF(residual, { isNumericThreshold: () => false, ledgerPath });
+    });
+
+    assert.ok(result.actions_taken.some(a => a.includes('Flagged b for investigation')));
+  });
 });

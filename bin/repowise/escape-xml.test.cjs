@@ -64,3 +64,22 @@ describe('escapeXml — edge cases', () => {
     assert.equal(escapeXml('hello world'), 'hello world');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Illegal XML 1.0 control characters
+// ---------------------------------------------------------------------------
+
+describe('escapeXml — illegal XML control characters', () => {
+  it('strips C0 control chars that are illegal in XML 1.0', () => {
+    // NUL, backspace, vertical tab are forbidden in XML 1.0 char data
+    assert.equal(escapeXml('a\x00b\x08c\x0Bd'), 'abcd');
+  });
+
+  it('preserves the XML-legal whitespace controls (tab, newline, CR)', () => {
+    assert.equal(escapeXml('a\tb\nc\rd'), 'a\tb\nc\rd');
+  });
+
+  it('produced output never contains a raw NUL byte', () => {
+    assert.ok(!escapeXml('x\x00y').includes('\x00'));
+  });
+});

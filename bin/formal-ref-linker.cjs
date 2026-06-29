@@ -18,7 +18,7 @@ const path = require('node:path');
  * @returns {string[]}
  */
 function tokenize(text) {
-  return (text || '')
+  return (typeof text === 'string' ? text : '')
     .toLowerCase()
     .split(/[\s\-_]+/)
     .filter(t => t.length >= 3);
@@ -62,10 +62,12 @@ function linkFormalRefs(entries, options = {}) {
   }
 
   // Tokenize requirements for keyword matching
-  const reqTokens = requirements.map(req => ({
-    id: req.id,
-    tokens: tokenize(`${req.id} ${req.text || ''}`)
-  }));
+  const reqTokens = requirements
+    .filter(req => req != null && typeof req === 'object')
+    .map(req => ({
+      id: req.id,
+      tokens: tokenize(`${req.id} ${req.text || ''}`)
+    }));
 
   // Load spec module names (fail-open)
   let specModules = [];
@@ -138,7 +140,7 @@ function linkFormalRefs(entries, options = {}) {
           for (const { key, depth } of frontier) {
             if (depth >= 2) continue;
             const node = proximityIndex.nodes[key];
-            if (!node) continue;
+            if (!node || !Array.isArray(node.edges)) continue;
             for (const edge of node.edges) {
               if (visited.has(edge.to)) continue;
               visited.add(edge.to);
@@ -167,7 +169,7 @@ function linkFormalRefs(entries, options = {}) {
     }
 
     // Layer 3: Spec-inferred — module name substring matching
-    const titleLower = (entry.title || '').toLowerCase();
+    const titleLower = (typeof entry.title === 'string' ? entry.title : '').toLowerCase();
     let matched = false;
     for (const mod of specModules) {
       if (titleLower.includes(mod)) {

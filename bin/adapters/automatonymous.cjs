@@ -20,8 +20,12 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('Automatonymous extract: filePath must be a non-empty string');
+  }
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
+  if (!fs.statSync(absInput).isFile()) throw new Error('Not a file: ' + absInput);
 
   const content = fs.readFileSync(absInput, 'utf8');
 
@@ -86,7 +90,7 @@ function extract(filePath, options = {}) {
     const blockEnd = afterDuring.search(/\n\s*(?:During|Initially|Finally|DuringAny)\s*\(/);
     const block = blockEnd > 0 ? afterDuring.slice(0, blockEnd) : afterDuring.slice(0, 500);
 
-    const whenTransPattern = /When\s*\(\s*(\w+)\s*\)[\s\S]*?\.TransitionTo\s*\(\s*(\w+)\s*\)/g;
+    const whenTransPattern = /When\s*\(\s*(\w+)\s*\)(?:(?!\bWhen\s*\()[\s\S])*?\.TransitionTo\s*\(\s*(\w+)\s*\)/g;
     let wtm;
     while ((wtm = whenTransPattern.exec(block)) !== null) {
       const event = wtm[1];
@@ -102,7 +106,7 @@ function extract(filePath, options = {}) {
     }
 
     // When(Event).Finalize() — transition to final
-    const finalizePattern = /When\s*\(\s*(\w+)\s*\)[\s\S]*?\.Finalize\s*\(\s*\)/g;
+    const finalizePattern = /When\s*\(\s*(\w+)\s*\)(?:(?!\bWhen\s*\()[\s\S])*?\.Finalize\s*\(\s*\)/g;
     let fzm;
     while ((fzm = finalizePattern.exec(block)) !== null) {
       const event = fzm[1];

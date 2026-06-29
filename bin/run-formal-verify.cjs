@@ -206,10 +206,16 @@ function discoverModels(root) {
 
   if (registry && Array.isArray(registry.search_dirs)) {
     for (const dir of registry.search_dirs) {
+      if (typeof dir !== 'string') continue;
       const resolvedDir = path.resolve(root, dir);
-      if (!fs.existsSync(resolvedDir)) continue;
-
-      const files = fs.readdirSync(resolvedDir);
+      let files;
+      try {
+        const st = fs.statSync(resolvedDir);
+        if (!st.isDirectory()) continue;
+        files = fs.readdirSync(resolvedDir);
+      } catch (_) {
+        continue;
+      }
 
       // TLA+: *.cfg
       for (const f of files.filter(f => f.endsWith('.cfg'))) {

@@ -413,6 +413,30 @@ test('telemetry: multiple issues, only first unsurfaced high-priority one is sur
   assert.equal(fixSecond.surfaced, false, 'fix-second-high must remain unsurfaced');
 });
 
+test('telemetry: a null entry in issues[] must not block a valid later issue', () => {
+  const tmpDir = makeTmpDir();
+  writePackageJson(tmpDir, 'nforma');
+  writePendingFixes(tmpDir, [
+    null,
+    {
+      id: 'fix-after-null',
+      description: 'Valid high-priority issue after a null entry',
+      action: 'Should still surface',
+      priority: 80,
+      surfaced: false,
+    },
+  ]);
+
+  const { exitCode, parsed } = runHook({ cwd: tmpDir });
+
+  assert.equal(exitCode, 0, 'hook must exit 0');
+  assert.ok(parsed && parsed.hookSpecificOutput, 'must surface the valid issue despite the null entry');
+  assert.ok(
+    parsed.hookSpecificOutput.additionalContext.includes('Valid high-priority issue after a null entry'),
+    'the valid issue following the malformed null entry must still be surfaced'
+  );
+});
+
 test('cwd field absent in stdin JSON → exits 0 (defaults to process.cwd, no crash)', () => {
   // Pass an object with no cwd field. The hook should default to process.cwd()
   // and not crash regardless of whether that directory has a nForma package.json.
@@ -486,6 +510,19 @@ test('parseStateForReminder returns null for null/undefined input', () => {
   assert.equal(parseStateForReminder(null), null);
   assert.equal(parseStateForReminder(undefined), null);
   assert.equal(parseStateForReminder(''), null);
+});
+
+test('parseStateForReminder: empty Phase value must not capture the following line (no cross-newline)', () => {
+  const content = [
+    'Phase:',
+    'Status: In Progress',
+    'Plan: 1 of 2',
+    'Last activity: today',
+  ].join('\n');
+  const result = parseStateForReminder(content);
+  // BUG: /Phase:\s*(.+)/ lets \s* span the newline and capture 'Status: In Progress'
+  // as the phase, producing a misleading reminder.
+  assert.equal(result, null, 'empty Phase value must not pull text from the next line');
 });
 
 // ─── coderlm auto-start tests ───────────────────────────────────────────────

@@ -46,7 +46,9 @@ const MAX_PER_WAVE = 3;
  * @returns {string[]}
  */
 function getLayerDeps(layerKey) {
-  return LAYER_DEPS[layerKey] || [];
+  return Object.prototype.hasOwnProperty.call(LAYER_DEPS, layerKey)
+    ? LAYER_DEPS[layerKey]
+    : [];
 }
 
 /**
@@ -68,6 +70,7 @@ function getLayerDeps(layerKey) {
  * @returns {Array<{wave: number, layers: string[], sequential?: boolean}>}
  */
 function computeWaves(residualVector, priorityWeights = {}) {
+  if (!residualVector || typeof residualVector !== 'object') return [];
   // Filter to active layers (residual > 0)
   const active = new Set();
   for (const [key, val] of Object.entries(residualVector)) {
@@ -171,7 +174,9 @@ function computeWavesFromGraph(graph, priorityWeights = {}) {
   }
 
   const nodes = new Set(graph.nodes);
-  const edges = graph.edges || [];
+  const edges = (Array.isArray(graph.edges) ? graph.edges : []).filter(
+    (e) => e && typeof e === 'object'
+  );
 
   // Build adjacency list: node -> [nodes it depends on]
   const adjList = new Map();

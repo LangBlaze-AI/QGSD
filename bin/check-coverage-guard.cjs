@@ -34,7 +34,11 @@ const args = process.argv.slice(2);
 const saveBaseline = args.includes('--save-baseline');
 const quietMode    = args.includes('--quiet');
 const thresholdIdx = args.indexOf('--threshold');
-const threshold    = thresholdIdx !== -1 ? parseFloat(args[thresholdIdx + 1]) : 15;
+let threshold = 15;
+if (thresholdIdx !== -1) {
+  const parsedThreshold = parseFloat(args[thresholdIdx + 1]);
+  threshold = Number.isFinite(parsedThreshold) ? parsedThreshold : 15;
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

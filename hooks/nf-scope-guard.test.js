@@ -69,6 +69,23 @@ it('TC-SG-09: isFileInScope normalizes trailing slashes for matching', () => {
   assert.strictEqual(result, false);
 });
 
+// TC-SG-13: isFileInScope must match on a path-segment boundary, not a bare string prefix
+it('TC-SG-13: isFileInScope does not flag a sibling dir sharing the pattern prefix', () => {
+  // 'binutils/' is NOT under 'bin/', so the file is in scope.
+  assert.strictEqual(isFileInScope('binutils/tool.js', { out_of_scope: ['bin/'] }), true);
+  assert.strictEqual(isFileInScope('binary.js', { out_of_scope: ['bin'] }), true);
+  // Regression guard: genuine descendants and exact matches still flagged.
+  assert.strictEqual(isFileInScope('bin/install.js', { out_of_scope: ['bin/'] }), false);
+  assert.strictEqual(isFileInScope('bin', { out_of_scope: ['bin'] }), false);
+});
+
+// TC-SG-14: isFileInScope tolerates a non-string targetPath (fail-open, no throw)
+it('TC-SG-14: isFileInScope does not throw on a non-string targetPath', () => {
+  assert.doesNotThrow(() => isFileInScope(42, { out_of_scope: ['bin/'] }));
+  assert.strictEqual(isFileInScope(42, { out_of_scope: ['bin/'] }), true);
+  assert.strictEqual(isFileInScope({}, { out_of_scope: ['bin/'] }), true);
+});
+
 // TC-SG-10: readScopeContract with nonexistent path returns null
 it('TC-SG-10: readScopeContract with nonexistent path returns null', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-sg-test-'));

@@ -53,3 +53,46 @@ describe('validate-memory non-array requirements guard', () => {
     }
   });
 });
+
+describe('validate-memory fail-open on unreadable MEMORY.md', () => {
+  it('validateMemory does not throw when the memory path is a directory (EISDIR)', () => {
+    const { validateMemory } = require('./validate-memory.cjs');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-vm-'));
+    const memDir = path.join(dir, 'MEMORY.md');
+    fs.mkdirSync(memDir); // a *directory* named MEMORY.md — existsSync() returns true
+    try {
+      let result;
+      assert.doesNotThrow(() => {
+        result = validateMemory({ cwd: dir, memoryPath: memDir, quiet: true });
+      });
+      assert.ok(Array.isArray(result.findings), 'returns a findings array, no throw');
+      assert.equal(result.findings.length, 0, 'no findings when memory is unreadable');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('validate-memory non-string content guard', () => {
+  it('checkStaleCounts does not crash on a null memoryContent', () => {
+    const dir = tmpProject({ requirements: [] });
+    try {
+      let findings;
+      assert.doesNotThrow(() => { findings = checkStaleCounts(null, dir); });
+      assert.ok(Array.isArray(findings), 'returns findings array, no throw');
+      assert.equal(findings.length, 0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('validate-memory findMemoryPath input guard', () => {
+  it('returns null for a non-string cwd instead of throwing', () => {
+    const { findMemoryPath } = require('./validate-memory.cjs');
+    let result;
+    assert.doesNotThrow(() => { result = findMemoryPath(undefined); });
+    assert.equal(result, null);
+    assert.doesNotThrow(() => findMemoryPath(42));
+  });
+});

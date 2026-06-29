@@ -37,10 +37,10 @@ function parseIssueSelection(input, maxIndex) {
     if (rangeMatch) {
       const start = parseInt(rangeMatch[1], 10);
       const end = parseInt(rangeMatch[2], 10);
-      for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
-        if (i >= 1 && i <= maxIndex) {
-          indices.add(i - 1); // Convert to zero-based
-        }
+      const lo = Math.max(1, Math.min(start, end));
+      const hi = Math.min(Math.max(start, end), maxIndex);
+      for (let i = lo; i <= hi; i++) {
+        indices.add(i - 1); // Convert to zero-based
       }
     } else {
       const num = parseInt(part, 10);
@@ -65,7 +65,7 @@ function buildTargetsManifest(selectedIssues, options = {}) {
     version: 1,
     created_at: new Date().toISOString(),
     source: 'observe',
-    targets: (selectedIssues || []).map(issue => ({
+    targets: (selectedIssues || []).filter(issue => issue && typeof issue === 'object').map(issue => ({
       id: issue.id,
       title: issue.title,
       severity: issue.severity,

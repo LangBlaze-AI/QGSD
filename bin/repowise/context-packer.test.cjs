@@ -130,3 +130,34 @@ describe('packContext — edge cases', () => {
     assert.ok(json.repowise.hotspot.summary, 'should include summary from _hotspotData');
   });
 });
+
+// ---------------------------------------------------------------------------
+// packContext — adversarial file inputs
+// ---------------------------------------------------------------------------
+
+describe('packContext — adversarial file inputs', () => {
+  it('treats a missing files key as empty without throwing', () => {
+    let result;
+    assert.doesNotThrow(() => { result = packContext({ projectRoot: '/tmp' }); });
+    assert.ok(result.xml.includes('<files/>'), 'should emit self-closing <files/>');
+    assert.deepEqual(result.json.repowise.files, [], 'json files should be empty array');
+  });
+
+  it('skips null entries in the files array without throwing', () => {
+    let result;
+    assert.doesNotThrow(() => {
+      result = packContext({ files: [null, { filePath: 'a.js', content: 'x' }], projectRoot: '/tmp' });
+    });
+    assert.ok(result.xml.includes('<file path="a.js"'), 'valid file should still be packed');
+    assert.equal(result.json.repowise.files.length, 1, 'null entry should be dropped from json');
+  });
+
+  it('handles a file entry missing filePath without ERR_INVALID_ARG_TYPE', () => {
+    let result;
+    assert.doesNotThrow(() => {
+      result = packContext({ files: [{ content: 'x = 1' }], projectRoot: '/tmp' });
+    });
+    assert.ok(result.xml.includes('x = 1'), 'content should still be packed');
+    assert.equal(typeof result.json.repowise.files[0].path, 'string', 'path should be a string, not undefined');
+  });
+});

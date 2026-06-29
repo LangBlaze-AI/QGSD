@@ -89,8 +89,13 @@ function validateIR(ir) {
     } else if (t.target !== null && !ir.stateNames.includes(t.target)) {
       errors.push(`transitions[${i}].target "${t.target}" is not in stateNames`);
     }
+    if (t.guard !== null && typeof t.guard !== 'string') {
+      errors.push(`transitions[${i}].guard must be a string or null`);
+    }
     if (!Array.isArray(t.assignedKeys)) {
       errors.push(`transitions[${i}].assignedKeys must be an array`);
+    } else if (t.assignedKeys.some(k => typeof k !== 'string')) {
+      errors.push(`transitions[${i}].assignedKeys must contain only strings`);
     }
   }
 

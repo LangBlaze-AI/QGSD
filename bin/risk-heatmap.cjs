@@ -49,13 +49,15 @@ function computeRiskScore(rpn, hasCoverageGap) {
 function generateRiskHeatmap(hazardModel, observedFsm) {
   // Build set of missing_in_model transitions
   const missingInModel = new Set(
-    (observedFsm.model_comparison?.missing_in_model || [])
+    (observedFsm?.model_comparison?.missing_in_model || [])
+      .filter(m => m && typeof m === 'object')
       .map(m => `${m.from}-${m.event}`)
   );
 
   const transitions = [];
 
   for (const hazard of (hazardModel?.hazards || [])) {
+    if (!hazard || typeof hazard !== 'object') continue;
     const key = `${hazard.state}-${hazard.event}`;
     const hasCoverageGap = missingInModel.has(key);
     const coverageGapPenalty = hasCoverageGap ? 0.5 : 0.0;

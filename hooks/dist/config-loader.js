@@ -112,8 +112,14 @@ const DEFAULT_HOOK_PRIORITIES = {
 };
 
 function shouldRunHook(hookBasename, profile) {
-  const validProfile = HOOK_PROFILE_MAP[profile] ? profile : 'standard';
-  return HOOK_PROFILE_MAP[validProfile].has(hookBasename);
+  // Resolve the profile's hook set defensively. A bare `HOOK_PROFILE_MAP[profile]`
+  // truthiness check matches INHERITED prototype keys ('constructor'/'toString'/…), whose
+  // values are functions (not Sets), so `.has(...)` would throw — a fail-CLOSED crash in
+  // the gate every hook depends on. The contract is "unknown profile → standard": fall
+  // back unless the lookup yields an actual Set.
+  const set = HOOK_PROFILE_MAP[profile];
+  const profileSet = set instanceof Set ? set : HOOK_PROFILE_MAP.standard;
+  return profileSet.has(hookBasename);
 }
 
 const DEFAULT_CONFIG = {
@@ -257,8 +263,12 @@ const HOOK_INPUT_SCHEMAS = {
 // Returns { valid: true } on success, or { valid: false, errors: [...] } on failure.
 // Unknown event types pass validation (fail-open) so future Claude Code updates do not break hooks.
 function validateHookInput(eventType, input) {
-  if (typeof input !== 'object' || input === null) {
-    return { valid: false, errors: [{ field: '(root)', error: 'not_object', expected: 'object', got: typeof input }] };
+  // Array.isArray guard: `typeof [] === 'object'`, so without it an array payload slips
+  // through and (for events with no required field — Stop/SessionStart/…) returns
+  // {valid:true}, while events WITH a required field reject it — opposite verdicts on the
+  // same structurally-broken input. A hook stdin is always a JSON object, never an array.
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return { valid: false, errors: [{ field: '(root)', error: 'not_object', expected: 'object', got: Array.isArray(input) ? 'array' : typeof input }] };
   }
 
   const schema = HOOK_INPUT_SCHEMAS[eventType];
@@ -310,7 +320,7 @@ function validateConfig(config) {
     config.quorum_commands = DEFAULT_CONFIG.quorum_commands;
   }
 
-  if (typeof config.required_models !== 'object' || config.required_models === null) {
+  if (typeof config.required_models !== 'object' || config.required_models === null || Array.isArray(config.required_models)) {
     process.stderr.write('[nf] WARNING: nf.json: required_models must be an object; using defaults\n');
     config.required_models = DEFAULT_CONFIG.required_models;
   }
@@ -321,7 +331,7 @@ function validateConfig(config) {
   }
 
   // Validate circuit_breaker sub-object
-  if (typeof config.circuit_breaker !== 'object' || config.circuit_breaker === null) {
+  if (typeof config.circuit_breaker !== 'object' || config.circuit_breaker === null || Array.isArray(config.circuit_breaker)) {
     process.stderr.write('[nf] WARNING: nf.json: circuit_breaker must be an object; using defaults\n');
     config.circuit_breaker = { ...DEFAULT_CONFIG.circuit_breaker };
   } else {
@@ -395,8 +405,10 @@ function validateConfig(config) {
     }
   }
 
-  // Validate quorum object
-  if (typeof config.quorum !== 'object' || config.quorum === null) {
+  // Validate quorum object. Array.isArray guard: `typeof [] === 'object'`, so a
+  // `"quorum": []` would otherwise slip into the else-branch, stay an Array with
+  // maxSize/preferSub bolted on as properties, and mislead downstream isArray checks.
+  if (typeof config.quorum !== 'object' || config.quorum === null || Array.isArray(config.quorum)) {
     config.quorum = { ...DEFAULT_CONFIG.quorum };
   } else {
     // Accept both minSize (legacy) and maxSize (current) — normalize to maxSize
@@ -410,6 +422,13 @@ function validateConfig(config) {
     }
     if (typeof config.quorum.preferSub !== 'boolean') {
       config.quorum.preferSub = DEFAULT_CONFIG.quorum.preferSub;
+    }
+    // Restore the issue-#170 consensus floor. A partial `quorum: { maxSize: N }` shallow-
+    // merges over the default and DROPS min_live_voters → undefined, silently disabling the
+    // floor for any consumer that trusts validateConfig (nf-stop currently re-derives `|| 2`
+    // defensively precisely because of this gap).
+    if (!Number.isInteger(config.quorum.min_live_voters) || config.quorum.min_live_voters < 1) {
+      config.quorum.min_live_voters = DEFAULT_CONFIG.quorum.min_live_voters;
     }
   }
 
@@ -444,7 +463,7 @@ function validateConfig(config) {
   }
 
   // Validate context_monitor sub-object
-  if (typeof config.context_monitor !== 'object' || config.context_monitor === null) {
+  if (typeof config.context_monitor !== 'object' || config.context_monitor === null || Array.isArray(config.context_monitor)) {
     process.stderr.write('[nf] WARNING: nf.json: context_monitor must be an object; using defaults\n');
     config.context_monitor = { ...DEFAULT_CONFIG.context_monitor };
   } else {
@@ -473,7 +492,7 @@ function validateConfig(config) {
   }
 
   // Validate budget sub-object
-  if (typeof config.budget !== 'object' || config.budget === null) {
+  if (typeof config.budget !== 'object' || config.budget === null || Array.isArray(config.budget)) {
     process.stderr.write('[nf] WARNING: nf.json: budget must be an object; using defaults\n');
     config.budget = { ...DEFAULT_CONFIG.budget };
   } else {
@@ -513,7 +532,7 @@ function validateConfig(config) {
   }
 
   // Validate stall_detection sub-object
-  if (typeof config.stall_detection !== 'object' || config.stall_detection === null) {
+  if (typeof config.stall_detection !== 'object' || config.stall_detection === null || Array.isArray(config.stall_detection)) {
     process.stderr.write('[nf] WARNING: nf.json: stall_detection must be an object; using defaults\n');
     config.stall_detection = { ...DEFAULT_CONFIG.stall_detection };
   } else {
@@ -545,7 +564,7 @@ function validateConfig(config) {
   }
 
   // Validate smart_compact sub-object
-  if (typeof config.smart_compact !== 'object' || config.smart_compact === null) {
+  if (typeof config.smart_compact !== 'object' || config.smart_compact === null || Array.isArray(config.smart_compact)) {
     process.stderr.write('[nf] WARNING: nf.json: smart_compact must be an object; using defaults\n');
     config.smart_compact = { ...DEFAULT_CONFIG.smart_compact };
   } else {
@@ -639,7 +658,13 @@ function loadConfig(projectDir) {
     process.stderr.write('[nf] WARNING: No nf.json found at ' + globalPath + ' or ' + projectPath + '; using hardcoded defaults\n');
     config = { ...DEFAULT_CONFIG };
   } else {
-    config = { ...DEFAULT_CONFIG, ...(globalObj || {}), ...(projectObj || {}) };
+    // Only spread a layer that is a PLAIN object. readConfigFile returns whatever
+    // JSON.parse yields, so a top-level array config ([1,2,3]) would otherwise spread its
+    // indices into config ("0":1,"1":2,…) and a top-level string its char indices — junk
+    // keys that persist into any later writeConfig round-trip. Core keys survive from
+    // DEFAULT, so this is silent corruption, not a crash.
+    const isPlainObj = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
+    config = { ...DEFAULT_CONFIG, ...(isPlainObj(globalObj) ? globalObj : {}), ...(isPlainObj(projectObj) ? projectObj : {}) };
   }
 
   validateConfig(config);

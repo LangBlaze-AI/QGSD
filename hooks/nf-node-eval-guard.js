@@ -115,11 +115,9 @@ function findHeredocRanges(command) {
  * Returns null if no rewrite needed, or the rewritten command string.
  */
 function rewriteCommand(command) {
-  // Skip if already using our heredoc marker
-  if (/<<\s*'?NF_EVAL/.test(command)) return null;
-
-  // Skip if using heredoc piping already (cat << ... | node)
-  if (/<<\s*'?\w+.*\|\s*node/.test(command)) return null;
+  // Skip if already using our heredoc marker (anchor to `node <<` so a real
+  // `node -e` that merely mentions NF_EVAL in its JS is not falsely skipped)
+  if (/node\s+<<\s*'?NF_EVAL/.test(command)) return null;
 
   // Collect all matches with their positions and extracted JS code
   const matches = [];
@@ -153,7 +151,11 @@ function rewriteCommand(command) {
   let result = command;
   for (let i = matches.length - 1; i >= 0; i--) {
     const { start, end, jsCode } = matches[i];
-    const delim = matches.length > 1 ? `NF_EVAL_${i}` : 'NF_EVAL';
+    let delim = matches.length > 1 ? `NF_EVAL_${i}` : 'NF_EVAL';
+    // Avoid a delimiter that appears as a standalone body line, which would
+    // terminate the heredoc early and leak the remaining JS as shell commands.
+    const bodyLines = jsCode.split('\n');
+    while (bodyLines.includes(delim)) delim += '_X';
     const heredoc = `node << '${delim}'\n${jsCode}\n${delim}`;
     result = result.substring(0, start) + heredoc + result.substring(end);
   }

@@ -30,11 +30,15 @@ function buildImportPatterns() {
       sdk,
       patterns: [
         // CommonJS require
-        new RegExp(`require\\s*\\(\\s*['"]${escaped}['"]\\s*\\)`),
+        new RegExp(`require\\s*\\(\\s*['"\`]${escaped}['"\`]\\s*\\)`),
         // require.resolve
-        new RegExp(`require\\.resolve\\s*\\(\\s*['"]${escaped}['"]\\s*\\)`),
+        new RegExp(`require\\.resolve\\s*\\(\\s*['"\`]${escaped}['"\`]\\s*\\)`),
         // ESM import
         new RegExp(`import\\s+.*\\s+from\\s+['"]${escaped}['"]`),
+        // ESM dynamic import()
+        new RegExp(`import\\s*\\(\\s*['"]${escaped}['"]\\s*\\)`),
+        // ESM side-effect import
+        new RegExp(`import\\s+['"]${escaped}['"]`),
       ],
     };
   });
@@ -45,6 +49,7 @@ function buildImportPatterns() {
 // ---------------------------------------------------------------------------
 
 function isInScope(filePath) {
+  if (typeof filePath !== 'string') return false;
   const normalized = filePath.replace(/\\/g, '/');
 
   // Must be under bin/ or hooks/

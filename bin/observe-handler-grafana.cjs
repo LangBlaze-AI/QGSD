@@ -33,15 +33,27 @@ function mapStateSeverity(state) {
  * @returns {Promise<object>} Standard schema result
  */
 async function handleGrafana(sourceConfig, options) {
-  const label = sourceConfig.label || 'Grafana';
-  const endpoint = (sourceConfig.endpoint || '').replace(/\/$/, '');
+  const cfg = (sourceConfig && typeof sourceConfig === 'object') ? sourceConfig : {};
+  const label = cfg.label || 'Grafana';
+  const endpoint = (cfg.endpoint || '').replace(/\/$/, '');
   const fetchFn = (options && options.fetchFn) || globalThis.fetch;
+
+  // Fail-open: a null/non-object sourceConfig yields the standard error shape
+  if (!sourceConfig || typeof sourceConfig !== 'object') {
+    return {
+      source_label: label,
+      source_type: 'grafana',
+      status: 'error',
+      error: 'Grafana fetch failed: invalid sourceConfig',
+      issues: []
+    };
+  }
 
   try {
     // Build auth headers
     const headers = {};
-    if (sourceConfig.auth_env) {
-      const token = process.env[sourceConfig.auth_env];
+    if (cfg.auth_env) {
+      const token = process.env[cfg.auth_env];
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -61,7 +73,9 @@ async function handleGrafana(sourceConfig, options) {
     }
 
     const rules = await response.json();
-    const ruleList = Array.isArray(rules) ? rules : [];
+    const ruleList = (Array.isArray(rules) ? rules : []).filter(
+      (r) => r && typeof r === 'object'
+    );
 
     const issues = ruleList.map((rule, idx) => {
       const labels = rule.labels || {};
@@ -89,7 +103,7 @@ async function handleGrafana(sourceConfig, options) {
         created_at: rule.updated || new Date().toISOString(),
         meta: metaParts.join(' | '),
         source_type: 'grafana',
-        issue_type: sourceConfig.issue_type || 'drift'
+        issue_type: cfg.issue_type || 'drift'
       };
     });
 

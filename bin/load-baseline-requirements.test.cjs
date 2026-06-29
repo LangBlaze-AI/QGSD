@@ -275,3 +275,29 @@ test('Intent result has enriched intent field with has_ui derived correctly', ()
   assert.equal(cliResult.intent.has_ui, false);
   assert.equal(cliResult.intent.base_profile, 'cli');
 });
+
+// Test 30: prototype-chain keys must be rejected, not silently treated as empty profiles (LBR-1)
+test('loadBaselineRequirements("__proto__") throws Invalid profile instead of returning empty result', () => {
+  assert.throws(() => {
+    loadBaselineRequirements('__proto__');
+  }, /Invalid profile/);
+});
+
+test('loadBaselineRequirements("constructor") throws Invalid profile instead of returning empty result', () => {
+  assert.throws(() => {
+    loadBaselineRequirements('constructor');
+  }, /Invalid profile/);
+});
+
+// Test 31: prototype-chain base_profile must be rejected, not silently treated as empty (LBR-2)
+test('loadBaselineRequirementsFromIntent({base_profile:"__proto__"}) throws Invalid base_profile', () => {
+  assert.throws(() => {
+    loadBaselineRequirementsFromIntent({ base_profile: '__proto__' });
+  }, /Invalid base_profile/);
+});
+
+test('loadBaselineRequirementsFromIntent({base_profile:"constructor"}) throws Invalid base_profile', () => {
+  assert.throws(() => {
+    loadBaselineRequirementsFromIntent({ base_profile: 'constructor' });
+  }, /Invalid base_profile/);
+});

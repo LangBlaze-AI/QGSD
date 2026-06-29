@@ -212,3 +212,43 @@ describe('computeCriticalPath', () => {
     assert.strictEqual(result.length, 1, 'Independent phases should have critical path length 1');
   });
 });
+
+describe('parseRoadmapPhases hardening', () => {
+  test('returns empty array for non-string input instead of throwing', () => {
+    assert.doesNotThrow(() => parseRoadmapPhases(null));
+    assert.deepStrictEqual(parseRoadmapPhases(null), []);
+    assert.deepStrictEqual(parseRoadmapPhases(undefined), []);
+    assert.deepStrictEqual(parseRoadmapPhases(42), []);
+  });
+});
+
+describe('buildRoadmapDot hardening', () => {
+  test('escapes double quotes in phase name to avoid DOT injection', () => {
+    const phases = [
+      { number: 'v0.21-01', name: 'Fix "quorum" bug', dependsOn: [], completed: false },
+    ];
+    const dot = buildRoadmapDot(phases);
+    // After escaping, the inner quotes appear as \" in the DOT source.
+    assert.ok(dot.includes('Fix \\"quorum\\" bug'),
+      'phase name quotes should be backslash-escaped in the DOT label');
+    // The raw, unescaped form must NOT appear (it would break the label attribute).
+    assert.ok(!dot.includes('label="v0.21-01\\nFix "quorum" bug"'),
+      'unescaped quotes must not leak into the label attribute');
+  });
+});
+
+test('does not emit NaN in DOT when --min-quorum is non-numeric', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'petri-test-'));
+  try {
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'formal', 'petri'), { recursive: true });
+    spawnSync(process.execPath, [GENERATE_PETRI, '--min-quorum=abc'], {
+      encoding: 'utf8',
+      cwd: tmpDir,
+    });
+    const dotPath = path.join(tmpDir, '.planning', 'formal', 'petri', 'quorum-petri-net.dot');
+    const dotContent = fs.readFileSync(dotPath, 'utf8');
+    assert.ok(!/NaN/.test(dotContent), 'DOT must not contain NaN for invalid --min-quorum');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

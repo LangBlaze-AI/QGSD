@@ -68,3 +68,21 @@ describe('refreshDebtLedger', () => {
     assert.ok(Array.isArray(result.results));
   });
 });
+
+describe('refreshDebtLedger adversarial opts', () => {
+  it('treats null opts as empty options instead of crashing', async () => {
+    const { refreshDebtLedger } = require('./observe-pipeline.cjs');
+    const result = await refreshDebtLedger(null);
+    assert.ok(result && typeof result === 'object', 'should return a result object');
+    assert.ok(Array.isArray(result.observations));
+    assert.ok(Array.isArray(result.results));
+    assert.strictEqual(typeof result.sourceCount, 'number');
+  });
+
+  it('treats a non-object opts (e.g. a string) as empty options', async () => {
+    const { refreshDebtLedger } = require('./observe-pipeline.cjs');
+    const result = await refreshDebtLedger('github');
+    assert.ok(result && typeof result === 'object');
+    assert.ok(Array.isArray(result.results));
+  });
+});

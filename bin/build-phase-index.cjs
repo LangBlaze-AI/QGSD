@@ -78,6 +78,9 @@ function parseSimpleYaml(yamlStr) {
  * Returns an object with parsed fields or empty object if no frontmatter.
  */
 function parseVerificationFrontmatter(content) {
+  if (typeof content !== 'string') {
+    return {};
+  }
   const lines = content.split('\n');
   if (lines.length < 3 || lines[0] !== '---') {
     return {};
@@ -123,7 +126,7 @@ function extractKeywords(dirName, phaseGoal, truthsText) {
   const keywords = new Set();
 
   // From directory name: split on hyphens, filter version prefix
-  const parts = dirName.split('-');
+  const parts = (typeof dirName === 'string' ? dirName : '').split('-');
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
     // Skip version prefix (v0.XX, v0.XX-NN)
@@ -402,8 +405,12 @@ function appendPhaseEntry(phaseDir, verificationPath) {
     const truthsText = extractObservableTruths(content);
     const keywords = extractKeywords(path.basename(phaseDir), phaseName, truthsText);
 
-    // Remove any existing entry with same phase_id (idempotent upsert)
-    index.phases = index.phases.filter(p => p.phase_id !== phaseId);
+    // Remove any existing entry with same phase_id (idempotent upsert).
+    // Also drop malformed null/non-object entries so a corrupt index
+    // cannot abort the upsert.
+    index.phases = index.phases.filter(
+      p => p && typeof p === 'object' && p.phase_id !== phaseId
+    );
 
     // Add new entry
     const phaseEntry = {

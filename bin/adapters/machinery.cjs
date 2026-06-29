@@ -18,8 +18,12 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('Machinery extract requires a non-empty file path');
+  }
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
+  if (!fs.statSync(absInput).isFile()) throw new Error('Not a file: ' + absInput);
 
   const content = fs.readFileSync(absInput, 'utf8');
 

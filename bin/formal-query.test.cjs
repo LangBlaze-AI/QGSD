@@ -165,4 +165,32 @@ describe('formal-query CLI', () => {
       assert.ok(source.includes('readFileSync'), 'should use readFileSync');
     });
   });
+
+  describe('resolveNodeKey prototype-key hardening', () => {
+    it('should return null for __proto__ (inherited, not a real node)', () => {
+      const index = { nodes: { 'real::node': { type: 'x', edges: [] } } };
+      assert.equal(resolveNodeKey(index, '__proto__'), null);
+    });
+
+    it('should return null for constructor', () => {
+      const index = { nodes: {} };
+      assert.equal(resolveNodeKey(index, 'constructor'), null);
+    });
+  });
+
+  describe('reach malformed-node hardening', () => {
+    it('should not crash on a node missing an edges array', () => {
+      const index = { nodes: { 'a::x': { type: 'code_file' } } };
+      const result = reach(index, 'a::x', 2, null);
+      assert.deepEqual(result, {});
+    });
+  });
+
+  describe('findPath malformed-node hardening', () => {
+    it('should not crash when a node lacks an edges array', () => {
+      const index = { nodes: { 'a::x': { type: 'code_file' }, 'b::y': { type: 'x', edges: [] } } };
+      const p = findPath(index, 'a::x', 'b::y');
+      assert.equal(p, null);
+    });
+  });
 });

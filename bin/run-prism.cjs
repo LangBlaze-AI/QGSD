@@ -18,7 +18,10 @@
 //     Linux binary tarball.
 
 const { spawnSync } = require('child_process');
-const PRISM_TIMEOUT_MS = parseInt(process.env.NF_PRISM_TIMEOUT_MS || '600000', 10); // 10min default
+const _PRISM_TIMEOUT_RAW = parseInt(process.env.NF_PRISM_TIMEOUT_MS || '600000', 10);
+const PRISM_TIMEOUT_MS = (Number.isFinite(_PRISM_TIMEOUT_RAW) && _PRISM_TIMEOUT_RAW > 0)
+  ? _PRISM_TIMEOUT_RAW
+  : 600000; // 10min default; guard non-numeric/non-positive env values
 const fs   = require('fs');
 const path = require('path');
 const { writeCheckResult } = require('./write-check-result.cjs');
@@ -195,9 +198,13 @@ function computeColdStartState(pol, sbPath, crPath) {
 
   // Count CI runs: number of lines in check-results.ndjson
   if (fs.existsSync(crPath)) {
-    const lines = fs.readFileSync(crPath, 'utf8')
-      .trim().split('\n').filter(l => l.length > 0);
-    ciRunCount = lines.length;
+    try {
+      const lines = fs.readFileSync(crPath, 'utf8')
+        .trim().split('\n').filter(l => l.length > 0);
+      ciRunCount = lines.length;
+    } catch (_e) {
+      process.stderr.write('[run-prism] Warning: check-results unreadable — treating as zero CI runs for cold-start\n');
+    }
   }
 
   // Read quorum rounds from scoreboard

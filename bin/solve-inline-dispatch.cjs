@@ -62,7 +62,7 @@ function runDtoC(residualVector) {
   if (!dtoc || dtoc.residual <= 0) {
     return { status: 'skipped', summary: 'D->C residual is 0', broken_claims_count: 0, table: '' };
   }
-  const claims = dtoc.detail?.broken_claims || [];
+  const claims = Array.isArray(dtoc.detail?.broken_claims) ? dtoc.detail.broken_claims : [];
   if (claims.length === 0) {
     return { status: 'skipped', summary: 'No broken claims in detail', broken_claims_count: 0, table: '' };
   }
@@ -70,11 +70,12 @@ function runDtoC(residualVector) {
   const header = '  Doc File              Line  Type         Value                    Reason';
   const sep =    '  ──────────────────────────────────────────────────────────────────────────';
   const rows = claims.map(c => {
-    const doc = (c.doc_file || c.file || '').padEnd(22);
-    const line = String(c.line || '').padEnd(6);
-    const type = (c.type || '').padEnd(13);
-    const value = (c.value || '').padEnd(25);
-    const reason = c.reason || '';
+    const e = (c && typeof c === 'object') ? c : {};
+    const doc = String(e.doc_file || e.file || '').padEnd(22);
+    const line = String(e.line || '').padEnd(6);
+    const type = String(e.type || '').padEnd(13);
+    const value = String(e.value || '').padEnd(25);
+    const reason = String(e.reason || '');
     return `  ${doc}${line}${type}${value}${reason}`;
   });
   const table = `D->C: ${claims.length} stale structural claim(s) in docs:\n${header}\n${sep}\n${rows.join('\n')}`;

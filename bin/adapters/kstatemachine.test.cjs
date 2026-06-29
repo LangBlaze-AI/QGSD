@@ -60,3 +60,24 @@ test('extract parses kstatemachine fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract throws a clean error for a directory path (not raw EISDIR)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kstatemachine-dir-'));
+  try {
+    assert.throws(() => extract(dir), (err) => {
+      assert.notStrictEqual(err.code, 'EISDIR');
+      return /File not found|must be a non-empty string/.test(err.message);
+    });
+  } finally {
+    fs.rmdirSync(dir);
+  }
+});
+
+test('extract throws a clear error for non-string filePath', () => {
+  for (const bad of [undefined, null, 42]) {
+    assert.throws(() => extract(bad), (err) => {
+      assert.notStrictEqual(err.code, 'ERR_INVALID_ARG_TYPE');
+      return /non-empty string|filePath/.test(err.message);
+    });
+  }
+});

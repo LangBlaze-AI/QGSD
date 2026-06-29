@@ -29,12 +29,18 @@ function extract(filePath, options = {}) {
   const content = fs.readFileSync(absInput, 'utf8');
   const parsed = JSON.parse(content);
 
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+      !parsed.States || typeof parsed.States !== 'object' || Array.isArray(parsed.States)) {
+    throw new Error('Not a valid ASL machine (missing or invalid "States" object): ' + absInput);
+  }
+
   const initial = parsed.StartAt;
   const stateNames = Object.keys(parsed.States);
   const finalStates = [];
   const transitions = [];
 
   for (const [stateName, stateDef] of Object.entries(parsed.States)) {
+    if (!stateDef || typeof stateDef !== 'object') continue;
     const type = stateDef.Type;
 
     if (type === 'Succeed' || type === 'Fail') {

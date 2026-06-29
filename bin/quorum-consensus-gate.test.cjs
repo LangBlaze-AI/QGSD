@@ -266,3 +266,29 @@ describe('early-escalation CLI --remaining-rounds validation', () => {
     assert.match(res.stderr, /min-quorum/);
   });
 });
+
+// ── buildFailureDomainClusters hardening (adversarial) ───────────────────────
+
+describe('buildFailureDomainClusters hardening', () => {
+  test('buildFailureDomainClusters skips null/non-object provider entries without throwing', () => {
+    const { buildFailureDomainClusters } = require('./quorum-consensus-gate.cjs');
+    const ppath = path.join(tmpDir, 'providers-null-entry.json');
+    fs.writeFileSync(ppath, JSON.stringify({ providers: [null, 42, { name: 'codex-1', provider: 'openai' }, { name: 'codex-2', provider: 'openai' }] }));
+    const slotRates = { 'codex-1': 0.8, 'codex-2': 0.8, 'gemini-1': 0.7 };
+    let clusters;
+    assert.doesNotThrow(() => { clusters = buildFailureDomainClusters(slotRates, ppath); }, 'must not throw on a null/non-object provider entry');
+    // The two valid openai slots should still cluster correctly.
+    assert.deepStrictEqual(clusters.openai.sort(), ['codex-1', 'codex-2']);
+  });
+
+  test('unmapped slots are modeled as independent, not a shared _independent failure domain', () => {
+    const { computeClusterAwareConsensus } = require('./quorum-consensus-gate.cjs');
+    const ppath = path.join(tmpDir, 'providers-unrelated.json');
+    // providers.json is present but maps NONE of our slot names
+    fs.writeFileSync(ppath, JSON.stringify({ providers: [{ name: 'unrelated', provider: 'x' }] }));
+    const slotRates = { a: 0.85, b: 0.85, c: 0.85, d: 0.85 };
+    const res = computeClusterAwareConsensus(slotRates, 2, ppath);
+    // Independent P(>=2 of 4 @0.85) ~= 0.988019, NOT the deflated correlated 0.85.
+    assert.ok(res.probability > 0.95, 'unmapped slots must be independent (~0.988), got ' + res.probability + ' method=' + res.method);
+  });
+});

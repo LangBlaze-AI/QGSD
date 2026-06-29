@@ -191,6 +191,21 @@ test('TC-COMMIT-13: --json refuses to commit on a protected branch and leaves in
   }
 });
 
+test('TC-COMMIT-14: doCommit returns the real hash even when the branch name contains a hex run', () => {
+  const tmp = createTempRepo();
+  try {
+    spawnSync('git', ['checkout', '-b', 'cafef00d-feature'], { encoding: 'utf8', cwd: tmp });
+    fs.writeFileSync(path.join(tmp, '.planning', 'formal', 'b.json'), '{}');
+    stagePaths({ cwd: tmp });
+    const res = doCommit({ cwd: tmp });
+    assert.equal(res.committed, true, 'should commit');
+    const real = (spawnSync('git', ['rev-parse', '--short=7', 'HEAD'], { encoding: 'utf8', cwd: tmp }).stdout || '').trim();
+    assert.equal(res.hash, real, 'hash must be the real commit SHA, not the branch-name hex run');
+  } finally {
+    cleanup(tmp);
+  }
+});
+
 test('TC-COMMIT-10: nf-solve --no-auto-commit skips commit call', {
   // Heavy: spins up the full nf-solve pipeline, which needs quorum slots and
   // otherwise hits the 90s spawn timeout (status null). Opt-in only so it never

@@ -76,15 +76,25 @@ function computeCoverage(requirements, registry, checkResults) {
   // By status
   const byStatus = {};
   for (const r of requirements) {
+    if (!r || typeof r !== 'object') continue;
     const s = r.status || 'Unknown';
     byStatus[s] = (byStatus[s] || 0) + 1;
   }
 
-  // By category
+  // By category. Use hasOwnProperty + defineProperty so a category literally
+  // named '__proto__'/'constructor' becomes an ordinary own data property
+  // (shadowing the Object.prototype accessor) rather than mutating the global
+  // prototype or being silently dropped.
   const byCategory = {};
   for (const r of requirements) {
+    if (!r || typeof r !== 'object') continue;
     const c = r.category || 'Uncategorized';
-    if (!byCategory[c]) byCategory[c] = { total: 0, complete: 0 };
+    if (!Object.prototype.hasOwnProperty.call(byCategory, c)) {
+      Object.defineProperty(byCategory, c, {
+        value: { total: 0, complete: 0 },
+        enumerable: true, writable: true, configurable: true,
+      });
+    }
     byCategory[c].total++;
     if (r.status === 'Complete') byCategory[c].complete++;
   }
@@ -226,6 +236,7 @@ function filterRequirements(requirements, filters) {
 function getUniqueCategories(requirements) {
   const cats = new Set();
   for (const r of requirements) {
+    if (!r || typeof r !== 'object') continue;
     cats.add(r.category || 'Uncategorized');
   }
   return [...cats].sort();
@@ -331,7 +342,10 @@ function groupByPrinciple(requirements) {
   }
 
   for (const r of requirements) {
-    const principle = getCategoryPrinciple(r.category);
+    let principle = getCategoryPrinciple(r.category);
+    if (!Object.prototype.hasOwnProperty.call(grouped, principle)) {
+      principle = 'Planning Discipline';
+    }
     grouped[principle].count++;
     grouped[principle].requirements.push(r);
   }

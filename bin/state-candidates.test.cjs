@@ -8,6 +8,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const os = require('node:os');
 
 const ROOT = process.env.PROJECT_ROOT || path.join(__dirname, '..');
 const OUTPUT_PATH = path.join(ROOT, '.planning', 'formal', 'evidence', 'state-candidates.json');
@@ -111,5 +112,57 @@ describe('state-candidates integration', () => {
       assert.ok('context_before' in c, 'Missing context_before');
       assert.ok('context_after' in c, 'Missing context_after');
     }
+  });
+});
+
+describe('state-candidates malformed vocabulary hardening', () => {
+  it('does not crash when event-vocabulary.json lacks a vocabulary key', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-vocab-'));
+    fs.mkdirSync(path.join(tmp, '.planning', 'formal', 'evidence'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, '.planning', 'telemetry'), { recursive: true });
+    // Valid JSON but NO `vocabulary` property
+    fs.writeFileSync(
+      path.join(tmp, '.planning', 'formal', 'evidence', 'event-vocabulary.json'),
+      JSON.stringify({ schema_version: '1' }),
+    );
+    fs.writeFileSync(
+      path.join(tmp, '.planning', 'telemetry', 'conformance-events.jsonl'),
+      JSON.stringify({ action: 'unknown_x', ts: '2026-01-01T00:00:00Z' }) + '\n',
+    );
+    assert.doesNotThrow(() => {
+      execFileSync('node', [path.join(ROOT, 'bin', 'state-candidates.cjs')], {
+        cwd: tmp,
+        env: { ...process.env, PROJECT_ROOT: tmp },
+        stdio: 'pipe',
+      });
+    });
+    const out = JSON.parse(fs.readFileSync(
+      path.join(tmp, '.planning', 'formal', 'evidence', 'state-candidates.json'), 'utf8'));
+    // With an empty vocabulary, the lone event is unmapped
+    assert.ok(out.total_unmapped_events >= 1);
+  });
+});
+
+describe('state-candidates malformed event line hardening', () => {
+  it('does not crash when a conformance-events line parses to null', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-null-'));
+    fs.mkdirSync(path.join(tmp, '.planning', 'formal', 'evidence'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, '.planning', 'telemetry'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmp, '.planning', 'formal', 'evidence', 'event-vocabulary.json'),
+      JSON.stringify({ vocabulary: { quorum_start: {} } }),
+    );
+    // 'null' is valid JSON: it survives JSON.parse and crashes the sort comparator
+    fs.writeFileSync(
+      path.join(tmp, '.planning', 'telemetry', 'conformance-events.jsonl'),
+      'null\n' + JSON.stringify({ action: 'unknown_x', ts: '2026-01-01T00:00:00Z' }) + '\n',
+    );
+    assert.doesNotThrow(() => {
+      execFileSync('node', [path.join(ROOT, 'bin', 'state-candidates.cjs')], {
+        cwd: tmp,
+        env: { ...process.env, PROJECT_ROOT: tmp },
+        stdio: 'pipe',
+      });
+    });
   });
 });

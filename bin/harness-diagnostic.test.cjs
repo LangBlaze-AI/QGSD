@@ -126,6 +126,25 @@ test('generateReport reads scoreboard slots correctly', () => {
   assert.equal(report.slot_availability[0].status, 'healthy');
 });
 
+test('generateReport does not pollute Object.prototype via __proto__ scoreboard slot key', () => {
+  const dir = makeTmpDir();
+  writeJson(dir, '.planning/quorum/scoreboard.json', {
+    slots: { '__proto__:model-a': { tp: 2, fn: 8 } },
+  });
+  try {
+    generateReport(dir);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(Object.prototype, 'tp'),
+      false,
+      'Object.prototype must not gain a tp property'
+    );
+    assert.equal(({}).tp, undefined, 'plain objects must not inherit a polluted tp');
+  } finally {
+    delete Object.prototype.tp;
+    delete Object.prototype.fn;
+  }
+});
+
 // ─── formatTerminalReport Tests ─────────────────────────────────────────────
 
 test('formatTerminalReport produces string output', () => {
@@ -145,6 +164,13 @@ test('formatTerminalReport includes all sections', () => {
   assert.ok(output.includes('Stall Events'), 'should include Stall Events');
   assert.ok(output.includes('Circuit Breaker'), 'should include Circuit Breaker');
   assert.ok(output.includes('Recommendations'), 'should include Recommendations');
+});
+
+test('formatTerminalReport tolerates null and partial report objects', () => {
+  assert.doesNotThrow(() => formatTerminalReport(null), 'null report must not throw');
+  const out = formatTerminalReport({ timestamp: 'x' });
+  assert.ok(typeof out === 'string' && out.length > 0, 'partial report should still render a string');
+  assert.ok(out.includes('Recommendations'), 'partial report should still include section headers');
 });
 
 // ─── CLI Tests ──────────────────────────────────────────────────────────────

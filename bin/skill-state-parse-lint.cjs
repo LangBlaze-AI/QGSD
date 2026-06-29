@@ -34,6 +34,29 @@ function tryRanges(code) {
     let depth = 1;
     while (i < code.length && depth > 0) {
       const c = code[i];
+      // Skip string/template literals and // and /* */ comments so a stray { or }
+      // inside a string, jq filter, or comment cannot skew the brace counter. This
+      // is scoped to the try BODY (real JS, balanced quotes) — doing it across the
+      // whole markdown would mis-handle unbalanced apostrophes in prose.
+      if (c === '"' || c === "'" || c === '`') {
+        const q = c; i++;
+        while (i < code.length && code[i] !== q) {
+          if (code[i] === '\\') i++;
+          i++;
+        }
+        i++; // closing quote
+        continue;
+      }
+      if (c === '/' && code[i + 1] === '/') {
+        while (i < code.length && code[i] !== '\n') i++;
+        continue;
+      }
+      if (c === '/' && code[i + 1] === '*') {
+        i += 2;
+        while (i < code.length && !(code[i] === '*' && code[i + 1] === '/')) i++;
+        i += 2;
+        continue;
+      }
       if (c === '{') depth++;
       else if (c === '}') depth--;
       i++;

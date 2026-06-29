@@ -95,6 +95,26 @@ test('Drift Fingerprinting - Validation', async (t) => {
   });
 });
 
+test('Drift Fingerprinting - Non-object input', async (t) => {
+  await t.test('null drift throws controlled Error, not a raw TypeError', () => {
+    assert.throws(() => {
+      fingerprintDrift(null);
+    }, /formal_parameter_key required/, 'Should throw the documented controlled error for null drift');
+  });
+
+  await t.test('undefined drift throws controlled Error, not a raw TypeError', () => {
+    assert.throws(() => {
+      fingerprintDrift(undefined);
+    }, /formal_parameter_key required/, 'Should throw the documented controlled error for undefined drift');
+  });
+
+  await t.test('string drift throws controlled Error', () => {
+    assert.throws(() => {
+      fingerprintDrift('MCsafety.cfg:MaxDeliberation');
+    }, /formal_parameter_key required/, 'Should throw the documented controlled error for non-object drift');
+  });
+});
+
 test('Drift Fingerprinting - Key Formats', async (t) => {
   await t.test('various key formats work: file.cfg:Param', () => {
     const fp = fingerprintDrift({ formal_parameter_key: 'file.cfg:Param' });

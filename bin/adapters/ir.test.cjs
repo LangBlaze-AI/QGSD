@@ -89,3 +89,26 @@ test('IR with empty finalStates is valid', () => {
   const result = validateIR(ir);
   assert.strictEqual(result.valid, true);
 });
+
+test('transition with non-string guard fails validation', () => {
+  const ir = validIR();
+  ir.transitions[0].guard = { type: 'BinaryExpression' };
+  const result = validateIR(ir);
+  assert.strictEqual(result.valid, false);
+  assert.ok(result.errors.some(e => e.includes('guard')));
+});
+
+test('transition with null guard is valid', () => {
+  const ir = validIR();
+  ir.transitions[0].guard = null;
+  const result = validateIR(ir);
+  assert.strictEqual(result.valid, true);
+});
+
+test('transition with non-string assignedKeys element fails validation', () => {
+  const ir = validIR();
+  ir.transitions[1].assignedKeys = ['count', 42];
+  const result = validateIR(ir);
+  assert.strictEqual(result.valid, false);
+  assert.ok(result.errors.some(e => e.includes('assignedKeys')));
+});

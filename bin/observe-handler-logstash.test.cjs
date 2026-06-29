@@ -389,3 +389,33 @@ describe('handleLogstash — Field edge cases', () => {
       'Meta should include extra source fields');
   });
 });
+
+describe('handleLogstash — Adversarial config', () => {
+  it('returns error result instead of throwing when sourceConfig is null', async () => {
+    const result = await handleLogstash(null, {});
+    assert.equal(result.status, 'error', 'null config should fail-open to error');
+    assert.equal(result.source_type, 'logstash');
+    assert.ok(Array.isArray(result.issues), 'issues must be an array');
+    assert.equal(result.issues.length, 0);
+  });
+
+  it('returns error result when sourceConfig is undefined', async () => {
+    const result = await handleLogstash(undefined, {});
+    assert.equal(result.status, 'error');
+    assert.equal(result.issues.length, 0);
+  });
+});
+
+describe('handleLogstash — non-string message', () => {
+  it('coerces a non-string (object) message to a string title', async () => {
+    const objMsgHits = {
+      hits: { hits: [{ _id: 'm1', _source: { message: { code: 500, detail: 'boom' }, level: 'error', '@timestamp': '2026-03-04T14:00:00Z' } }] }
+    };
+    const result = await handleLogstash(
+      { type: 'logstash', label: 'ES', endpoint: 'https://es:9200' },
+      { fetchFn: mockFetch({ '/_search': { body: objMsgHits } }) }
+    );
+    assert.equal(result.status, 'ok');
+    assert.equal(typeof result.issues[0].title, 'string', 'title must be a string even for non-string message');
+  });
+});

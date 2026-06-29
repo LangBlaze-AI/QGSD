@@ -330,4 +330,58 @@ describe('writeObservationsToDebt', () => {
     assert.strictEqual(typeof result.updated, 'number');
     assert.strictEqual(typeof result.errors, 'number');
   });
+
+  it('does not throw on null/undefined observations argument (fail-open)', () => {
+    let result;
+    assert.doesNotThrow(() => {
+      result = writeObservationsToDebt(null, ledgerPath);
+    });
+    assert.equal(result.written, 0);
+    assert.equal(result.updated, 0);
+    assert.equal(result.errors, 0);
+
+    assert.doesNotThrow(() => {
+      writeObservationsToDebt(undefined, ledgerPath);
+    });
+  });
+
+  it('does not crash when debt.json parses to a non-object (corrupt ledger)', () => {
+    fs.writeFileSync(ledgerPath, 'null');
+    let result;
+    assert.doesNotThrow(() => {
+      result = writeObservationsToDebt([{
+        id: 'gh-1',
+        title: 'Corrupt ledger issue',
+        source_type: 'github',
+        issue_type: 'issue',
+        created_at: new Date().toISOString()
+      }], ledgerPath);
+    });
+    assert.equal(result.errors, 0);
+    assert.equal(result.written, 1);
+    const ledger = readDebtLedger(ledgerPath);
+    assert.equal(ledger.debt_entries.length, 1);
+  });
+
+  it('repairs missing source_entries on an existing entry instead of dropping the update', () => {
+    const obs = [{
+      id: 'gh-1',
+      title: 'Recurring issue',
+      source_type: 'github',
+      issue_type: 'issue',
+      created_at: new Date().toISOString()
+    }];
+    writeObservationsToDebt(obs, ledgerPath);
+
+    // Corrupt the persisted entry: strip its source_entries array
+    const corrupt = readDebtLedger(ledgerPath);
+    delete corrupt.debt_entries[0].source_entries;
+    fs.writeFileSync(ledgerPath, JSON.stringify(corrupt));
+
+    const result = writeObservationsToDebt([{ ...obs[0], id: 'gh-1-again' }], ledgerPath);
+    assert.equal(result.errors, 0);
+    assert.equal(result.updated, 1);
+    const ledger = readDebtLedger(ledgerPath);
+    assert.ok(Array.isArray(ledger.debt_entries[0].source_entries));
+  });
 });

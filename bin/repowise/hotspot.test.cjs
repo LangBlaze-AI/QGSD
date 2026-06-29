@@ -231,3 +231,50 @@ describe('formatHotspotXml', () => {
     assert.ok(xml.includes('path="src/foo&amp;bar.js"'), 'should escape & in path');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Hardening: estimateComplexity non-string filePath (HOTSPOT-01)
+// ---------------------------------------------------------------------------
+
+describe('estimateComplexity hardening', () => {
+  it('returns 0 for a non-string filePath instead of throwing', () => {
+    const projectRoot = path.resolve(__dirname, '../..');
+    assert.equal(estimateComplexity(undefined, projectRoot), 0);
+    assert.equal(estimateComplexity(123, projectRoot), 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hardening: computeChurnScores malformed commits (HOTSPOT-02)
+// ---------------------------------------------------------------------------
+
+describe('computeChurnScores hardening', () => {
+  it('does not crash on a commit object missing files', () => {
+    const result = computeChurnScores([{ sha: 'aaa1111', message: 'no files' }]);
+    assert.equal(result.size, 0);
+  });
+
+  it('skips a commit whose files is null among valid commits', () => {
+    const commits = [
+      { sha: 'aaa1111', message: 'bad', files: null },
+      { sha: 'bbb2222', message: 'good', files: [{ path: 'src/good.js', added: 1, deleted: 0 }] },
+    ];
+    const result = computeChurnScores(commits);
+    assert.equal(result.get('src/good.js'), 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hardening: normalizeMap NaN poisoning (HOTSPOT-03)
+// ---------------------------------------------------------------------------
+
+describe('normalizeMap hardening', () => {
+  it('does not produce NaN when a value is NaN', () => {
+    const input = new Map([['a', NaN], ['b', 5], ['c', 10]]);
+    const result = normalizeMap(input);
+    for (const [k, v] of result) {
+      assert.ok(Number.isFinite(v), `normalized value for ${k} should be finite, got ${v}`);
+      assert.ok(v >= 0 && v <= 1, `normalized value for ${k} out of range: ${v}`);
+    }
+  });
+});

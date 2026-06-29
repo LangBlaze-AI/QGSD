@@ -15,7 +15,7 @@ const { parseNDJSON, groupByFormalism } = require('./verify-formal-results.cjs')
  */
 function parseCurrentNDJSON() {
   const ndjsonPath = path.join(process.cwd(), '.planning', 'formal', 'check-results.ndjson');
-  return parseNDJSON(ndjsonPath);
+  return parseNDJSON(ndjsonPath).filter(r => r !== null && typeof r === 'object' && !Array.isArray(r));
 }
 
 /**
@@ -86,7 +86,7 @@ function computeDeltas(currentResults, previousSnapshot) {
 
   for (const r of currentResults) {
     if (!r.check_id) continue;
-    if (!(r.check_id in previousSnapshot)) {
+    if (!Object.prototype.hasOwnProperty.call(previousSnapshot, r.check_id)) {
       newChecks.push(r);
     } else if (previousSnapshot[r.check_id] !== r.result) {
       transitioned.push({ ...r, previousResult: previousSnapshot[r.check_id] });
@@ -95,7 +95,7 @@ function computeDeltas(currentResults, previousSnapshot) {
     }
   }
 
-  const removedChecks = Object.keys(previousSnapshot).filter(id => !(id in currentMap));
+  const removedChecks = Object.keys(previousSnapshot).filter(id => !Object.prototype.hasOwnProperty.call(currentMap, id));
 
   return { transitioned, newChecks, removedChecks, unchanged };
 }
@@ -158,7 +158,7 @@ function formatDiffReport(currentResults, deltas, isFirstRun) {
       lines.push('| Check | Previous | Current | Summary |');
       lines.push('|-------|----------|---------|---------|');
       for (const r of deltas.transitioned) {
-        const summary = (r.summary || '').substring(0, 60);
+        const summary = String(r.summary || '').substring(0, 60);
         lines.push(`| ${r.check_id} | ${r.previousResult} | ${r.result} | ${summary} |`);
       }
       lines.push('');
@@ -171,7 +171,7 @@ function formatDiffReport(currentResults, deltas, isFirstRun) {
       lines.push('| Check | Result | Summary |');
       lines.push('|-------|--------|---------|');
       for (const r of deltas.newChecks) {
-        const summary = (r.summary || '').substring(0, 60);
+        const summary = String(r.summary || '').substring(0, 60);
         lines.push(`| ${r.check_id} | ${r.result} | ${summary} |`);
       }
       lines.push('');

@@ -166,3 +166,27 @@ test('computeAffectedLayers: null adapter passed explicitly behaves same as no a
   assert.deepEqual(r1.affected_layers.sort(), r2.affected_layers.sort());
   assert.deepEqual(r1.skip_layers.sort(), r2.skip_layers.sort());
 });
+
+test('computeAffectedLayers: non-string array entries do not crash (coerce to unknown)', () => {
+  assert.doesNotThrow(() => computeAffectedLayers([null]));
+  assert.doesNotThrow(() => computeAffectedLayers([123]));
+  assert.doesNotThrow(() => computeAffectedLayers([{}]));
+  const result = computeAffectedLayers(['bin/nf-solve.cjs', null, 42]);
+  assert.ok(Array.isArray(result.affected_layers));
+  assert.ok(Array.isArray(result.skip_layers));
+  assert.equal(result.files_analyzed, 3);
+  // non-string entries fall through to the unknown-file branch -> forward layers present
+  assert.ok(result.affected_layers.includes('c_to_f'));
+});
+
+test('expandWithCallGraph: non-string callers do not crash, valid ones still processed (fail-open)', () => {
+  const adapter = {
+    healthSync: () => ({ healthy: true }),
+    getCallersSync: () => ({ callers: [null, 123, 'bin/nf-solve.cjs'] })
+  };
+  const affected = new Set(['r_to_f']);
+  assert.doesNotThrow(() => expandWithCallGraph(['bin/utils.cjs'], affected, adapter));
+  // valid string caller still maps bin/*.cjs -> c_to_f, c_to_r
+  assert.ok(affected.has('c_to_f'), 'valid string caller still processed');
+  assert.ok(affected.has('r_to_f'), 'original layer preserved');
+});

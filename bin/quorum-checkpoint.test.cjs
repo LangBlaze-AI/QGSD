@@ -72,6 +72,15 @@ test('validateCheckpoint: unexpected additional property fails', () => {
   assert.ok(errors.some(e => /injected/.test(e)), errors.join('; '));
 });
 
+test('validateCheckpoint: injected Object.prototype-named fields bypass additionalProperties:false (must be rejected)', () => {
+  for (const key of ['toString', 'constructor', 'valueOf', 'hasOwnProperty']) {
+    const cp = validCheckpoint({ [key]: 'x' });
+    const { valid, errors } = mod.validateCheckpoint(cp);
+    assert.strictEqual(valid, false, `injected "${key}" must be rejected as an additional property`);
+    assert.ok(errors.some(e => e.includes(key)), errors.join('; '));
+  }
+});
+
 test('validateCheckpoint: unknown schema_version fails (enum)', () => {
   const { valid } = mod.validateCheckpoint(validCheckpoint({ schema_version: 99 }));
   assert.strictEqual(valid, false);
@@ -116,6 +125,12 @@ test('checkpointSatisfiesFallback: true when all_tiers_exhausted', () => {
 test('checkpointSatisfiesFallback: false when neither', () => {
   assert.strictEqual(mod.checkpointSatisfiesFallback(
     validCheckpoint({ fallback_dispatched: false, all_tiers_exhausted: false })), false);
+});
+
+test('checkpointSatisfiesFallback: non-object input returns false instead of throwing', () => {
+  for (const bad of [null, undefined, 'x', 42, [1, 2]]) {
+    assert.strictEqual(mod.checkpointSatisfiesFallback(bad), false, `expected false for ${JSON.stringify(bad)}`);
+  }
 });
 
 // ── buildCheckpoint ──────────────────────────────────────────────────────────

@@ -262,3 +262,33 @@ test('classifyTlcFailure: fairness_gap ordered before invariant_violation', () =
   // Should match fairness_gap (has "temporal" + "stuttering"), not invariant_violation
   assert.equal(classifyTlcFailure(entry), 'fairness_gap');
 });
+
+// CTF-1: Non-string summary must fail-open, not crash on .toLowerCase()
+test('classifyTlcFailure: unknown when summary is a non-string (array)', () => {
+  assert.equal(
+    classifyTlcFailure({ summary: ['Deadlock reached'], result: 'fail', metadata: {} }),
+    'unknown'
+  );
+});
+
+test('classifyTlcFailure: unknown when summary is a number', () => {
+  assert.equal(
+    classifyTlcFailure({ summary: 42, result: 'fail', metadata: {} }),
+    'unknown'
+  );
+});
+
+// CTF-2: Non-string property must not crash; classification proceeds from summary
+test('classifyTlcFailure: ignores non-string property and classifies via summary', () => {
+  assert.equal(
+    classifyTlcFailure({ summary: 'Deadlock reached at state 1', result: 'fail', property: 12345, metadata: {} }),
+    'deadlock'
+  );
+});
+
+test('classifyTlcFailure: unknown when property is an array and summary unrecognized', () => {
+  assert.equal(
+    classifyTlcFailure({ summary: 'misc output', result: 'warn', property: ['Liveness'], metadata: {} }),
+    'unknown'
+  );
+});

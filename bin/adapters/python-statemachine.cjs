@@ -18,8 +18,14 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('python-statemachine: filePath must be a non-empty string');
+  }
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
+  if (!fs.statSync(absInput).isFile()) {
+    throw new Error('python-statemachine: not a regular file: ' + absInput);
+  }
 
   const content = fs.readFileSync(absInput, 'utf8');
 

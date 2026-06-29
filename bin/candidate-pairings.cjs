@@ -37,15 +37,18 @@ const PAIRINGS_PATH = path.join(FORMAL_DIR, 'candidate-pairings.json');
  * @returns {{ metadata: object, pairings: Array }}
  */
 function generatePairings(candidatesData, existingPairings) {
-  const candidates = candidatesData.candidates || [];
+  const candidates = Array.isArray(candidatesData && candidatesData.candidates)
+    ? candidatesData.candidates
+    : [];
   const sourceHash = crypto.createHash('sha256')
     .update(JSON.stringify(candidatesData))
     .digest('hex').slice(0, 8);
 
   // Build lookup from existing pairings
   const existingMap = new Map();
-  if (existingPairings && existingPairings.pairings) {
+  if (existingPairings && Array.isArray(existingPairings.pairings)) {
     for (const p of existingPairings.pairings) {
+      if (!p || typeof p !== 'object') continue;
       existingMap.set(`${p.model}::${p.requirement}`, p);
     }
   }
@@ -53,6 +56,7 @@ function generatePairings(candidatesData, existingPairings) {
   const pairings = [];
 
   for (const c of candidates) {
+    if (!c || typeof c !== 'object') continue;
     const key = `${c.model}::${c.requirement}`;
     const existing = existingMap.get(key);
 

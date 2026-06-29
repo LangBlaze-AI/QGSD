@@ -52,8 +52,8 @@ if (!VALID_SPECS.includes(specName)) {
     '[run-installer-alloy] Unknown spec: ' + specName +
     '. Valid: ' + VALID_SPECS.join(', ') + '\n'
   );
-  const check_id = CHECK_ID_MAP[specName] || ('alloy:' + specName);
-  try { writeCheckResult({ tool: 'run-installer-alloy', formalism: 'alloy', result: 'error', check_id: check_id, surface: 'alloy', property: PROPERTY_MAP[specName] || specName, runtime_ms: 0, summary: 'error: ' + check_id + ' (invalid spec)', triage_tags: [], requirement_ids: getRequirementIds(check_id), metadata: { spec: specName } }); } catch (e) { process.stderr.write('[run-installer-alloy] Warning: failed to write check result: ' + e.message + '\n'); }
+  const check_id = Object.prototype.hasOwnProperty.call(CHECK_ID_MAP, specName) ? CHECK_ID_MAP[specName] : ('alloy:' + specName);
+  try { writeCheckResult({ tool: 'run-installer-alloy', formalism: 'alloy', result: 'error', check_id: check_id, surface: 'alloy', property: (Object.prototype.hasOwnProperty.call(PROPERTY_MAP, specName) ? PROPERTY_MAP[specName] : specName) || '(unknown spec)', runtime_ms: 0, summary: 'error: ' + check_id + ' (invalid spec)', triage_tags: [], requirement_ids: getRequirementIds(check_id), metadata: { spec: specName } }); } catch (e) { process.stderr.write('[run-installer-alloy] Warning: failed to write check result: ' + e.message + '\n'); }
   process.exit(1);
 }
 

@@ -323,4 +323,26 @@ sources: []
     assert.equal(result.observeConfig.default_timeout, 15);
     assert.equal(result.observeConfig.fail_open_default, false);
   });
+
+  it('does not crash when a source entry is null or a bare scalar (fail-open)', () => {
+    writeConfig(tmpDir, 'observe-sources.md', `---
+sources:
+  - null
+  - github
+---
+`);
+    let result;
+    assert.doesNotThrow(() => { result = loadObserveConfig(null, tmpDir); });
+    assert.ok(result.error, 'expected a validation error for non-object source entries');
+    assert.ok(result.error.includes('sources[0]'));
+  });
+
+  it('fails open (no throw) when the config path is a directory', () => {
+    const dirPath = path.join(tmpDir, 'config-as-dir');
+    fs.mkdirSync(dirPath);
+    let result;
+    assert.doesNotThrow(() => { result = loadObserveConfig(dirPath, tmpDir); });
+    assert.deepEqual(result.sources, []);
+    assert.ok(result.error && /read/i.test(result.error));
+  });
 });

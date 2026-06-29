@@ -94,14 +94,17 @@ function detectLivenessProperties(configName, cfgPath, specDir) {
     return []; // No liveness properties declared
   }
 
-  let surface = SURFACE_MAP[configName];
+  let surface = (typeof configName === 'string'
+      && Object.prototype.hasOwnProperty.call(SURFACE_MAP, configName))
+    ? SURFACE_MAP[configName]
+    : undefined;
 
   // Fallback: if config not in SURFACE_MAP, try stripping MC prefix
-  if (!surface && configName.startsWith('MC')) {
+  if (!surface && typeof configName === 'string' && configName.startsWith('MC')) {
     surface = configName.substring(2).toLowerCase();
   }
 
-  if (!surface) {
+  if (typeof surface !== 'string' || !surface) {
     return []; // Unknown surface — can't validate; do not block unknown configs
   }
 

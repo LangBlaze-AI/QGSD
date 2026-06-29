@@ -185,6 +185,7 @@ function analyzeSession(fileInfo) {
       } catch (_) {
         continue; // Skip malformed lines
       }
+      if (!msg || typeof msg !== 'object') continue; // Skip parseable non-object lines (literal null/number/string)
 
       // Count assistant turns
       if (msg.type === 'assistant') {
@@ -193,6 +194,7 @@ function analyzeSession(fileInfo) {
         // Check assistant content for circuit breaker
         if (Array.isArray(msg.message && msg.message.content)) {
           for (const block of msg.message.content) {
+            if (!block || typeof block !== 'object') continue;
             // Tool use entries
             if (block.type === 'tool_use') {
               toolUseMap[block.id] = block.name;
@@ -215,6 +217,7 @@ function analyzeSession(fileInfo) {
         // Also check top-level content array (some formats)
         if (Array.isArray(msg.content)) {
           for (const block of msg.content) {
+            if (!block || typeof block !== 'object') continue;
             if (block.type === 'tool_use') {
               toolUseMap[block.id] = block.name;
               const filePath = (block.input && block.input.file_path) || (block.input && block.input.path);
@@ -236,6 +239,7 @@ function analyzeSession(fileInfo) {
         const contentArr = (msg.message && msg.message.content) || msg.content;
         if (Array.isArray(contentArr)) {
           for (const block of contentArr) {
+            if (!block || typeof block !== 'object') continue;
             if (block.type === 'tool_result' && block.is_error) {
               const toolName = toolUseMap[block.tool_use_id] || 'unknown';
               if (!toolFailures[toolName]) {

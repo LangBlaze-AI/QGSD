@@ -229,7 +229,9 @@ function generateDiagnosticFeedback(checkerOutput, bugTraceJsonPath, bugContext)
 function verifyBugReproduction(modelPath, bugContext, options) {
   options = options || {};
   const formalism = options.formalism || 'tla';
-  const maxAttempts = options.maxAttempts || getMaxIterations();
+  const maxAttempts = (Number.isInteger(options.maxAttempts) && options.maxAttempts > 0)
+    ? options.maxAttempts
+    : getMaxIterations();
   const verbose = options.verbose || false;
   const onIteration = options.onIteration || null;
   const bugTraceJsonPath = options.bugTraceJsonPath || null;
@@ -328,13 +330,14 @@ function verifyBugReproduction(modelPath, bugContext, options) {
  * @returns {string} Formatted feedback line
  */
 function formatIterationFeedback(iteration, verbose, fullOutput) {
+  if (!iteration || typeof iteration !== 'object') return '';
   const status = iteration.passed ? 'model still incomplete' : 'reproduced';
   let line = `Attempt ${iteration.attempt}: ${status} \u2014 ${iteration.summary}`;
 
   // Append diagnostic summary if present
   if (iteration.diagnostic) {
     const proposalCount = (iteration.diagnostic.correction_proposals || []).length;
-    const divergedCount = (iteration.diagnostic.trace_alignment.diverged_fields || []).length;
+    const divergedCount = ((iteration.diagnostic.trace_alignment || {}).diverged_fields || []).length;
     line += `\n  Diagnostic: ${proposalCount} correction proposals generated (${divergedCount} diverged fields)`;
   }
 

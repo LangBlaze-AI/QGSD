@@ -79,6 +79,17 @@ describe('trace-corpus-stats session inference', () => {
     const sessions2 = inferSessions(events, 300000);
     assert.strictEqual(sessions2.length, 1, '5min threshold should keep all together');
   });
+
+  it('tolerates non-object (null) event entries without crashing', () => {
+    const events = [
+      { ts: '2026-03-01T10:00:00Z', action: 'quorum_start' },
+      null, // valid-JSON-but-non-object line from the corpus
+      { ts: '2026-03-01T10:01:00Z', action: 'quorum_complete' },
+    ];
+    assert.doesNotThrow(() => inferSessions(events, 300000));
+    const sessions = inferSessions(events, 300000);
+    assert.ok(sessions.length >= 1, 'should still produce at least one session');
+  });
 });
 
 describe('trace-corpus-stats action indexing', () => {
@@ -106,6 +117,21 @@ describe('trace-corpus-stats action indexing', () => {
     };
     const summary = summarizeSession(session);
     assert.strictEqual(summary.actions.undefined, 1);
+  });
+
+  it('tolerates non-object (null) event entries in a session', () => {
+    const session = {
+      id: 'test-003',
+      events: [
+        { ts: '2026-03-01T10:00:00Z', action: 'quorum_start' },
+        null, // non-object line that slipped through JSON.parse
+      ],
+    };
+    let summary;
+    assert.doesNotThrow(() => { summary = summarizeSession(session); });
+    assert.strictEqual(summary.event_count, 2);
+    assert.strictEqual(summary.actions.quorum_start, 1);
+    assert.strictEqual(summary.actions.undefined, 1, 'null entry counts as undefined action');
   });
 });
 

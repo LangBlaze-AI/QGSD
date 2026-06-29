@@ -72,7 +72,7 @@ function readOpenDebt(ledgerPath) {
     }
 
     const entries = ledger.debt_entries.filter(
-      e => e.status === 'open' || e.status === 'acknowledged'
+      e => e && (e.status === 'open' || e.status === 'acknowledged')
     );
     return { entries, error: null };
   } catch (err) {
@@ -102,6 +102,10 @@ function matchDebtToResidual(debtEntries, residualVector) {
   const unmatched = [];
 
   for (const entry of debtEntries) {
+    if (!entry || typeof entry !== 'object') {
+      unmatched.push(entry);
+      continue;
+    }
     let layer = null;
     let reason = null;
 
@@ -113,7 +117,7 @@ function matchDebtToResidual(debtEntries, residualVector) {
 
     // Priority 2: source_entries with internal type -> use _route or title keywords
     if (!layer && Array.isArray(entry.source_entries)) {
-      const hasInternal = entry.source_entries.some(s => s.source_type === 'internal');
+      const hasInternal = entry.source_entries.some(s => s && s.source_type === 'internal');
       if (hasInternal) {
         // Check _route first
         const route = entry._route || '';
@@ -133,7 +137,7 @@ function matchDebtToResidual(debtEntries, residualVector) {
     // Priority 3: github/sentry sources -> f_to_c
     if (!layer && Array.isArray(entry.source_entries)) {
       const hasExternal = entry.source_entries.some(
-        s => s.source_type === 'github' || s.source_type === 'sentry'
+        s => s && (s.source_type === 'github' || s.source_type === 'sentry')
       );
       if (hasExternal) {
         layer = 'f_to_c';
@@ -246,7 +250,7 @@ function summarizeDebtProgress(ledgerPath) {
     const counts = { open: 0, acknowledged: 0, resolving: 0, resolved: 0, total: 0 };
     for (const entry of ledger.debt_entries) {
       const status = entry.status || 'open';
-      if (status in counts) {
+      if (Object.prototype.hasOwnProperty.call(counts, status) && status !== 'total') {
         counts[status]++;
       }
       counts.total++;

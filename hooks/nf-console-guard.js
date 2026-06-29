@@ -42,24 +42,24 @@ process.stdin.on('end', () => {
     }
 
     // Get all modified files (staged + unstaged)
-    const stagedResult = spawnSync('git', ['diff', '--cached', '--name-only'], {
+    const stagedResult = spawnSync('git', ['diff', '--cached', '--name-only', '-z'], {
       encoding: 'utf8',
       cwd: input.cwd || process.cwd(),
       timeout: 5000,
     });
-    const unstagedResult = spawnSync('git', ['diff', '--name-only'], {
+    const unstagedResult = spawnSync('git', ['diff', '--name-only', '-z'], {
       encoding: 'utf8',
       cwd: input.cwd || process.cwd(),
       timeout: 5000,
     });
 
-    // Combine and dedupe
+    // Combine and dedupe (NUL-delimited output avoids C-quoting of special chars)
     const allFiles = new Set();
     if (stagedResult.status === 0 && stagedResult.stdout) {
-      stagedResult.stdout.trim().split('\n').filter(Boolean).forEach(f => allFiles.add(f));
+      stagedResult.stdout.split('\0').filter(Boolean).forEach(f => allFiles.add(f));
     }
     if (unstagedResult.status === 0 && unstagedResult.stdout) {
-      unstagedResult.stdout.trim().split('\n').filter(Boolean).forEach(f => allFiles.add(f));
+      unstagedResult.stdout.split('\0').filter(Boolean).forEach(f => allFiles.add(f));
     }
 
     // Filter to JS/TS files only
@@ -81,9 +81,19 @@ process.stdin.on('end', () => {
         const content = fs.readFileSync(fullPath, 'utf8');
         const lines = content.split('\n');
         let count = 0;
+        let inBlockComment = false;
         for (const line of lines) {
+          if (inBlockComment) {
+            // Stay inside the block until a closing */ appears on a line
+            if (line.includes('*/')) inBlockComment = false;
+            continue;
+          }
           // Skip comment lines
-          if (COMMENT_LINE_RE.test(line)) continue;
+          if (COMMENT_LINE_RE.test(line)) {
+            // Enter block-comment mode if a /* opens but does not close on this line
+            if (/^\s*\/\*/.test(line) && !line.includes('*/')) inBlockComment = true;
+            continue;
+          }
           if (/^\s*console\.log\b/.test(line)) {
             count++;
           }

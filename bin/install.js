@@ -4202,6 +4202,12 @@ function installAllRuntimes(runtimes, isGlobal, isInteractive) {
   }
 }
 
+// install.js is require-safe: the entire main-execution block below runs ONLY when this file
+// is invoked directly (node bin/install.js). When required as a library (tests, tooling) the
+// block is skipped and only the module.exports at the bottom are reached — requiring this file
+// never triggers a real global install.
+if (require.main === module) {
+
 // RECV-01: --reset-breaker clears project-relative circuit breaker state and exits before any install logic
 if (hasResetBreaker) {
   const { spawnSync } = require('child_process');
@@ -4431,7 +4437,8 @@ if (hasGlobal && hasLocal) {
   }
 }
 
-// Export for testing (only when required as a library, not when run directly)
-if (require.main !== module) {
-  module.exports = { validateStructuralIntegrity, validateHookPaths, fileHash, generateManifest, saveLocalPatches, reportLocalPatches, PATCHES_DIR_NAME, MANIFEST_NAME, classifyProviders, detectExternalClis, shouldCopyToNfBin, isUnderInstallDir, synthesizeMcpEntry, installedUnifiedMcpPath, NF_BIN_RUNTIME_MJS };
-}
+} // end: if (require.main === module) — main-execution guard for require-safety
+
+// Export for testing. Reached whether run directly or required; the guard above ensures
+// requiring this file exposes these helpers WITHOUT running the installer.
+module.exports = { validateStructuralIntegrity, validateHookPaths, fileHash, generateManifest, saveLocalPatches, reportLocalPatches, PATCHES_DIR_NAME, MANIFEST_NAME, classifyProviders, detectExternalClis, shouldCopyToNfBin, isUnderInstallDir, synthesizeMcpEntry, installedUnifiedMcpPath, NF_BIN_RUNTIME_MJS };

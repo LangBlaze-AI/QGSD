@@ -37,6 +37,15 @@ test('resolveSpawnTarget returns empty string when nothing is resolvable', () =>
   assert.equal(resolveSpawnTarget(undefined), '');
 });
 
+test('resolveSpawnTarget returns a string when resolvedCli is a non-string (type guard)', () => {
+  assert.equal(typeof resolveSpawnTarget({ resolvedCli: 42 }), 'string');
+  assert.equal(resolveSpawnTarget({ resolvedCli: 42 }), '');
+  assert.equal(resolveSpawnTarget({ resolvedCli: { path: '/x' } }), '');
+  // falls through to cli when resolvedCli is unusable
+  const r = resolveSpawnTarget({ resolvedCli: 42, cli: 'node' });
+  assert.ok(r === 'node' || r.endsWith(path.sep + 'node') || r.endsWith('/node'));
+});
+
 // ─── Basic contract tests ─────────────────────────────────────────────────────
 
 test('returns a non-empty string for a known system CLI (node)', () => {
@@ -84,6 +93,16 @@ test('non-string truthy input: falls back without throwing', () => {
   // For truthy non-strings (e.g. 42), that means the input is returned as-is.
   // The important contract is: never throws.
   assert.doesNotThrow(() => resolveCli(42));
+});
+
+test('resolveCli always returns a string for non-string truthy input (spawn-safety contract)', () => {
+  assert.equal(typeof resolveCli(42), 'string', 'number input must not be returned as a number');
+  assert.equal(typeof resolveCli([]), 'string', 'array input must not be returned as an array');
+  assert.equal(typeof resolveCli({ cli: 'x' }), 'string', 'object input must not be returned as an object');
+  // Safe sentinel: unresolvable non-string degrades to empty string
+  assert.equal(resolveCli(42), '');
+  assert.equal(resolveCli([]), '');
+  assert.equal(resolveCli({ cli: 'x' }), '');
 });
 
 // ─── Never-throws contract ────────────────────────────────────────────────────

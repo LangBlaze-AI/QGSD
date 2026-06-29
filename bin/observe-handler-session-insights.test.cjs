@@ -344,6 +344,44 @@ describe('observe-handler-session-insights', () => {
     });
   });
 
+  describe('analyzeSession - adversarial: literal null line', () => {
+    it('does not silently drop a session when a transcript line is literal null', () => {
+      const dir = createTempDir();
+      try {
+        const lines = [null];
+        for (let i = 0; i < 55; i++) {
+          lines.push({ type: 'assistant', content: [{ type: 'text', text: `turn ${i}` }] });
+        }
+        const filePath = writeJsonlFile(dir, 'null-line.jsonl', lines);
+        const stat = fs.statSync(filePath);
+        const issues = analyzeSession({ name: 'null-line.jsonl', path: filePath, mtime: stat.mtime, size: stat.size });
+        const longSessions = issues.filter(i => i.id.includes('long-session'));
+        assert.equal(longSessions.length, 1);
+      } finally {
+        cleanup(dir);
+      }
+    });
+  });
+
+  describe('analyzeSession - adversarial: null content block', () => {
+    it('does not silently drop a session when a content array contains null', () => {
+      const dir = createTempDir();
+      try {
+        const lines = [{ type: 'assistant', content: [null] }];
+        for (let i = 0; i < 55; i++) {
+          lines.push({ type: 'assistant', content: [{ type: 'text', text: `turn ${i}` }] });
+        }
+        const filePath = writeJsonlFile(dir, 'null-block.jsonl', lines);
+        const stat = fs.statSync(filePath);
+        const issues = analyzeSession({ name: 'null-block.jsonl', path: filePath, mtime: stat.mtime, size: stat.size });
+        const longSessions = issues.filter(i => i.id.includes('long-session'));
+        assert.equal(longSessions.length, 1);
+      } finally {
+        cleanup(dir);
+      }
+    });
+  });
+
   describe('handleSessionInsights - return schema', () => {
     it('returns correct source_type', () => {
       const result = handleSessionInsights({ label: 'Test' }, {});

@@ -20,6 +20,9 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('Machina.js adapter: filePath must be a non-empty string');
+  }
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
 
@@ -97,6 +100,9 @@ function extract(filePath, options = {}) {
 
   if (initial) stateSet.add(initial);
   const stateNames = [...stateSet];
+  // machina allows omitting initialState; fall back to the first discovered
+  // state so a valid FSM still produces a usable IR (matches robot/jssm adapters).
+  if (!initial && stateNames.length > 0) initial = stateNames[0];
 
   const ir = {
     machineId: path.basename(filePath, path.extname(filePath)),

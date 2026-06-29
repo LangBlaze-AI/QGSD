@@ -157,11 +157,11 @@ function collectAll() {
 // ── Build aggregated result ─────────────────────────────────────────────────
 
 function buildResult(data) {
-  const { gateA, gateB, gateC, l1Pct, maturity } = data;
+  const { gateA, gateB, gateC, l1Pct, maturity } = data || {};
 
   const result = {
     generated: new Date().toISOString(),
-    l1_coverage_pct: l1Pct != null ? l1Pct : null,
+    l1_coverage_pct: (typeof l1Pct === 'number' && Number.isFinite(l1Pct)) ? l1Pct : null,
     gate_a: gateA ? {
       score: resolveGateScore(gateA, 'a'),
       target: gateA.target,
@@ -208,6 +208,7 @@ function pct(value, decimals = 1) {
 }
 
 function renderTerminal(result) {
+  result = result || {};
   const lines = [];
   const W = 64;
   const hr = '─'.repeat(W);

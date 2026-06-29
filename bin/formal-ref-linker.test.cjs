@@ -189,4 +189,51 @@ test('linkFormalRefs', async (t) => {
       assert.strictEqual(result.entries.length, 1);
     } finally { cleanup(tmpDir); }
   });
+
+  await t.test('fail-open: requirements.json with null array element does not crash', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'formal-ref-'));
+    const reqPath = path.join(tmpDir, 'requirements.json');
+    fs.writeFileSync(reqPath, JSON.stringify([null, { id: 'DEBT-01', text: 'Schema validation' }]), 'utf8');
+    const specDir = path.join(tmpDir, 'spec');
+    fs.mkdirSync(specDir, { recursive: true });
+    try {
+      const entries = [makeEntry({ title: 'Schema validation fails' })];
+      const result = linkFormalRefs(entries, { requirementsPath: reqPath, specDir });
+      assert.strictEqual(result.entries.length, 1);
+      // the valid requirement should still auto-detect-match
+      assert.strictEqual(result.entries[0].formal_ref, 'requirement:DEBT-01');
+      assert.strictEqual(result.entries[0].formal_ref_source, 'auto-detect');
+    } finally { cleanup(tmpDir); }
+  });
+
+  await t.test('non-string entry.title does not crash (treated as no keywords)', () => {
+    const { tmpDir, reqPath, specDir } = setupTempDir([{ id: 'DEBT-01', text: 'Schema validation' }]);
+    try {
+      const entries = [makeEntry({ title: 12345 })];
+      const result = linkFormalRefs(entries, { requirementsPath: reqPath, specDir });
+      assert.strictEqual(result.entries.length, 1);
+      assert.strictEqual(result.entries[0].formal_ref, null);
+      assert.strictEqual(result.entries[0].formal_ref_source, null);
+    } finally { cleanup(tmpDir); }
+  });
+
+  await t.test('fail-open: proximity node without edges array does not crash', () => {
+    const { tmpDir, reqPath, specDir } = setupTempDir();
+    const pfDir = path.join(tmpDir, '.planning', 'formal');
+    fs.mkdirSync(pfDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pfDir, 'proximity-index.json'),
+      JSON.stringify({ nodes: { 'code_file::bin/foo.cjs': { type: 'code_file' } } }),
+      'utf8'
+    );
+    const origCwd = process.cwd();
+    process.chdir(tmpDir);
+    try {
+      const entry = makeEntry({ title: 'Completely unrelated message' });
+      entry.source_file = 'bin/foo.cjs';
+      const result = linkFormalRefs([entry], { requirementsPath: reqPath, specDir });
+      assert.strictEqual(result.entries.length, 1);
+      assert.strictEqual(result.entries[0].formal_ref, null);
+    } finally { process.chdir(origCwd); cleanup(tmpDir); }
+  });
 });

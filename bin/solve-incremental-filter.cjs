@@ -84,6 +84,7 @@ function expandWithCallGraph(filesTouched, affectedSet, adapter) {
     }
 
     for (const callerFile of callers) {
+      if (typeof callerFile !== 'string') continue;
       const normalized = callerFile.replace(/\\/g, '/');
       for (const { pattern, layers } of DOMAIN_MAP) {
         if (pattern.test(normalized)) {
@@ -111,7 +112,7 @@ function computeAffectedLayers(filesTouched, adapter) {
   const affected = new Set(ALWAYS_SWEEP);
 
   for (const filePath of filesTouched) {
-    const normalized = filePath.replace(/\\/g, '/');
+    const normalized = String(filePath).replace(/\\/g, '/');
     let matched = false;
     for (const { pattern, layers } of DOMAIN_MAP) {
       if (pattern.test(normalized)) {

@@ -139,6 +139,9 @@ function failureSignature(verdict) {
  * }>}
  */
 async function simulateSolutionLoop(input, deps) {
+  if (!input || typeof input !== 'object') {
+    throw new Error('input must be an object');
+  }
   const {
     fixIdea,
     bugDescription,
@@ -181,6 +184,11 @@ async function simulateSolutionLoop(input, deps) {
     } catch (e) {
       maxIterations = 100;
     }
+  }
+
+  // Reject non-positive / non-finite iteration budgets — fall back to the default
+  if (typeof maxIterations !== 'number' || !Number.isFinite(maxIterations) || maxIterations < 1) {
+    maxIterations = 100;
   }
 
   // Truncate fix idea for banner display (80 chars)
@@ -329,6 +337,12 @@ async function simulateSolutionLoop(input, deps) {
       } else {
         escalationReason = `Convergence gate execution failed at iteration ${i}: ${e.message}`;
       }
+      break;
+    }
+
+    // Guard against a dependency that resolves to a non-object verdict
+    if (!verdict || typeof verdict !== 'object') {
+      escalationReason = `Convergence gate returned no verdict at iteration ${i}`;
       break;
     }
 

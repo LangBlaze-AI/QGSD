@@ -28,7 +28,7 @@ function extract(filePath, options = {}) {
   let initial = '';
 
   // Parse const/enum values for resolution
-  const constMap = {};
+  const constMap = Object.create(null);
   const enumPattern = /(\w+)\s*(?:=\s*"(\w+)"|\(["'](\w+)["']\))/g;
   let cm;
   while ((cm = enumPattern.exec(content)) !== null) {

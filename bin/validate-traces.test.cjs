@@ -507,3 +507,22 @@ test('exit code 0 on security_sweep trace (skipped, not divergent)', () => {
   assert.strictEqual(result.status, 0);
   assert.ok(!result.stdout.match(/divergence/i), 'security_sweep should not cause divergence');
 });
+
+// ── Adversarial hardening tests ───────────────────────────────────────────────
+
+test('expectedState: returns null for null/undefined/non-object input (no crash)', () => {
+  const { expectedState } = require('../bin/validate-traces.cjs');
+  assert.doesNotThrow(() => expectedState(null), 'expectedState(null) must not throw');
+  assert.strictEqual(expectedState(null), null);
+  assert.strictEqual(expectedState(undefined), null);
+  assert.strictEqual(expectedState('quorum_start'), null);
+});
+
+test('validate-traces does not misclassify a valid `null` JSON line as a parse error', () => {
+  const result = runValidator(['null']);
+  assert.strictEqual(result.status, 1, 'a null event line is a schema violation -> exit 1');
+  assert.ok(!/Cannot set properties of null/.test(result.stdout),
+    'must not surface a strict-mode property-set TypeError as a json_parse_error');
+  assert.ok(!/json_parse_error/.test(result.stdout),
+    'a syntactically valid JSON line must not be reported as a parse error');
+});

@@ -36,8 +36,12 @@ function countDirectionChanges(entries) {
   let lastDirection = null; // 'up' or 'down'
 
   for (let i = 0; i < entries.length; i++) {
-    const fromIdx = LEVEL_ORDER.indexOf(entries[i].from_level);
-    const toIdx = LEVEL_ORDER.indexOf(entries[i].to_level);
+    const e = entries[i];
+    // Skip null/non-object entries (e.g. trailing garbage / partially-written records)
+    if (!e || typeof e !== 'object') continue;
+
+    const fromIdx = LEVEL_ORDER.indexOf(e.from_level);
+    const toIdx = LEVEL_ORDER.indexOf(e.to_level);
 
     // Skip entries with unknown levels or same-level transitions
     if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) continue;
@@ -68,8 +72,9 @@ function detectFlipFlops(changelog, threshold) {
 
   if (!Array.isArray(changelog) || changelog.length === 0) return {};
 
-  // Group entries by model
-  const byModel = {};
+  // Group entries by model (null-proto so '__proto__'/'constructor' model paths
+  // are ordinary own keys instead of hitting inherited getters/setters)
+  const byModel = Object.create(null);
   for (const entry of changelog) {
     if (!entry || !entry.model) continue;
     if (!byModel[entry.model]) byModel[entry.model] = [];
@@ -81,10 +86,17 @@ function detectFlipFlops(changelog, threshold) {
   for (const [model, entries] of Object.entries(byModel)) {
     const directionChanges = countDirectionChanges(entries);
     if (directionChanges >= threshold) {
-      unstable[model] = {
-        direction_changes: directionChanges,
-        flagged_at: new Date().toISOString(),
-      };
+      // defineProperty so a '__proto__' model path is recorded as a plain own
+      // key instead of mutating the result object's prototype.
+      Object.defineProperty(unstable, model, {
+        value: {
+          direction_changes: directionChanges,
+          flagged_at: new Date().toISOString(),
+        },
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     }
   }
 

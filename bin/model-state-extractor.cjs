@@ -25,7 +25,7 @@ function extractFinalStates(traceJsonPath) {
     }
 
     // If trace is a lasso (cycle), final states are those in the cycle
-    if (loopPoint !== null && loopPoint >= 0 && loopPoint < states.length) {
+    if (typeof loopPoint === 'number' && Number.isInteger(loopPoint) && loopPoint >= 0 && loopPoint < states.length) {
       return states.slice(loopPoint);  // States in cycle
     }
 

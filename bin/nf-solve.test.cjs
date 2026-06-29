@@ -40,6 +40,9 @@ const {
   autoClose,
   persistSessionSummary,
   checkCleanSession,
+  proximityPreFilter,
+  computeScannerStats,
+  classifyFailingTest,
 } = require('./nf-solve.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -1929,4 +1932,36 @@ test('TC-HTARGET-4: computeWaves + computeLayerPriorityWeights integration', () 
     assert.ok(typeof w.wave === 'number', 'wave object should have wave number');
     assert.ok(Array.isArray(w.layers), 'wave object should have layers array');
   }
+});
+
+// @requirement HARDEN-PROX
+test('TC-HARDEN-PROX-1: proximityPreFilter fails open on null/undefined instead of crashing', () => {
+  let result;
+  assert.doesNotThrow(() => { result = proximityPreFilter(null); }, 'null candidates must not throw');
+  assert.ok(result && Array.isArray(result.filtered), 'should return a filtered array');
+  assert.equal(result.filtered.length, 0, 'null input yields no filtered candidates');
+  assert.equal(result.stats.total, 0, 'stats.total should be 0');
+  assert.equal(result.stats.passed, 0, 'stats.passed should be 0');
+  assert.doesNotThrow(() => proximityPreFilter(undefined), 'undefined candidates must not throw');
+});
+
+// @requirement HARDEN-SCAN
+test('TC-HARDEN-SCAN-1: computeScannerStats tolerates a null scanner entry (corrupt classifications)', () => {
+  let stats;
+  assert.doesNotThrow(() => { stats = computeScannerStats({ ctor: null, ttor: { a: 'fp', b: 'genuine' } }); }, 'null nested entry must not throw');
+  assert.ok(stats.ctor, 'should still emit an entry for the null scanner');
+  assert.equal(stats.ctor.total, 0, 'null scanner counts as 0 items');
+  assert.equal(stats.ctor.fp, 0);
+  assert.equal(stats.ttor.total, 2, 'valid scanner still counted');
+  assert.equal(stats.ttor.fp, 1);
+  assert.equal(stats.ttor.genuine, 1);
+});
+
+// @requirement HARDEN-CFT
+test('TC-HARDEN-CFT-1: classifyFailingTest tolerates null trace/model/bug inputs (corrupt JSON)', () => {
+  let res;
+  assert.doesNotThrow(() => { res = classifyFailingTest('test/foo.test.cjs', null, null, null); }, 'null shapes must not throw');
+  assert.equal(res.classification, 'not_covered', 'no trace data => not_covered');
+  assert.ok(Array.isArray(res.models), 'models should be an array');
+  assert.match(res.bug_id, /^[0-9a-f]{8}$/, 'bug_id should be an 8-char hex hash');
 });

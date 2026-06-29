@@ -100,3 +100,26 @@ describe('levenshteinSimilarity', () => {
     assert.strictEqual(levenshteinSimilarity('', 'abc'), 0.0);
   });
 });
+
+describe('levenshteinDistance hardening', () => {
+  it('null/undefined operand does not crash (treated as empty string)', () => {
+    assert.strictEqual(levenshteinDistance(null, 'abc'), 3);
+    assert.strictEqual(levenshteinDistance('abc', undefined), 3);
+    assert.strictEqual(levenshteinDistance(undefined, ''), 0);
+  });
+});
+
+describe('levenshteinSimilarity hardening', () => {
+  it('null/undefined operand returns a number instead of throwing', () => {
+    assert.strictEqual(levenshteinSimilarity(null, 'abc'), 0.0);
+    assert.strictEqual(levenshteinSimilarity('abc', undefined), 0.0);
+    assert.strictEqual(levenshteinSimilarity(null, null), 1.0);
+  });
+});
+
+describe('levenshteinDistance type-coercion hardening', () => {
+  it('numeric operands do not throw RangeError', () => {
+    assert.strictEqual(levenshteinDistance(12, 12), 0);
+    assert.strictEqual(levenshteinDistance(12, 34), 2);
+  });
+});

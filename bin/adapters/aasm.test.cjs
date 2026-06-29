@@ -85,6 +85,70 @@ end
   }
 });
 
+test('extract defaults initial to first declared state when none marked initial: true', () => {
+  const noInitial = `
+class Job
+  include AASM
+
+  aasm do
+    state :queued
+    state :running
+    state :done
+
+    event :start do
+      transitions from: :queued, to: :running
+    end
+
+    event :finish do
+      transitions from: :running, to: :done
+    end
+  end
+end
+`;
+  const tmpFile = path.join(os.tmpdir(), 'aasm-noinit-' + Date.now() + '.rb');
+  fs.writeFileSync(tmpFile, noInitial, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.strictEqual(ir.initial, 'queued', 'AASM uses first declared state as initial');
+    assert.strictEqual(ir.transitions.length, 2);
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract does not miscount do/end inside Ruby comments', () => {
+  const withComment = `
+class Order
+  include AASM
+
+  aasm do
+    state :pending, initial: true
+    state :submitted
+    state :shipped
+
+    event :submit do
+      transitions from: :pending, to: :submitted
+      # please do not remove this line
+    end
+
+    event :ship do
+      transitions from: :submitted, to: :shipped
+    end
+  end
+end
+`;
+  const tmpFile = path.join(os.tmpdir(), 'aasm-comment-' + Date.now() + '.rb');
+  fs.writeFileSync(tmpFile, withComment, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    const submitTrans = ir.transitions.filter(t => t.event === 'submit');
+    assert.strictEqual(submitTrans.length, 1, 'submit must own exactly one transition');
+    assert.strictEqual(submitTrans[0].target, 'submitted');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
 test('extract parses AASM fixture', () => {
   const tmpFile = path.join(os.tmpdir(), 'aasm-test-' + Date.now() + '.rb');
   fs.writeFileSync(tmpFile, fixture, 'utf8');

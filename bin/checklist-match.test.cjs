@@ -104,3 +104,53 @@ test('keyword matching: "deprecation planning" triggers deprecation', () => {
   const ids = result.map(r => r.id);
   assert.ok(ids.includes('deprecation'), `Expected deprecation, got: ${JSON.stringify(ids)}`);
 });
+
+test('null description does not crash (treated as no keyword text)', () => {
+  assert.doesNotThrow(() => {
+    matchChecklists({
+      description: null,
+      files: ['README.txt'],
+      registryPath: REGISTRY_PATH,
+    });
+  });
+  // A non-string description still allows file/task matching to work
+  const result = matchChecklists({
+    description: null,
+    files: ['hooks/nf-stop.js'],
+    registryPath: REGISTRY_PATH,
+  });
+  const ids = result.map(r => r.id);
+  assert.ok(ids.includes('security'), `Expected security, got: ${JSON.stringify(ids)}`);
+});
+
+test('checklist entry missing triggers does not crash', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const tmp = path.join(os.tmpdir(), `cm-reg-${process.pid}-${Date.now()}.json`);
+  fs.writeFileSync(tmp, JSON.stringify({ checklists: [{ id: 'x', file: 'x.md' }] }));
+  try {
+    assert.doesNotThrow(() => {
+      matchChecklists({ files: ['a.js'], description: 'auth token', taskType: 'bug_fix', registryPath: tmp });
+    });
+    const result = matchChecklists({ files: ['a.js'], registryPath: tmp });
+    assert.strictEqual(result.length, 0);
+  } finally {
+    fs.unlinkSync(tmp);
+  }
+});
+
+test('registry without checklists array yields no matches and does not crash', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const tmp = path.join(os.tmpdir(), `cm-reg2-${process.pid}-${Date.now()}.json`);
+  fs.writeFileSync(tmp, JSON.stringify({ $schema: 'checklist-registry/v1' }));
+  try {
+    let result;
+    assert.doesNotThrow(() => {
+      result = matchChecklists({ files: ['hooks/x.js'], description: 'auth', registryPath: tmp });
+    });
+    assert.strictEqual(result.length, 0);
+  } finally {
+    fs.unlinkSync(tmp);
+  }
+});

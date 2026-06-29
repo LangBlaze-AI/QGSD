@@ -285,6 +285,37 @@ describe('candidate-discovery', () => {
       assert.equal(result.candidates.length, 0, 'NaN scores should be skipped');
     });
 
+    it('should not crash when model-registry has a null model entry', () => {
+      const index = makeMockIndex();
+      const registry = makeMockRegistry({
+        'models/a.als': null,
+      });
+      const reqs = makeMockRequirements(['REQ-01']);
+
+      setMockScores({});
+
+      // Should skip the malformed entry rather than throw
+      const result = discoverCandidates(index, registry, reqs, { threshold: 0.7, maxHops: 3 });
+      assert.ok(Array.isArray(result.candidates), 'should return a candidates array');
+      assert.equal(result.candidates.length, 0, 'null model contributes no candidates');
+    });
+
+    it('should not crash when requirements array contains a null entry', () => {
+      const index = makeMockIndex();
+      const registry = makeMockRegistry({
+        'models/a.als': { requirements: [] },
+      });
+      const reqs = [...makeMockRequirements(['REQ-01']), null];
+
+      setMockScores({
+        'formal_model::models/a.als|requirement::REQ-01': 0.85,
+      });
+
+      const result = discoverCandidates(index, registry, reqs, { threshold: 0.7, maxHops: 3 });
+      assert.equal(result.candidates.length, 1, 'valid requirement still produces its candidate');
+      assert.equal(result.candidates[0].requirement, 'REQ-01');
+    });
+
   });
 
 });

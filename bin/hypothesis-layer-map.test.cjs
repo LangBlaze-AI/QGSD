@@ -64,6 +64,13 @@ describe('hypothesis-layer-map module', () => {
     it('returns empty array for empty string', () => {
       assert.deepStrictEqual(mod.mapSourceToLayer(''), []);
     });
+
+    it('returns empty array (does not throw) for non-string source_model', () => {
+      assert.deepStrictEqual(mod.mapSourceToLayer(12345), []);
+      assert.deepStrictEqual(mod.mapSourceToLayer({ path: '/x.tla' }), []);
+      assert.deepStrictEqual(mod.mapSourceToLayer(['/x.tla']), []);
+      assert.deepStrictEqual(mod.mapSourceToLayer(true), []);
+    });
   });
 
   describe('loadHypothesisTransitions', () => {
@@ -174,6 +181,28 @@ describe('hypothesis-layer-map module', () => {
       const result = mod.loadHypothesisTransitions(tmpDir);
       assert.equal(result.length, 1);
       assert.deepStrictEqual(result[0].layer_keys, ['c_to_r']);
+    });
+
+    it('returns empty array when current file parses to a non-object (corrupt-but-valid JSON)', () => {
+      const evidenceDir = path.join(tmpDir, '.planning', 'formal', 'evidence');
+      fs.writeFileSync(path.join(evidenceDir, 'hypothesis-measurements.json'), 'null');
+      fs.writeFileSync(path.join(evidenceDir, 'hypothesis-measurements.prev.json'), JSON.stringify({ measurements: [] }));
+      assert.deepStrictEqual(mod.loadHypothesisTransitions(tmpDir), []);
+    });
+
+    it('skips null/non-object measurement entries without throwing', () => {
+      const evidenceDir = path.join(tmpDir, '.planning', 'formal', 'evidence');
+      const prevPath = path.join(evidenceDir, 'hypothesis-measurements.prev.json');
+      const currentPath = path.join(evidenceDir, 'hypothesis-measurements.json');
+      fs.writeFileSync(prevPath, JSON.stringify({
+        measurements: [null, { assumption_name: 'X', verdict: 'UNMEASURABLE', source_model: '/p/NFOscillation.tla' }]
+      }));
+      fs.writeFileSync(currentPath, JSON.stringify({
+        measurements: [null, { assumption_name: 'X', verdict: 'CONFIRMED', source_model: '/p/NFOscillation.tla' }]
+      }));
+      const result = mod.loadHypothesisTransitions(tmpDir);
+      assert.equal(result.length, 1);
+      assert.equal(result[0].assumption_name, 'X');
     });
   });
 

@@ -256,6 +256,33 @@ test('Intent Normalizer - Context Parameter', async (t) => {
   });
 });
 
+test('Intent Normalizer - Context Parameter (hardening)', async (t) => {
+  await t.test('handles null context without throwing when a mutation matches', () => {
+    const input = 'add timeout variable';
+    let result;
+    assert.doesNotThrow(() => { result = normalizeFixIntent(input, null); });
+    assert.equal(result.mutations.length, 1);
+    assert.equal(result.mutations[0].type, 'add_state_variable');
+    // falls back to the no-bugDescription reasoning branch
+    assert(result.mutations[0].reasoning.includes('timeout'));
+  });
+
+  await t.test('handles null context across all three channels', () => {
+    const input = 'if timeout then retry. add retryCount variable. ```retryCount++;```';
+    let result;
+    assert.doesNotThrow(() => { result = normalizeFixIntent(input, null); });
+    assert(result.mutations.length >= 3);
+  });
+
+  await t.test('handles non-object (number/string/array) context without throwing', () => {
+    for (const bad of [12345, 'oops', []]) {
+      let result;
+      assert.doesNotThrow(() => { result = normalizeFixIntent('add retryCount variable', bad); });
+      assert.equal(result.mutations.length, 1);
+    }
+  });
+});
+
 test('Intent Normalizer - Mutation Structure', async (t) => {
   await t.test('each mutation has required fields: type, target, content, reasoning', () => {
     const input = 'if timeout then retry. add retryCount variable.';

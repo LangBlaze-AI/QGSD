@@ -20,7 +20,10 @@
  * @returns {{ get, set, reset, stats }}
  */
 function createLRUCache(capacity, ttlMs) {
-  const _capacity = capacity !== undefined ? capacity : 100;
+  const _capacity =
+    typeof capacity === 'number' && Number.isFinite(capacity) && capacity >= 0
+      ? capacity
+      : 100;
   const _ttlMs = ttlMs !== undefined ? ttlMs : 300000;
 
   /** @type {Map<string, {value: any, expiresAt: number}>} */
@@ -65,11 +68,12 @@ function createLRUCache(capacity, ttlMs) {
       if (_cache.has(key)) {
         // Remove first to re-insert at MRU position (refresh TTL + position)
         _cache.delete(key);
-      } else if (_cache.size >= _capacity) {
-        // Evict LRU (first inserted / least recently used)
-        _cache.delete(_cache.keys().next().value);
       }
       _cache.set(key, { value, expiresAt: Date.now() + _ttlMs });
+      // Evict LRU entries until within capacity (correct even when capacity is 0)
+      while (_cache.size > _capacity) {
+        _cache.delete(_cache.keys().next().value);
+      }
     },
 
     /**

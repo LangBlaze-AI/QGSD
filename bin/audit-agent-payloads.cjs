@@ -39,7 +39,8 @@ const getArg = (f) => {
 };
 
 const JSON_OUT = hasFlag('--json');
-const THRESHOLD_KB = parseInt(getArg('--threshold-kb') ?? '128', 10);
+const _thresholdRaw = parseInt(getArg('--threshold-kb') ?? '128', 10);
+const THRESHOLD_KB = (Number.isFinite(_thresholdRaw) && _thresholdRaw > 0) ? _thresholdRaw : 128;
 const TIMEOUT_MS = 15000;
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB
 
@@ -125,6 +126,14 @@ function scanSkillFiles() {
 
 // Try to run a script with --json
 function auditScript(scriptName) {
+  if (typeof scriptName !== 'string' || scriptName.length === 0) {
+    return {
+      name: String(scriptName),
+      size_bytes: 0,
+      status: 'missing',
+      reason: 'Invalid script name',
+    };
+  }
   const scriptPath = path.join(ROOT, 'bin', scriptName);
 
   if (!fs.existsSync(scriptPath)) {

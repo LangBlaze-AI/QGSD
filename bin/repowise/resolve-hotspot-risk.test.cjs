@@ -87,3 +87,45 @@ describe('cache management', () => {
     assert.equal(result, null);
   });
 });
+
+describe('resolveHotspotRisk corrupt cache', () => {
+  const os = require('os');
+  it('treats a cache with a non-array files field as a miss instead of crashing', () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hotspot-rhr-'));
+    const cacheDir = path.join(tmpRoot, '.planning', 'repowise');
+    fs.mkdirSync(cacheDir, { recursive: true });
+    // valid JSON, fresh mtime, but no `files` array (partial/legacy shape)
+    fs.writeFileSync(path.join(cacheDir, 'hotspot-cache.json'), JSON.stringify({ summary: {} }), 'utf8');
+
+    let result;
+    assert.doesNotThrow(() => {
+      result = resolveHotspotRisk(['some/changed/file.js'], tmpRoot);
+    });
+    assert.equal(result.risk_level, 'routine');
+    assert.ok(Array.isArray(result.hotspot_files));
+    assert.equal(result.hotspot_files.length, 0);
+
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+});
+
+describe('resolveHotspotRisk non-array changedFiles', () => {
+  it('returns routine (no throw) when changedFiles is null', () => {
+    let result;
+    assert.doesNotThrow(() => {
+      result = resolveHotspotRisk(null, PROJECT_ROOT);
+    });
+    assert.equal(result.risk_level, 'routine');
+    assert.deepEqual(result.hotspot_files, []);
+    assert.equal(result.max_score, 0);
+  });
+
+  it('returns routine (no throw) when changedFiles is undefined', () => {
+    let result;
+    assert.doesNotThrow(() => {
+      result = resolveHotspotRisk(undefined, PROJECT_ROOT);
+    });
+    assert.equal(result.risk_level, 'routine');
+    assert.deepEqual(result.hotspot_files, []);
+  });
+});

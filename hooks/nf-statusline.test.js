@@ -1057,3 +1057,38 @@ test('QS2c: fresh cache but a slot is MISSING its entry -> dim count, NO false r
       `must NOT show a repair/restart CTA when slots are merely unprobed; got: ${JSON.stringify(line1(stdout))}`);
   } finally { fs.rmSync(tempHome, { recursive: true, force: true }); fs.rmSync(tempDir, { recursive: true, force: true }); }
 });
+
+// SL-1: non-string model.display_name must not blank the whole statusline (fail-open contract)
+test('SL-1: non-string model.display_name with context_window still renders (no blank statusline)', () => {
+  const { stdout, exitCode } = runHook({
+    model: { display_name: { nested: 'oops' } },
+    workspace: { current_dir: '/tmp/projA' },
+    context_window: { remaining_percentage: 50 },
+  });
+  assert.strictEqual(exitCode, 0, 'exit code must be 0');
+  assert.ok(stdout.length > 0, `statusline must not be blank on corrupt display_name; got: ${JSON.stringify(stdout)}`);
+  assert.ok(stdout.includes('projA'), `must still show directory basename; got: ${JSON.stringify(stdout)}`);
+});
+
+// SL-2: provider name colliding with Object.prototype member must not be falsely MCP-registered
+test('SL-2: provider name colliding with Object.prototype (toString) is not falsely MCP-registered', () => {
+  const tempHome = setupSlotsHome('sl2-proto', {
+    providers: [{ name: 'toString' }],
+    mcpServers: {}, // genuinely NOT registered
+  });
+  const tempDir = makeTempDir('sl2-dir');
+  try {
+    const { stdout, exitCode } = runHook(
+      { model: { display_name: 'M' }, workspace: { current_dir: tempDir } },
+      { HOME: tempHome }
+    );
+    assert.strictEqual(exitCode, 0);
+    assert.ok(stdout.includes('\x1b[2m· toString\x1b[0m'),
+      `unregistered slot must render dim ·; got: ${JSON.stringify(stdout)}`);
+    assert.ok(!stdout.includes('quorum'),
+      `must not count an unregistered (inherited-name) slot toward quorum; got: ${JSON.stringify(stdout)}`);
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

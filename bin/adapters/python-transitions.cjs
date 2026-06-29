@@ -17,6 +17,9 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('Python transitions adapter: filePath must be a non-empty string');
+  }
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
 
@@ -24,7 +27,7 @@ function extract(filePath, options = {}) {
 
   // Extract states: states = ['idle', 'processing', 'done']
   const stateNames = [];
-  const statesMatch = content.match(/states\s*=\s*\[([^\]]+)\]/);
+  const statesMatch = content.match(/\bstates\s*=\s*\[([^\]]+)\]/);
   if (statesMatch) {
     const statesStr = statesMatch[1];
     const statePattern = /['"](\w+)['"]/g;
@@ -41,7 +44,7 @@ function extract(filePath, options = {}) {
 
   // Extract transitions: list of dicts
   const transitions = [];
-  const transBlockMatch = content.match(/transitions\s*=\s*\[([\s\S]*?)\]/);
+  const transBlockMatch = content.match(/\btransitions\s*=\s*\[([\s\S]*)\]/);
   if (transBlockMatch) {
     const transBlock = transBlockMatch[1];
     // Match individual dicts

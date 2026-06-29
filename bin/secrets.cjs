@@ -107,7 +107,8 @@ async function syncToClaudeJson(_service) {
     return;
   }
 
-  if (!claudeJson.mcpServers || typeof claudeJson.mcpServers !== 'object') return;
+  if (!claudeJson || typeof claudeJson !== 'object' ||
+      !claudeJson.mcpServers || typeof claudeJson.mcpServers !== 'object') return;
 
   // A value is "fillable" (safe to overwrite) when it's an unresolved ${VAR}
   // placeholder, empty, or absent — i.e. it's not a concrete provisioned credential.
@@ -183,7 +184,8 @@ function patchClaudeJsonForKey(envKey, value) {
   let claudeJson;
   try { claudeJson = JSON.parse(raw); } catch (_) { return; }
 
-  if (!claudeJson.mcpServers || typeof claudeJson.mcpServers !== 'object') return;
+  if (!claudeJson || typeof claudeJson !== 'object' ||
+      !claudeJson.mcpServers || typeof claudeJson.mcpServers !== 'object') return;
 
   let patched = 0;
   for (const serverName of Object.keys(claudeJson.mcpServers)) {
@@ -220,11 +222,12 @@ function patchCcrConfigForKey(envKey, value) {
   let config;
   try { config = JSON.parse(raw); } catch (_) { return; }
 
-  if (!Array.isArray(config.providers)) return;
+  if (!config || typeof config !== 'object' || !Array.isArray(config.providers)) return;
 
   let patched = 0;
   for (const provider of config.providers) {
-    if (provider.name && provider.name.toLowerCase() === providerName.toLowerCase()) {
+    if (!provider || typeof provider !== 'object') continue;
+    if (typeof provider.name === 'string' && provider.name.toLowerCase() === providerName.toLowerCase()) {
       provider.api_key = value;
       patched++;
     }

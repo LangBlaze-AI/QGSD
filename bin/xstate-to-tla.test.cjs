@@ -9,6 +9,8 @@ const { test } = require('node:test');
 const assert   = require('node:assert');
 const { spawnSync } = require('child_process');
 const path = require('path');
+const fs   = require('fs');
+const os   = require('os');
 
 const XSTATE_TO_TLA = path.join(__dirname, 'xstate-to-tla.cjs');
 
@@ -37,4 +39,28 @@ test('--dry output references NFQuorum_xstate.tla, not NFQuorum.tla, for --modul
     !combinedOutput.includes('NFQuorum.tla') || combinedOutput.includes('NFQuorum_xstate.tla'),
     'Output should reference NFQuorum_xstate.tla, not NFQuorum.tla: ' + combinedOutput
   );
+});
+
+test('exits non-zero when fsm-to-tla is terminated by a signal (null exit status)', () => {
+  // Stub child_process.spawnSync inside the wrapper process via a --require preload so it
+  // returns a signal-kill result (status: null) WITHOUT actually spawning fsm-to-tla.
+  // The preload mutates the cached child_process module before the wrapper destructures it.
+  const preload = path.join(os.tmpdir(), `nf-x2t-preload-${process.pid}-${Date.now()}.cjs`);
+  fs.writeFileSync(
+    preload,
+    "'use strict';\n" +
+    "const cp = require('child_process');\n" +
+    "cp.spawnSync = () => ({ status: null, signal: 'SIGSEGV', error: undefined, stdout: null, stderr: null });\n"
+  );
+  try {
+    const result = spawnSync(process.execPath, [XSTATE_TO_TLA, 'whatever.ts', '--dry'], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE_OPTIONS: `--require ${preload}` },
+    });
+    // Current code does `process.exit(result.status || 0)` -> exits 0, masking the crash.
+    assert.notStrictEqual(result.status, 0, 'signal-killed child must not be reported as success');
+    assert.strictEqual(result.status, 1);
+  } finally {
+    fs.unlinkSync(preload);
+  }
 });

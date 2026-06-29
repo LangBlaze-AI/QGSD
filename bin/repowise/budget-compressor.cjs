@@ -37,7 +37,7 @@ function formatEntryByDetail(entry, detail) {
     case 'signatures':
       if (entry.skeletonEntries && entry.skeletonEntries.length > 0) {
         return entry.skeletonEntries
-          .filter(e => e.type.includes('function') || e.type.includes('class') || e.type.includes('method'))
+          .filter(e => e && typeof e.type === 'string' && (e.type.includes('function') || e.type.includes('class') || e.type.includes('method')))
           .map(e => `${e.type} ${e.name} [${e.start}-${e.end}]`)
           .join('\n');
       }
@@ -57,10 +57,10 @@ function allocateBudget(files, totalBudget, options) {
   const minBudgetPerFile = opts.minBudgetPerFile || 50;
   const riskThreshold = opts.riskThreshold || 0.4;
 
-  if (files.length === 0) return { allocations: [], totalUsed: 0, overflow: false };
+  if (!Array.isArray(files) || files.length === 0) return { allocations: [], totalUsed: 0, overflow: false };
 
   const totalMinBudget = files.length * minBudgetPerFile;
-  if (totalBudget < totalMinBudget) {
+  if (!Number.isFinite(totalBudget) || totalBudget < totalMinBudget) {
     // Budget insufficient — produce filename-only listing
     return {
       allocations: files.map(f => ({

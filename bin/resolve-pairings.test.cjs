@@ -87,4 +87,26 @@ describe('resolve-pairings', () => {
     assert.equal(registry.models['nonexistent.als'], undefined);
   });
 
+  it('should not prototype-pollute when model is __proto__', () => {
+    const registry = makeRegistry({ 'm1.als': { requirements: [] } });
+    const pairing = makePairing('__proto__', 'REQ-99');
+    try {
+      const result = confirmPairing(pairing, registry);
+      // Treated as missing model: no registry mutation, no added
+      assert.equal(result.added, false);
+      // Object.prototype must NOT gain a `requirements` property
+      assert.equal({}.requirements, undefined);
+    } finally {
+      // Defensive cleanup in case the (buggy) code polluted the prototype
+      delete Object.prototype.requirements;
+    }
+  });
+
+  it('should not crash when registry is null', () => {
+    const pairing = makePairing('m1.als', 'REQ-01');
+    const result = confirmPairing(pairing, null);
+    assert.equal(result.pairing.status, 'confirmed');
+    assert.equal(result.added, false);
+  });
+
 });

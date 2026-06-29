@@ -56,3 +56,36 @@ test('extract parses rust-fsm fixture with correct counts', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract ignores a single-element derive when finding machine name/initial', () => {
+  const single = `
+use rust_fsm::*;
+
+state_machine! {
+    derive(Clone)
+    CircuitBreaker(Closed)
+    Trip {
+        Closed => Open
+    }
+}
+`;
+  const tmpFile = path.join(os.tmpdir(), 'rust-fsm-derive-' + Date.now() + '.rs');
+  fs.writeFileSync(tmpFile, single, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    assert.strictEqual(ir.initial, 'Closed', 'initial must be the machine initial state, not a derive trait');
+    assert.ok(!ir.stateNames.includes('Clone'), 'derive trait name must not leak into stateNames');
+    assert.deepStrictEqual([...ir.stateNames].sort(), ['Closed', 'Open']);
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract throws a clear error for a directory path', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rust-fsm-dir-'));
+  try {
+    assert.throws(() => extract(dir), /Not a file/);
+  } finally {
+    fs.rmdirSync(dir);
+  }
+});

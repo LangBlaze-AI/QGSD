@@ -98,9 +98,11 @@ function replayPerSession(conformanceEvents, traceStats, mapToXStateEvent, creat
 
   const sessions = (traceStats && traceStats.sessions) || [];
   for (const session of sessions) {
+    if (!session || typeof session !== 'object') continue;
     const sessionStart = new Date(session.start).getTime();
     const sessionEnd = new Date(session.end).getTime();
     const sessionEvents = conformanceEvents.filter(e => {
+      if (!e || typeof e !== 'object') return false;
       const t = new Date(e.ts).getTime();
       return t >= sessionStart && t <= sessionEnd;
     });

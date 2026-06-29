@@ -43,8 +43,8 @@ function handleMessage(msg) {
   try {
     switch (msg.cmd) {
       case 'sweep': {
-        const fn = nfSolve[msg.fnName];
-        if (!fn) {
+        const fn = Object.prototype.hasOwnProperty.call(nfSolve, msg.fnName) ? nfSolve[msg.fnName] : undefined;
+        if (typeof fn !== 'function') {
           process.send({ ok: false, error: `Sweep function "${msg.fnName}" not found`, cmd: msg.cmd, id: msg.id });
           return;
         }
@@ -67,11 +67,11 @@ function handleMessage(msg) {
 
       case 'batchSweep': {
         // Run multiple sweep functions, sending each result as it completes
-        const fnNames = msg.fnNames || [];
+        const fnNames = Array.isArray(msg.fnNames) ? msg.fnNames : [];
         for (const fnName of fnNames) {
           try {
-            const fn = nfSolve[fnName];
-            if (!fn) {
+            const fn = Object.prototype.hasOwnProperty.call(nfSolve, fnName) ? nfSolve[fnName] : undefined;
+            if (typeof fn !== 'function') {
               process.send({ ok: false, error: `"${fnName}" not found`, cmd: 'sweepResult', id: msg.id, fnName, done: false });
               continue;
             }

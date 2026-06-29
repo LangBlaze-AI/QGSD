@@ -14,10 +14,11 @@ function getProgressPath(cwd) {
 }
 
 function initProgress(cwd, { planFile, totalTasks, taskNames, doneConditions }) {
+  const safePlanFile = typeof planFile === 'string' ? planFile : '';
   const progress = {
     version: 1,
-    phase: planFile.match(/v[\d.]+-\d+/)?.[0] || 'unknown',
-    plan: planFile.match(/-(\d+)-PLAN/)?.[1] || '01',
+    phase: safePlanFile.match(/v[\d.]+-\d+/)?.[0] || 'unknown',
+    plan: safePlanFile.match(/-(\d+)-PLAN/)?.[1] || '01',
     plan_file: planFile,
     total_tasks: totalTasks,
     status: 'in_progress',
@@ -50,7 +51,11 @@ function completeTask(cwd, { taskNumber, commitHash }) {
   const progressPath = getProgressPath(cwd);
   if (!fs.existsSync(progressPath)) return null;
 
-  const progress = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
+  let progress;
+  try {
+    progress = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
+  } catch (_) { return null; }
+  if (!progress || !Array.isArray(progress.tasks)) return null;
   const task = progress.tasks.find(t => t.number === taskNumber);
   if (!task) return null;
 
@@ -91,7 +96,11 @@ function completeTask(cwd, { taskNumber, commitHash }) {
 function getStatus(cwd) {
   const progressPath = getProgressPath(cwd);
   if (!fs.existsSync(progressPath)) return { status: 'no_progress_file' };
-  return JSON.parse(fs.readFileSync(progressPath, 'utf8'));
+  try {
+    return JSON.parse(fs.readFileSync(progressPath, 'utf8'));
+  } catch (_) {
+    return { status: 'no_progress_file' };
+  }
 }
 
 function incrementIteration(cwd) {

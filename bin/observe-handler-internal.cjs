@@ -41,8 +41,12 @@ const { loadProviders } = require('./resolve-providers.cjs');
  * @returns {object} Standard observe schema result
  */
 function handleInternal(sourceConfig, options) {
-  const label = sourceConfig.label || 'Internal Work';
-  const projectRoot = options.projectRoot || process.cwd();
+  // Defensive normalization: tolerate null/undefined/non-object args so the
+  // fail-open contract holds even before the outer try block below.
+  const cfg = (sourceConfig && typeof sourceConfig === 'object') ? sourceConfig : {};
+  const opts = (options && typeof options === 'object') ? options : {};
+  const label = cfg.label || 'Internal Work';
+  const projectRoot = opts.projectRoot || process.cwd();
   const issues = [];
 
   try {
@@ -172,7 +176,7 @@ function handleInternal(sourceConfig, options) {
 
         if (grepOutput) {
           const lines = grepOutput.split('\n').filter(l => l.trim());
-          const limit = options.limitOverride || 50; // Cap to avoid noise
+          const limit = opts.limitOverride || 50; // Cap to avoid noise
           const todoSeverityMap = Object.fromEntries(todoPatterns.map(p => [p.tag, p.severity]));
 
           let count = 0;
@@ -298,7 +302,7 @@ function handleInternal(sourceConfig, options) {
         const pm = JSON.parse(fs.readFileSync(pmPath, 'utf8'));
         const metrics = pm.metrics || [];
         const outstanding = metrics.filter(m => m.status === 'proposed');
-        const limit = options.limitOverride || 20;
+        const limit = opts.limitOverride || 20;
 
         // Surface tier-1 outstanding metrics first, then tier-2
         const sorted = outstanding.sort((a, b) => (a.tier || 99) - (b.tier || 99));
@@ -682,7 +686,7 @@ function handleInternal(sourceConfig, options) {
           try { secData = JSON.parse(result.stdout); } catch (_) { /* non-JSON */ }
           if (secData) {
             const findings = secData.findings || secData.results || [];
-            const limit = options.limitOverride || 10;
+            const limit = opts.limitOverride || 10;
             let count = 0;
             for (const f of findings) {
               if (count >= limit) break;
@@ -814,7 +818,7 @@ function handleInternal(sourceConfig, options) {
       if (fs.existsSync(memoryStorePath)) {
         const { readLastN } = require(memoryStorePath);
         const { clusterErrors } = require(path.join(projectRoot, 'bin', 'error-clusterer.cjs'));
-        const limit = options.limitOverride || 20;
+        const limit = opts.limitOverride || 20;
         const recentErrors = readLastN(projectRoot, 'errors', limit);
 
         // Filter entries that have actionable content

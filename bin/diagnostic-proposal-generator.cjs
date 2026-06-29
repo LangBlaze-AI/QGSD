@@ -49,7 +49,8 @@ function generateCorrectionProposals(stateDiff, bugContext) {
     return [];
   }
 
-  const { summary = {}, per_state_diffs = [] } = stateDiff;
+  const summary = (stateDiff.summary && typeof stateDiff.summary === 'object') ? stateDiff.summary : {};
+  const per_state_diffs = Array.isArray(stateDiff.per_state_diffs) ? stateDiff.per_state_diffs : [];
   const { changed_fields = [], first_divergence_index = null, total_changes = 0 } = summary;
 
   // Early return: no changes detected
@@ -75,6 +76,7 @@ function generateCorrectionProposals(stateDiff, bugContext) {
     let fieldStateIndex = null;
 
     for (const stateDiffEntry of per_state_diffs) {
+      if (!stateDiffEntry || !Array.isArray(stateDiffEntry.changes)) continue;
       const changeForField = stateDiffEntry.changes.find(c => c.key === field);
       if (changeForField) {
         fieldOldValue = changeForField.oldValue;
@@ -85,7 +87,7 @@ function generateCorrectionProposals(stateDiff, bugContext) {
     }
 
     // Determine confidence: 0.9 if field appears in bugContext, 0.7 otherwise
-    const fieldInBugContext = bugContextStr.includes(field.toLowerCase());
+    const fieldInBugContext = bugContextStr.includes(String(field).toLowerCase());
     const confidence = fieldInBugContext ? 0.9 : 0.7;
 
     // Build evidence-based reasoning using concrete values
@@ -135,15 +137,16 @@ function generateCorrectionProposals(stateDiff, bugContext) {
   // Generate one proposal if per_state_diffs is non-empty AND first_divergence_index is not null
   if (per_state_diffs.length > 0 && first_divergence_index !== null) {
     const firstDiff = per_state_diffs[0];
-    const changeCount = firstDiff.changes.length;
+    const firstChanges = (firstDiff && Array.isArray(firstDiff.changes)) ? firstDiff.changes : [];
+    const changeCount = firstChanges.length;
 
     // Confidence: 0.8 for 1-2 changed fields (focused), 0.6 for 3+ (diffuse)
     const invariantConfidence = changeCount <= 2 ? 0.8 : 0.6;
 
     // Build evidence-based reasoning with concrete field:oldValue->newValue pairs
     let reasoningParts = [];
-    for (let j = 0; j < Math.min(3, firstDiff.changes.length); j++) {
-      const change = firstDiff.changes[j];
+    for (let j = 0; j < Math.min(3, firstChanges.length); j++) {
+      const change = firstChanges[j];
       reasoningParts.push(`${change.key}:${JSON.stringify(change.oldValue)}->${JSON.stringify(change.newValue)}`);
     }
 
@@ -153,8 +156,8 @@ function generateCorrectionProposals(stateDiff, bugContext) {
 
     // Build example with actual field names and values
     let exampleConditions = [];
-    for (let j = 0; j < Math.min(2, firstDiff.changes.length); j++) {
-      const change = firstDiff.changes[j];
+    for (let j = 0; j < Math.min(2, firstChanges.length); j++) {
+      const change = firstChanges[j];
       const op = typeof change.newValue === 'number' ? '=' : '=';
       exampleConditions.push(`${change.key} ${op} ${JSON.stringify(change.newValue)}`);
     }
@@ -187,6 +190,7 @@ function generateCorrectionProposals(stateDiff, bugContext) {
     let sampleNewValue = undefined;
 
     for (const stateDiffEntry of per_state_diffs) {
+      if (!stateDiffEntry || !Array.isArray(stateDiffEntry.changes)) continue;
       const changeForField = stateDiffEntry.changes.find(c => c.key === firstField);
       if (changeForField) {
         sampleOldValue = changeForField.oldValue;

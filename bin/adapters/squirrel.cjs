@@ -33,10 +33,20 @@ function extract(filePath, options = {}) {
   if (initMatch) initial = initMatch[1];
 
   // Extract @Transit annotations: @Transit(from="A", to="B", on="E", whenMvel="guard")
-  const transitPattern = /@Transit\s*\(\s*([^)]+)\)/g;
+  const transitStart = /@Transit\s*\(/g;
   let tm;
-  while ((tm = transitPattern.exec(content)) !== null) {
-    const args = tm[1];
+  while ((tm = transitStart.exec(content)) !== null) {
+    // Balance parens (skipping string literals) so guards like whenMvel="f(x)" don't truncate args.
+    let depth = 1, i = transitStart.lastIndex, inStr = null;
+    for (; i < content.length && depth > 0; i++) {
+      const ch = content[i];
+      if (inStr) { if (ch === inStr) inStr = null; }
+      else if (ch === '"' || ch === "'") inStr = ch;
+      else if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+    }
+    const args = content.slice(transitStart.lastIndex, i - 1);
+    transitStart.lastIndex = i;
 
     const fromMatch = args.match(/from\s*=\s*["']?(\w+)["']?/);
     const toMatch = args.match(/to\s*=\s*["']?(\w+)["']?/);
@@ -63,12 +73,13 @@ function extract(filePath, options = {}) {
   }
 
   // Extract builder-style: builder.externalTransition().from(A).to(B).on(E)
-  const builderPattern = /\.from\s*\(\s*(?:\w+\.)?(\w+)\s*\)\s*\.to\s*\(\s*(?:\w+\.)?(\w+)\s*\)\s*\.on\s*\(\s*(?:\w+\.)?(\w+)\s*\)/g;
+  const builderPattern = /\.from\s*\(\s*(?:\w+\.)?(\w+)\s*\)\s*\.to\s*\(\s*(?:\w+\.)?(\w+)\s*\)\s*\.on\s*\(\s*(?:\w+\.)?(\w+)\s*\)(?:\s*\.whenMvel\s*\(\s*["']([^"']+)["']\s*\))?/g;
   let bm;
   while ((bm = builderPattern.exec(content)) !== null) {
     const fromState = bm[1];
     const target = bm[2];
     const event = bm[3];
+    const guard = bm[4] || null;
 
     stateSet.add(fromState);
     stateSet.add(target);
@@ -80,7 +91,7 @@ function extract(filePath, options = {}) {
       transitions.push({
         fromState,
         event,
-        guard: null,
+        guard,
         target,
         assignedKeys: [],
       });

@@ -337,6 +337,44 @@ test('Handles missing or invalid stateDiff gracefully', (t) => {
   assert.deepEqual(generateCorrectionProposals({}, 'bug'), [], 'Should handle empty object');
 });
 
+// Test: Handles null summary without crashing (fail-open)
+test('Handles null summary without crashing', (t) => {
+  assert.deepEqual(
+    generateCorrectionProposals({ summary: null, per_state_diffs: [] }, 'bug'),
+    [],
+    'Should treat null summary as empty and return []'
+  );
+  assert.deepEqual(
+    generateCorrectionProposals({ summary: 'oops', per_state_diffs: [] }, 'bug'),
+    [],
+    'Should treat string summary as empty and return []'
+  );
+});
+
+// Test: Handles per_state_diffs entry missing a changes array
+test('Handles per_state_diffs entry missing changes array', (t) => {
+  const stateDiff = {
+    summary: { changed_fields: ['x'], first_divergence_index: 0, total_changes: 1 },
+    per_state_diffs: [{ index: 0 }] // no `changes` property
+  };
+  assert.doesNotThrow(
+    () => generateCorrectionProposals(stateDiff, 'bug'),
+    'Should not throw when a per_state_diffs entry lacks a changes array'
+  );
+});
+
+// Test: Handles non-string entry in changed_fields without crashing
+test('Handles non-string entry in changed_fields', (t) => {
+  const stateDiff = {
+    summary: { changed_fields: [123], first_divergence_index: 0, total_changes: 1 },
+    per_state_diffs: [{ index: 0, changes: [{ key: 123, oldValue: 1, newValue: 2 }] }]
+  };
+  assert.doesNotThrow(
+    () => generateCorrectionProposals(stateDiff, 'bug'),
+    'Should not throw when changed_fields contains a non-string element'
+  );
+});
+
 // Test: Export verification
 test('module exports generateCorrectionProposals', (t) => {
   assert.ok(typeof generateCorrectionProposals === 'function', 'generateCorrectionProposals should be exported');

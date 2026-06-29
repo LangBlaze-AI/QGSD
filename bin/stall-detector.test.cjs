@@ -84,6 +84,30 @@ describe('detectStalledSlots', () => {
     const result = detectStalledSlots(tmpDir, {});
     assert.deepEqual(result, []);
   });
+
+  it('does not lose detection when a record slot is named __proto__', () => {
+    tmpDir = makeTempProject([
+      { slot: '__proto__', reason: 'TIMEOUT' },
+      { slot: 'codex-1', reason: 'TIMEOUT' },
+      { slot: 'codex-1', reason: 'TIMEOUT' },
+    ]);
+    const result = detectStalledSlots(tmpDir, {});
+    const codex = result.find(r => r.slot === 'codex-1');
+    assert.ok(codex, 'codex-1 stall must still be detected despite a __proto__ record');
+    assert.equal(codex.consecutiveTimeouts, 2);
+  });
+
+  it('skips null/non-object records instead of dropping all detection', () => {
+    tmpDir = makeTempProject([
+      null,
+      { slot: 'codex-1', reason: 'TIMEOUT' },
+      { slot: 'codex-1', reason: 'TIMEOUT' },
+    ]);
+    const result = detectStalledSlots(tmpDir, {});
+    const codex = result.find(r => r.slot === 'codex-1');
+    assert.ok(codex, 'valid records must still be processed despite a null entry');
+    assert.equal(codex.consecutiveTimeouts, 2);
+  });
 });
 
 // --- shouldEscalate ---
@@ -101,6 +125,12 @@ describe('shouldEscalate', () => {
     const result = shouldEscalate(stalled, { stall_detection: { consecutive_threshold: 2, check_commits: false } }, '/tmp');
     assert.equal(result.escalate, true);
     assert.equal(result.stalledSlots.length, 1);
+  });
+
+  it('does not throw when given null/undefined stalledSlots', () => {
+    assert.doesNotThrow(() => shouldEscalate(null, { stall_detection: { check_commits: false } }, '/tmp'));
+    const result = shouldEscalate(undefined, { stall_detection: { check_commits: false } }, '/tmp');
+    assert.equal(result.escalate, false);
   });
 
   it('returns false when commits active', () => {

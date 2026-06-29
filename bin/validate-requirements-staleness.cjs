@@ -65,7 +65,7 @@ function scan(root) {
   let envelope;
   try { envelope = JSON.parse(fs.readFileSync(reqPath, 'utf8')); }
   catch (e) { return { error: 'requirements.json parse error: ' + e.message }; }
-  const reqs = envelope.requirements || [];
+  const reqs = Array.isArray(envelope && envelope.requirements) ? envelope.requirements : [];
 
   const findings = [];
   const counts = {};

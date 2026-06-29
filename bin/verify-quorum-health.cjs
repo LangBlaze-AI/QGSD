@@ -45,8 +45,9 @@ function computeRates(slot, rounds) {
 
   // Exclude Mode A rounds (empty-string result) and UNAVAILABLE typo variant —
   // neither carries a valid binary signal for rate calculation.
-  const relevant = rounds.filter(r => {
-    const v = r.votes && r.votes[slot];
+  const list = Array.isArray(rounds) ? rounds : [];
+  const relevant = list.filter(r => {
+    const v = r && r.votes ? r.votes[slot] : undefined;
     return v !== undefined && v !== '' && v !== 'UNAVAILABLE';
   });
   const n = relevant.length;
@@ -144,7 +145,13 @@ function computePassAtKRates(conformanceEventsPath) {
   const result = { total: 0, pass_at_1: 0, pass_at_3: 0, avg_k: 0 };
   if (!fs.existsSync(conformanceEventsPath)) return result;
 
-  const lines = fs.readFileSync(conformanceEventsPath, 'utf8')
+  let raw;
+  try {
+    raw = fs.readFileSync(conformanceEventsPath, 'utf8');
+  } catch {
+    return result;
+  }
+  const lines = raw
     .split('\n')
     .filter(l => l.trim().length > 0);
 

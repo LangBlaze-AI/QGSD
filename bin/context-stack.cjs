@@ -71,6 +71,7 @@ function append(cwd, { phase, type, content, tags }) {
  */
 function queryRecentPhases(cwd, currentPhase, maxPhases) {
   if (maxPhases === undefined) maxPhases = 3;
+  if (!Number.isFinite(maxPhases) || maxPhases <= 0) return [];
   const entries = readAllEntries(cwd);
   if (entries.length === 0) return [];
 
@@ -125,7 +126,7 @@ function formatInjection(cwd, currentPhase) {
  * Rewrites the file. Returns { removed, remaining }.
  */
 function prune(cwd, keepPhases) {
-  if (keepPhases === undefined) keepPhases = 5;
+  if (keepPhases === undefined || !Number.isFinite(keepPhases)) keepPhases = 5;
   const entries = readAllEntries(cwd);
   if (entries.length === 0) return { removed: 0, remaining: 0 };
 
@@ -139,7 +140,7 @@ function prune(cwd, keepPhases) {
     }
   }
 
-  const keepSet = new Set(phaseOrder.slice(-keepPhases));
+  const keepSet = new Set(keepPhases <= 0 ? [] : phaseOrder.slice(-keepPhases));
   const kept = entries.filter(e => keepSet.has(e.phase));
   const removed = entries.length - kept.length;
 

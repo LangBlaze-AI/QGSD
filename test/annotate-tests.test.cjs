@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const { hasExistingAnnotation, querySuggestion, injectAnnotation } = require('../bin/annotate-tests.cjs');
+const { discoverTestFiles, hasExistingAnnotation, querySuggestion, injectAnnotation } = require('../bin/annotate-tests.cjs');
 
 // ── hasExistingAnnotation ───────────────────────────────────────────────────
 
@@ -75,6 +75,31 @@ describe('querySuggestion', () => {
   test('returns null for file with no reachable requirements', () => {
     const result = querySuggestion(mockPi, mockReach, 'test/no-link.test.cjs');
     assert.strictEqual(result, null, 'should return null when no requirements reachable');
+  });
+
+  test('returns null when pi has no nodes property (corrupt/partial index)', () => {
+    assert.strictEqual(querySuggestion({}, mockReach, 'test/foo.test.cjs'), null);
+  });
+
+  test('returns null when pi is null', () => {
+    assert.strictEqual(querySuggestion(null, mockReach, 'test/foo.test.cjs'), null);
+  });
+
+  test('returns null when pi is an array (wrong shape)', () => {
+    assert.strictEqual(querySuggestion([], mockReach, 'test/foo.test.cjs'), null);
+  });
+});
+
+// ── discoverTestFiles ───────────────────────────────────────────────────────
+
+describe('discoverTestFiles', () => {
+  test('returns [] for null/undefined dirs', () => {
+    assert.deepStrictEqual(discoverTestFiles(null), []);
+    assert.deepStrictEqual(discoverTestFiles(undefined), []);
+  });
+
+  test('returns [] for a non-array (string) dirs', () => {
+    assert.deepStrictEqual(discoverTestFiles('test'), []);
   });
 });
 

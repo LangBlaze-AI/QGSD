@@ -447,3 +447,78 @@ test('triage_tags defaults to empty array when not provided', () => {
     delete require.cache[require.resolve(MODULE_PATH)];
   }
 });
+
+// ─── writeCheckResult creates the parent directory when missing ────────────
+test('writeCheckResult creates missing parent directory', () => {
+  const tmpDir  = fs.mkdtempSync(path.join(os.tmpdir(), 'wcr-test-'));
+  // Parent dirs 'nested/deep' deliberately do NOT exist yet.
+  const tmpFile = path.join(tmpDir, 'nested', 'deep', 'check-results.ndjson');
+  try {
+    const origEnv = process.env.CHECK_RESULTS_PATH;
+    process.env.CHECK_RESULTS_PATH = tmpFile;
+    delete require.cache[require.resolve(MODULE_PATH)];
+    const { writeCheckResult } = require(MODULE_PATH);
+
+    assert.doesNotThrow(() => {
+      writeCheckResult({
+        tool: 'run-tlc', formalism: 'tla', result: 'pass',
+        check_id: 'tla:quorum-safety', surface: 'tla',
+        property: 'Safety invariants', runtime_ms: 100,
+        summary: 'pass: test'
+      });
+    });
+
+    const line   = fs.readFileSync(tmpFile, 'utf8').trim();
+    const record = JSON.parse(line);
+    assert.strictEqual(record.result, 'pass');
+
+    process.env.CHECK_RESULTS_PATH = origEnv;
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    delete require.cache[require.resolve(MODULE_PATH)];
+  }
+});
+
+// ─── writeCheckResult rejects non-finite runtime_ms ────────────────────────
+test('writeCheckResult rejects NaN runtime_ms', () => {
+  delete require.cache[require.resolve(MODULE_PATH)];
+  const { writeCheckResult } = require(MODULE_PATH);
+  assert.throws(
+    () => writeCheckResult({
+      tool: 'run-tlc', formalism: 'tla', result: 'pass',
+      check_id: 'tla:quorum-safety', surface: 'tla',
+      property: 'Safety invariants', runtime_ms: NaN,
+      summary: 'pass: test'
+    }),
+    /runtime_ms/
+  );
+});
+
+// ─── metadata coerces to {} when not a plain object ────────────────────────
+test('writeCheckResult normalizes non-object metadata to {}', () => {
+  const tmpDir  = fs.mkdtempSync(path.join(os.tmpdir(), 'wcr-test-'));
+  const tmpFile = path.join(tmpDir, 'check-results.ndjson');
+  try {
+    const origEnv = process.env.CHECK_RESULTS_PATH;
+    process.env.CHECK_RESULTS_PATH = tmpFile;
+    delete require.cache[require.resolve(MODULE_PATH)];
+    const { writeCheckResult } = require(MODULE_PATH);
+
+    writeCheckResult({
+      tool: 'run-tlc', formalism: 'tla', result: 'pass',
+      check_id: 'tla:quorum-safety', surface: 'tla',
+      property: 'Safety invariants', runtime_ms: 100,
+      summary: 'pass: test', metadata: 'oops'
+    });
+
+    const line   = fs.readFileSync(tmpFile, 'utf8').trim();
+    const record = JSON.parse(line);
+    assert.deepStrictEqual(record.metadata, {},
+      'non-object metadata must be normalized to an empty object');
+
+    process.env.CHECK_RESULTS_PATH = origEnv;
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    delete require.cache[require.resolve(MODULE_PATH)];
+  }
+});

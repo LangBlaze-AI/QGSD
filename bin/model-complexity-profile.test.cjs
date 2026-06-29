@@ -363,3 +363,68 @@ test('join miss: alloy:quorum-votes with no matching state-space entry', () => {
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
+
+// ── Adversarial: malformed external inputs (skip-malformed / fail-open) ──────
+
+test('non-string check_id in NDJSON is skipped, profiler does not crash', () => {
+  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'mcp-test-'));
+  const formalDir = path.join(tmpDir, '.planning', 'formal');
+  fs.mkdirSync(formalDir, { recursive: true });
+
+  const ndjsonLines = [
+    JSON.stringify({ check_id: 123, runtime_ms: 5000, formalism: 'tla' }),
+    JSON.stringify({ check_id: { foo: 1 }, runtime_ms: 9000, formalism: 'tla' }),
+    JSON.stringify({ check_id: 'tla:valid', runtime_ms: 200, formalism: 'tla' }),
+  ];
+  fs.writeFileSync(path.join(formalDir, 'check-results.ndjson'), ndjsonLines.join('\n') + '\n', 'utf8');
+
+  // Currently throws: execFileSync surfaces main()'s TypeError as a non-zero exit.
+  const profile = runProfiler(tmpDir);
+
+  assert.equal(profile.summary.total_profiled, 1, 'only the valid string check_id is profiled');
+  assert.ok(profile.profiles['tla:valid']);
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('null model entry in state-space-report does not crash profiler', () => {
+  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'mcp-test-'));
+  const formalDir = path.join(tmpDir, '.planning', 'formal');
+  fs.mkdirSync(formalDir, { recursive: true });
+
+  const stateSpace = {
+    models: {
+      '.planning/formal/tla/Foo.tla': null,
+      '.planning/formal/tla/NFQuorum.tla': { module_name: 'NFQuorum', estimated_states: 5000, risk_level: 'LOW', variables: ['a', 'b'] },
+    },
+    cross_model: { pairs: [] },
+  };
+  fs.writeFileSync(path.join(formalDir, 'state-space-report.json'), JSON.stringify(stateSpace), 'utf8');
+  // no check-results.ndjson -> static-only branch (step 2) runs
+
+  // Currently throws: main() dereferences modelData.module_name on the null entry.
+  const profile = runProfiler(tmpDir);
+
+  assert.ok(profile.profiles['static:NFQuorum'], 'valid model still profiled');
+  assert.equal(profile.summary.total_profiled, 1, 'null entry skipped, not counted');
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('check_id "__proto__" is not silently dropped from profiles', () => {
+  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'mcp-test-'));
+  const formalDir = path.join(tmpDir, '.planning', 'formal');
+  fs.mkdirSync(formalDir, { recursive: true });
+
+  const ndjsonLines = [
+    JSON.stringify({ check_id: '__proto__', runtime_ms: 35000, formalism: 'tla' }),
+  ];
+  fs.writeFileSync(path.join(formalDir, 'check-results.ndjson'), ndjsonLines.join('\n') + '\n', 'utf8');
+
+  const profile = runProfiler(tmpDir);
+
+  // Currently 0: the entry vanished because it reassigned the prototype of `profiles`.
+  assert.equal(profile.summary.total_profiled, 1, '__proto__ check_id must be counted');
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});

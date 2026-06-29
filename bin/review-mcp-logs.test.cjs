@@ -181,3 +181,65 @@ test('TC5: percentile logic p50 >= 100 and p95 >= 300 for 4 durations', () => {
     cleanup(logFile);
   }
 });
+
+// TC6: server named __proto__ must not crash via prototype-key deref
+test('TC6: server named __proto__ does not crash (prototype-pollution key)', () => {
+  const logFile = writeSyntheticLog([
+    `2026-02-22T10:00:00.000Z MCP server "__proto__": Tool 'proto-tool' completed successfully in 100ms`,
+  ]);
+  try {
+    const { stdout, exitCode } = runCLI(['--json', '--days', '1', '--tool', '__proto__']);
+    assert.strictEqual(exitCode, 0, 'must not crash on a server named __proto__');
+    let parsed;
+    try {
+      parsed = JSON.parse(stdout);
+    } catch (e) {
+      assert.fail(`stdout must be valid JSON, not a crash; stdout[:200]: ${stdout.slice(0, 200)}`);
+    }
+    assert.ok(parsed.serverStats, 'parsed result must have serverStats key');
+  } finally {
+    cleanup(logFile);
+  }
+});
+
+// TC7: non-numeric --days falls back to default and still finds a recent log
+test('TC7: non-numeric --days falls back to default and still finds a recent log', () => {
+  const serverName = 'nf-tc7-days';
+  const logFile = writeSyntheticLog([
+    `2026-02-22T10:00:00.000Z MCP server "${serverName}": Tool 'd-tool' completed successfully in 120ms`,
+  ]);
+  try {
+    const { stdout, exitCode } = runCLI(['--json', '--days', 'week', '--tool', 'nf-tc7']);
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    let parsed;
+    try {
+      parsed = JSON.parse(stdout);
+    } catch (e) {
+      assert.fail(`stdout must be valid JSON (NaN cutoff hid all files); stdout[:200]: ${stdout.slice(0, 200)}`);
+    }
+    assert.ok(parsed.serverStats[serverName], `serverStats must contain "${serverName}" despite bad --days`);
+  } finally {
+    cleanup(logFile);
+  }
+});
+
+// TC8: non-numeric --files falls back to default and still finds a recent log
+test('TC8: non-numeric --files falls back to default and still finds a recent log', () => {
+  const serverName = 'nf-tc8-files';
+  const logFile = writeSyntheticLog([
+    `2026-02-22T10:00:00.000Z MCP server "${serverName}": Tool 'f-tool' completed successfully in 130ms`,
+  ]);
+  try {
+    const { stdout, exitCode } = runCLI(['--json', '--files', 'all', '--days', '1', '--tool', 'nf-tc8']);
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    let parsed;
+    try {
+      parsed = JSON.parse(stdout);
+    } catch (e) {
+      assert.fail(`stdout must be valid JSON (NaN slice emptied file list); stdout[:200]: ${stdout.slice(0, 200)}`);
+    }
+    assert.ok(parsed.serverStats[serverName], `serverStats must contain "${serverName}" despite bad --files`);
+  } finally {
+    cleanup(logFile);
+  }
+});

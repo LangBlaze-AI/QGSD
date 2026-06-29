@@ -159,3 +159,32 @@ test('requirement-map.cjs has tla:solve-convergence entry with FV-01, FV-02, FV-
   assert.deepStrictEqual(ids, ['FV-01', 'FV-02', 'FV-03'],
     'tla:solve-convergence must map to [FV-01, FV-02, FV-03]');
 });
+
+// OSC-TLC-01: prototype-pollution config key must not poison the error record
+test('unknown config with a prototype-pollution key (__proto__) still records an error check result instead of silently dropping it', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const outFile = path.join(os.tmpdir(), 'nf-osc-tlc-proto-' + process.pid + '-' + Date.now() + '.ndjson');
+  try {
+    const result = spawnSync(process.execPath, [RUN_OSCILLATION_TLC, '--config=__proto__'], {
+      encoding: 'utf8',
+      env: { ...process.env, CHECK_RESULTS_PATH: outFile },
+    });
+    // Still an operator error -> exit 1 with the clear message.
+    assert.strictEqual(result.status, 1);
+    assert.match(result.stderr, /Unknown config/i);
+    // The poison key must NOT cause writeCheckResult to throw internally.
+    assert.doesNotMatch(result.stderr, /failed to write check result/i,
+      'prototype-pollution config key must not poison the check_id/property bracket lookup');
+    // The structured error record must be recorded, not silently dropped.
+    assert.ok(fs.existsSync(outFile), 'an error check-result line must be written');
+    const lines = fs.readFileSync(outFile, 'utf8').trim().split('\n').filter(Boolean);
+    assert.strictEqual(lines.length, 1, 'exactly one error record expected');
+    const rec = JSON.parse(lines[0]);
+    assert.strictEqual(rec.result, 'error');
+    assert.strictEqual(rec.check_id, 'tla:__proto__');
+    assert.strictEqual(typeof rec.property, 'string');
+  } finally {
+    if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
+  }
+});

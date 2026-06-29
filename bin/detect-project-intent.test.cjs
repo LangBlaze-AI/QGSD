@@ -239,4 +239,74 @@ describe('detectProjectIntent', () => {
       cleanupTmpDir(tmpDir);
     }
   });
+
+  // Adversarial: a test-runner-only project must not be misread as a web app
+  test('11. vitest devDependency is not misclassified as base_profile web (substring guard)', () => {
+    const tmpDir = createTempProject({
+      'package.json': JSON.stringify({
+        name: 'test-stats',
+        devDependencies: { vitest: '^1.0.0' },
+      }),
+    });
+    try {
+      const result = detectProjectIntent(tmpDir);
+
+      assert.notEqual(result.suggested.base_profile, 'web');
+      assert.equal(result.suggested.base_profile, 'unknown');
+      assert.ok(result.needs_confirmation.includes('base_profile'));
+    } finally {
+      cleanupTmpDir(tmpDir);
+    }
+  });
+
+  // Sanity: a real vite dependency must still be detected after the fix
+  test('12. real vite dependency still detected as base_profile web', () => {
+    const tmpDir = createTempProject({
+      'package.json': JSON.stringify({
+        name: 'real-web',
+        devDependencies: { vite: '^4.0.0' },
+      }),
+    });
+    try {
+      const result = detectProjectIntent(tmpDir);
+      assert.equal(result.suggested.base_profile, 'web');
+    } finally {
+      cleanupTmpDir(tmpDir);
+    }
+  });
+
+  // Adversarial: 'chi-squared' must not trip the payment-library substring match
+  test('13. chi-squared dependency is not flagged sensitive (square substring guard)', () => {
+    const tmpDir = createTempProject({
+      'package.json': JSON.stringify({
+        name: 'stats-project',
+        dependencies: { 'chi-squared': '^1.0.0' },
+      }),
+    });
+    try {
+      const result = detectProjectIntent(tmpDir);
+
+      assert.equal(result.suggested.sensitive, false);
+      assert.equal(result.signals.find(s => s.dimension === 'sensitive'), undefined);
+      assert.ok(!result.needs_confirmation.includes('sensitive'));
+    } finally {
+      cleanupTmpDir(tmpDir);
+    }
+  });
+
+  // Sanity: a real square dependency must still be detected after the fix
+  test('14. real square dependency still flagged sensitive', () => {
+    const tmpDir = createTempProject({
+      'package.json': JSON.stringify({
+        name: 'shop',
+        dependencies: { square: '^30.0.0' },
+      }),
+    });
+    try {
+      const result = detectProjectIntent(tmpDir);
+      assert.equal(result.suggested.sensitive, true);
+    } finally {
+      cleanupTmpDir(tmpDir);
+    }
+  });
 });

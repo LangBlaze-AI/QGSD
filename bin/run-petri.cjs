@@ -60,8 +60,9 @@ function parsePetriDOT(content) {
     transitions = Math.floor(nodeMatches.length / 2);
   }
 
-  // Count edges (arcs)
-  const arcMatches = content.match(/->/g) || [];
+  // Count edges (arcs) — ignore '->' that appears inside [...] attribute blocks
+  const contentNoAttrs = content.replace(/\[[^\]]*\]/g, '');
+  const arcMatches = contentNoAttrs.match(/->/g) || [];
   const arcs = arcMatches.length;
 
   // Validate bounds
@@ -93,7 +94,7 @@ function main() {
   const startMs = Date.now();
   const petriDir = path.join(ROOT, '.planning', 'formal', 'petri');
 
-  if (!fs.existsSync(petriDir)) {
+  if (!fs.existsSync(petriDir) || !fs.statSync(petriDir).isDirectory()) {
     process.stderr.write(TAG + ' Petri directory not found: ' + petriDir + '\n');
     process.exit(0);
   }
@@ -114,7 +115,7 @@ function main() {
   let totalValid = 0;
 
   for (const dotFile of dotFiles) {
-    const modelName = dotFile.replace('.dot', '');
+    const modelName = dotFile.replace(/\.dot$/, '');
     const checkId = 'petri:' + modelName;
     const filePath = path.join(petriDir, dotFile);
     const taskStartMs = Date.now();

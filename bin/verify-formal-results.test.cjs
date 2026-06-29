@@ -111,3 +111,34 @@ test('VERIFY-02: core/templates/verification-report.md contains ## Formal Verifi
   assert.match(src, /## Formal Verification/,
     'Template must contain ## Formal Verification section (VERIFY-02)');
 });
+
+// ─── VERIFY-01 edge — groupByFormalism survives a bare `null` NDJSON record ───
+test('VERIFY-01 edge: parseNDJSON + groupByFormalism survives a bare `null` NDJSON line', () => {
+  const { parseNDJSON, groupByFormalism } = require('./verify-formal-results.cjs');
+  const tmpFile = path.join(os.tmpdir(), 'fv-null-' + Date.now() + '.ndjson');
+  const content = [
+    JSON.stringify({ formalism: 'tla', result: 'pass' }),
+    'null', // valid JSON scalar — slips past parseNDJSON's malformed-line guard
+    JSON.stringify({ formalism: 'tla', result: 'fail' }),
+  ].join('\n');
+  fs.writeFileSync(tmpFile, content, 'utf8');
+  try {
+    const results = parseNDJSON(tmpFile);
+    // Currently throws: Cannot read properties of null (reading 'formalism')
+    const grouped = groupByFormalism(results);
+    assert.deepStrictEqual(grouped.tla, { pass: 1, fail: 1, warn: 0, inconclusive: 0 },
+      'null record must be skipped; valid records grouped normally');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+// ─── VERIFY-01 edge — groupByFormalism must not drop a '__proto__' formalism ───
+test('VERIFY-01 edge: groupByFormalism records a record whose formalism is "__proto__"', () => {
+  const { groupByFormalism } = require('./verify-formal-results.cjs');
+  const grouped = groupByFormalism([{ formalism: '__proto__', result: 'fail' }]);
+  assert.ok(Object.prototype.hasOwnProperty.call(grouped, '__proto__'),
+    '__proto__ formalism must become an own key, not be swallowed by the prototype chain');
+  assert.strictEqual(grouped['__proto__'].fail, 1,
+    'fail count must be 1, not silently dropped');
+});

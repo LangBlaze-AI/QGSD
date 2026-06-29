@@ -111,7 +111,7 @@ function loadRequirements() {
   }
   try {
     const data = JSON.parse(fs.readFileSync(REQUIREMENTS_PATH, 'utf8'));
-    return data.requirements || [];
+    return (data && Array.isArray(data.requirements)) ? data.requirements : [];
   } catch (err) {
     process.stderr.write(TAG + ' warn: requirements.json parse error: ' + err.message + '\n');
     return [];
@@ -144,7 +144,7 @@ function buildCheckResultMap(checkResults) {
   // Deduplicate by check_id (last entry wins)
   const byCheckId = new Map();
   for (const entry of checkResults) {
-    if (entry.check_id) {
+    if (entry && typeof entry === 'object' && entry.check_id) {
       byCheckId.set(entry.check_id, entry);
     }
   }
@@ -181,7 +181,7 @@ function validateBidirectionalLinks(registry, requirements) {
   // Build maps
   const registryReqs = {}; // modelFile -> Set<reqId>
   for (const [modelFile, entry] of Object.entries(registry.models || {})) {
-    const reqs = entry.requirements || [];
+    const reqs = (entry && entry.requirements) || [];
     if (reqs.length > 0) {
       registryReqs[modelFile] = new Set(reqs);
     }
@@ -407,7 +407,7 @@ function buildMatrix() {
     if (annotatedFiles.has(modelFile)) continue; // annotations exist — skip fallback
 
     const entry = registry.models[modelFile];
-    const reqs = entry.requirements || [];
+    const reqs = (entry && entry.requirements) || [];
     if (reqs.length === 0) continue; // no requirements in registry either
 
     fallbackCount++;

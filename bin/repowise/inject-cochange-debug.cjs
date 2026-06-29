@@ -17,8 +17,8 @@ function getCachePath(projectRoot) {
 }
 
 function loadCachedCoChange(projectRoot) {
-  const cachePath = getCachePath(projectRoot);
   try {
+    const cachePath = getCachePath(projectRoot);
     if (!fs.existsSync(cachePath)) return null;
     const stat = fs.statSync(cachePath);
     if (Date.now() - stat.mtimeMs > CACHE_TTL_MS) return null;
@@ -29,8 +29,8 @@ function loadCachedCoChange(projectRoot) {
 }
 
 function saveCachedCoChange(projectRoot, data) {
-  const cachePath = getCachePath(projectRoot);
   try {
+    const cachePath = getCachePath(projectRoot);
     const dir = path.dirname(cachePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(cachePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
@@ -57,7 +57,9 @@ function injectCoChangeDebug(filePath, projectRoot, options) {
   // Rebuild fileIndex from pairs if it's missing (e.g., loaded from cache)
   if (!cochange.fileIndex || !(cochange.fileIndex instanceof Map)) {
     const fileIndex = new Map();
-    for (const p of cochange.pairs) {
+    const pairs = Array.isArray(cochange.pairs) ? cochange.pairs : [];
+    for (const p of pairs) {
+      if (!p || typeof p !== 'object') continue;
       if (!fileIndex.has(p.file1)) fileIndex.set(p.file1, []);
       if (!fileIndex.has(p.file2)) fileIndex.set(p.file2, []);
       fileIndex.get(p.file1).push({ partner: p.file2, shared_commits: p.shared_commits, coupling_degree: p.coupling_degree });

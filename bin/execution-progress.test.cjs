@@ -480,4 +480,53 @@ describe('execution-progress', () => {
       }
     });
   });
+
+  describe('getStatus corrupt-file hardening', () => {
+    it('returns safe sentinel on corrupt JSON instead of throwing (fail-open)', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ep-corrupt-'));
+      try {
+        const p = getProgressPath(dir);
+        fs.mkdirSync(path.dirname(p), { recursive: true });
+        fs.writeFileSync(p, '{ "version": 1, "tas', 'utf8'); // truncated/corrupt
+        let result;
+        assert.doesNotThrow(() => { result = getStatus(dir); });
+        assert.deepStrictEqual(result, { status: 'no_progress_file' });
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('completeTask shape hardening', () => {
+    it('returns null (no crash) when progress file has no tasks array', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ep-notasks-'));
+      try {
+        const p = getProgressPath(dir);
+        fs.mkdirSync(path.dirname(p), { recursive: true });
+        fs.writeFileSync(p, JSON.stringify({ version: 1, status: 'in_progress' }), 'utf8');
+        let result;
+        assert.doesNotThrow(() => { result = completeTask(dir, { taskNumber: 1, commitHash: 'abc1234' }); });
+        assert.equal(result, null);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('initProgress null planFile hardening', () => {
+    it('does not crash when planFile is null; defaults phase/plan', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ep-nullplan-'));
+      try {
+        let result;
+        assert.doesNotThrow(() => {
+          result = initProgress(dir, { planFile: null, totalTasks: 1, taskNames: ['Task 1'] });
+        });
+        assert.equal(result.phase, 'unknown');
+        assert.equal(result.plan, '01');
+        assert.equal(result.tasks.length, 1);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
 });

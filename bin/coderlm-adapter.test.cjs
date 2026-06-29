@@ -483,4 +483,47 @@ describe('coderlm-adapter module', () => {
       assert.equal(m.queryCount, 0);
     });
   });
+
+  describe('createAdapter — null/non-object opts hardening', () => {
+    it('does not throw when opts is null and returns a usable adapter', () => {
+      let adapter;
+      assert.doesNotThrow(() => { adapter = createAdapter(null); });
+      assert.equal(typeof adapter.health, 'function');
+      assert.equal(typeof adapter.getCallers, 'function');
+    });
+
+    it('does not throw when opts is a non-object primitive', () => {
+      assert.doesNotThrow(() => createAdapter('http://localhost:9999'));
+      assert.doesNotThrow(() => createAdapter(42));
+    });
+  });
+
+  describe('getCallers — transient network error must not poison the cache', () => {
+    it('re-queries after a transient connection error instead of serving a cached error', async () => {
+      let callersHits = 0;
+      const server = http.createServer((req, res) => {
+        if (req.url.includes('/sessions')) {
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ session_id: 's1' }));
+          return;
+        }
+        callersHits++;
+        if (callersHits === 1) {
+          // simulate a transient network error on the first callers GET
+          req.socket.destroy();
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ callers: ['caller1'] }));
+      });
+      await new Promise((r) => server.listen(0, r));
+      const port = server.address().port;
+      const adapter = createAdapter({ host: `http://localhost:${port}`, enabled: true, timeout: 1000 });
+      const first = await adapter.getCallers('sym', 'file.js');
+      assert.ok(first.error, 'first call should surface the transient error');
+      const second = await adapter.getCallers('sym', 'file.js');
+      assert.deepStrictEqual(second.callers, ['caller1'], 'second call must re-query, not return a cached error');
+      await new Promise((r) => server.close(r));
+    });
+  });
 });

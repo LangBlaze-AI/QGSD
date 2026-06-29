@@ -39,6 +39,9 @@ function familyOf(slot) {
 // Returns [{ file, line, rule, ref, hint }] — rule is 'mcp-stale-slot' or 'mcp-bad-tool'.
 function findMcpToolViolations(text, file) {
   const out = [];
+  // Fail-open on non-string input (e.g. a Buffer from fs.readFileSync without an
+  // encoding, or an array): coerce before text.slice(...).split('\n').
+  if (typeof text !== 'string') text = text == null ? '' : String(text);
   let m;
   MCP_REF.lastIndex = 0;
   while ((m = MCP_REF.exec(text)) !== null) {

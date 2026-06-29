@@ -43,3 +43,30 @@ test('extract parses XState v4 fixture with correct counts', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract treats null options like default options', () => {
+  const tmpFile = path.join(os.tmpdir(), 'xstate-v4-null-opts-' + Date.now() + '.js');
+  fs.writeFileSync(tmpFile, fixture, 'utf8');
+  try {
+    const ir = extract(tmpFile, null);
+    assert.strictEqual(ir.framework, 'xstate-v4');
+    assert.strictEqual(ir.stateNames.length, 3);
+    assert.strictEqual(ir.transitions.length, 3);
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract tolerates non-object userVars with a context-bearing machine', () => {
+  const ctxFixture = `module.exports = { initial: "idle", states: { idle: {} }, context: { count: 0, name: "x" } };`;
+  const tmpFile = path.join(os.tmpdir(), 'xstate-v4-ctx-uservars-' + Date.now() + '.js');
+  fs.writeFileSync(tmpFile, ctxFixture, 'utf8');
+  try {
+    const ir = extract(tmpFile, { userVars: null });
+    assert.ok(Array.isArray(ir.ctxVars));
+    assert.strictEqual(ir.ctxVars.length, 2);
+    assert.deepStrictEqual(ir.ctxVars.sort(), ['count', 'name']);
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

@@ -204,3 +204,85 @@ test('run-formal-verify.cjs STEPS contains petri: entries', () => {
   const src = fs.readFileSync(rfvPath, 'utf8');
   assert.ok(src.includes('petri:'), 'STEPS must include petri: entries');
 });
+
+// Test 9: petri path is a file, not a directory — must degrade gracefully (exit 0)
+test('run-petri.cjs exits 0 when petri path is a file, not a directory', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'petri-test-'));
+  const formalDir = path.join(tmpDir, '.planning', 'formal');
+  fs.mkdirSync(formalDir, { recursive: true });
+  // Create .planning/formal/petri as a FILE instead of a directory
+  fs.writeFileSync(path.join(formalDir, 'petri'), 'not a directory', 'utf8');
+
+  const result = spawnSync(process.execPath, [TOOL_PATH, '--project-root=' + tmpDir], {
+    cwd: tmpDir,
+    encoding: 'utf8',
+    timeout: 15000,
+  });
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+
+  assert.strictEqual(
+    result.status,
+    0,
+    'must exit 0 when petri path is a file, not crash: ' + (result.stderr || result.error)
+  );
+});
+
+// Test 10: '->' inside a label attribute must not be counted as a real arc
+test('run-petri.cjs does not count -> inside attribute labels as arcs', () => {
+  const labelArcDot = `
+digraph g {
+  p0 [shape=circle,label="x->y"];
+  t0 [shape=box];
+}
+`;
+
+  const { tmpDir, result, ndjsonPath } = runPetri({ 'label-arc.dot': labelArcDot });
+
+  let ndjson = '';
+  try {
+    if (fs.existsSync(ndjsonPath)) {
+      ndjson = fs.readFileSync(ndjsonPath, 'utf8');
+    }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+
+  assert.strictEqual(result.status, 0, 'must exit 0');
+  assert.ok(ndjson.includes('petri:label-arc'), 'NDJSON must contain check_id');
+  assert.ok(
+    ndjson.includes('"result":"fail"') || ndjson.includes('"result": "fail"'),
+    'net with no real arcs must FAIL even when a label contains "->": ' + ndjson
+  );
+});
+
+// Test 11: only the trailing .dot extension is stripped from the model name
+test('run-petri.cjs strips only the trailing .dot from the model name', () => {
+  const validDot = `
+digraph g {
+  p0 [shape=circle];
+  t0 [shape=box];
+  p0 -> t0;
+}
+`;
+
+  const { tmpDir, result, ndjsonPath } = runPetri({ 'flow.dotcfg.dot': validDot });
+
+  let ndjson = '';
+  try {
+    if (fs.existsSync(ndjsonPath)) {
+      ndjson = fs.readFileSync(ndjsonPath, 'utf8');
+    }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+
+  assert.strictEqual(result.status, 0, 'must exit 0');
+  assert.ok(
+    ndjson.includes('petri:flow.dotcfg'),
+    'check_id must strip only the trailing .dot: ' + ndjson
+  );
+  assert.ok(
+    !ndjson.includes('petri:flowcfg.dot'),
+    'must not mangle a middle .dot occurrence: ' + ndjson
+  );
+});

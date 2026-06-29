@@ -222,3 +222,76 @@ test('source_id is recorded in registry', async () => {
 
   console.log(`Test ran, exit code: ${result.status}`);
 });
+
+test('non-object registry JSON fails open (no crash) and still merges spec', () => {
+  const tmpDir = createTempFormalDir({
+    tla: {
+      'target.tla': '---- MODULE Target ----\nEXTENDS Integers\nPROPERTY Existing == TRUE\n====',
+      'proposed-changes.tla': '---- MODULE ProposedChanges ----\nPROPERTY NewInvariant == TRUE\n===='
+    }
+  });
+
+  // Valid JSON, but a bare number — not an object
+  fs.writeFileSync(
+    path.join(tmpDir, '.planning', 'formal', 'model-registry.json'),
+    '42',
+    'utf8'
+  );
+
+  const result = runPromoteTool(
+    tmpDir,
+    '.planning/formal/tla/proposed-changes.tla',
+    '.planning/formal/tla/target.tla',
+    'v0.21-01-test'
+  );
+
+  // Fail-open: malformed-but-parseable registry must not crash the tool.
+  assert.strictEqual(result.status, 0, `expected exit 0, got ${result.status}; stderr: ${result.stderr}`);
+  const merged = fs.readFileSync(
+    path.join(tmpDir, '.planning', 'formal', 'tla', 'target.tla'), 'utf8');
+  assert.ok(merged.includes('PROPERTY NewInvariant'), 'spec should still be merged');
+});
+
+test('string version in registry increments numerically (no string concat)', () => {
+  const tmpDir = createTempFormalDir({
+    tla: {
+      'target.tla': '---- MODULE Target ----\nEXTENDS Integers\nPROPERTY Existing == TRUE\n====',
+      'proposed-changes.tla': '---- MODULE ProposedChanges ----\nPROPERTY NewInvariant == TRUE\n===='
+    }
+  });
+
+  // NOTE: the real registry key is the path relative to project root
+  const registry = {
+    version: '1.0',
+    last_sync: '2026-03-01T12:34:56.789Z',
+    models: {
+      '.planning/formal/tla/target.tla': {
+        version: '5', // stored as a STRING
+        last_updated: '2026-03-01T12:34:56.789Z',
+        update_source: 'manual',
+        source_id: null,
+        session_id: null,
+        description: 'Target spec'
+      }
+    }
+  };
+  fs.writeFileSync(
+    path.join(tmpDir, '.planning', 'formal', 'model-registry.json'),
+    JSON.stringify(registry, null, 2),
+    'utf8'
+  );
+
+  const result = runPromoteTool(
+    tmpDir,
+    '.planning/formal/tla/proposed-changes.tla',
+    '.planning/formal/tla/target.tla',
+    'v0.21-01-test'
+  );
+
+  assert.strictEqual(result.status, 0, `stderr: ${result.stderr}`);
+  const updated = JSON.parse(fs.readFileSync(
+    path.join(tmpDir, '.planning', 'formal', 'model-registry.json'), 'utf8'));
+  assert.strictEqual(
+    updated.models['.planning/formal/tla/target.tla'].version, 6,
+    'version should be numeric 6, not string "51"');
+});

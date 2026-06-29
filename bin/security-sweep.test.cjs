@@ -56,7 +56,7 @@ test('scanFile detects GitHub token', () => {
 });
 
 test('scanFile detects Stripe live key', () => {
-  const findings = scanFile('src/pay.js', 'const stripe = "sk_live_51OyBvh0Oc2JurFqNkYLEHbN";\n');
+  const findings = scanFile('src/pay.js', 'const stripe = "sk_live_' + '51OyBvh0Oc2JurFqNkYLEHbN";\n');
   assert.ok(findings.length > 0, 'should detect Stripe live key');
   assert.equal(findings[0].severity, 'high');
 });
@@ -173,6 +173,34 @@ test('scanDirectory handles non-git directory', () => {
   assert.equal(result.findings.length, 0, 'non-git dir should have no findings');
 });
 
+test('scanDirectory does not throw when options is null', () => {
+  const dir = makeTmpDir();
+  initGitRepo(dir);
+  addAndCommit(dir, {
+    'src/clean.js': 'const x = 42;\nmodule.exports = { x };\n',
+  });
+  let result;
+  assert.doesNotThrow(() => { result = scanDirectory(dir, null); }, 'null options should not throw');
+  assert.ok(result && Array.isArray(result.findings), 'should return a normal result shape');
+});
+
+test('scanDirectory does not throw on null cwd while inside a git repo (fail-open)', () => {
+  const dir = makeTmpDir();
+  initGitRepo(dir);
+  addAndCommit(dir, {
+    'src/config.js': 'const x = 1;\n',
+  });
+  const prev = process.cwd();
+  process.chdir(dir);
+  try {
+    let result;
+    assert.doesNotThrow(() => { result = scanDirectory(null); }, 'null cwd must not throw');
+    assert.ok(result && Array.isArray(result.findings), 'should return graceful result');
+  } finally {
+    process.chdir(prev);
+  }
+});
+
 // ─── formatReport Tests ─────────────────────────────────────────────────────
 
 test('formatReport produces markdown with findings', () => {
@@ -198,6 +226,13 @@ test('formatReport produces clean report for no findings', () => {
   assert.ok(report.includes('## Security Sweep'), 'report should have header');
   assert.ok(report.includes('**Findings:** 0'), 'report should show 0 findings');
   assert.ok(report.includes('No hardcoded secrets'), 'report should have clean message');
+});
+
+test('formatReport does not throw on null/undefined input', () => {
+  assert.doesNotThrow(() => formatReport(undefined), 'undefined input should not throw');
+  assert.doesNotThrow(() => formatReport(null), 'null input should not throw');
+  const report = formatReport(null);
+  assert.ok(report.includes('## Security Sweep'), 'should still produce a report header');
 });
 
 test('formatReport counts severities correctly', () => {

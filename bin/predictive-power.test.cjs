@@ -218,6 +218,45 @@ describe('linkBugsToProperties', () => {
     assert.strictEqual(result.total_bugs, 0);
     assert.strictEqual(result.total_linked, 0);
   });
+
+  it('fails open when debt.json contains literal null (parseable but wrong shape)', () => {
+    const debtPath = path.join(tmpDir, 'debt-null.json');
+    fs.writeFileSync(debtPath, 'null');
+    const regPath = writeTmp('reg-for-null.json', { models: {} });
+    const result = linkBugsToProperties(debtPath, regPath);
+    assert.strictEqual(result.total_bugs, 0);
+    assert.strictEqual(result.total_linked, 0);
+    assert.deepStrictEqual(result.mappings, []);
+  });
+
+  it('fails open when model-registry.json contains literal null', () => {
+    const debtPath = writeTmp('debt-for-regnull.json', { debt_entries: [] });
+    const regPath = path.join(tmpDir, 'reg-null.json');
+    fs.writeFileSync(regPath, 'null');
+    const result = linkBugsToProperties(debtPath, regPath);
+    assert.strictEqual(result.total_bugs, 0);
+    assert.strictEqual(result.total_linked, 0);
+  });
+
+  it('skips null/non-object model registry entries instead of crashing', () => {
+    const debtPath = writeTmp('debt-modelnull.json', {
+      debt_entries: [{
+        id: 'bug-x', fingerprint: 'fp-x', title: 'corrupt registry',
+        formal_refs: ['REQ-01'],
+        source_entries: [{ source_type: 'internal' }],
+      }],
+    });
+    const regPath = writeTmp('reg-modelnull.json', {
+      models: {
+        '.planning/formal/alloy/broken.als': null,
+        '.planning/formal/alloy/ok.als': { requirements: ['REQ-01'], gate_maturity: 'ADVISORY', layer_maturity: 1 },
+      },
+    });
+    const result = linkBugsToProperties(debtPath, regPath);
+    assert.strictEqual(result.total_bugs, 1);
+    assert.strictEqual(result.mappings[0].matching_models.length, 1);
+    assert.strictEqual(result.mappings[0].matching_models[0].model_path, '.planning/formal/alloy/ok.als');
+  });
 });
 
 // ── writeBugToProperty ───────────────────────────────────────────────────────
@@ -440,6 +479,19 @@ describe('computeConvergenceVelocity', () => {
     assert.strictEqual(result.r_to_f.status, 'INSUFFICIENT_DATA');
     assert.strictEqual(result.f_to_t.status, 'INSUFFICIENT_DATA');
     assert.strictEqual(result.c_to_f.status, 'INSUFFICIENT_DATA');
+  });
+
+  it('ignores a literal-null line in solve-trend.jsonl instead of crashing', () => {
+    const lines = [];
+    for (let i = 0; i < 12; i++) {
+      lines.push(JSON.stringify({ session: i, layers: { r_to_f: 50 * Math.pow(0.85, i) } }));
+    }
+    lines.push('null'); // parseable-but-null adversarial line
+    const trendPath = path.join(tmpDir, 'trend-nullline.jsonl');
+    fs.writeFileSync(trendPath, lines.join('\n'));
+
+    const result = computeConvergenceVelocity(trendPath);
+    assert.ok(result.r_to_f.status === 'CONVERGING' || result.r_to_f.status === 'CONVERGED');
   });
 });
 

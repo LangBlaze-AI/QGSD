@@ -198,3 +198,24 @@ test('Task 2: Debt state machine enforcement (TDD)', async (t) => {
     assert.ok(Array.isArray(ALLOWED_TRANSITIONS['open']), 'Each state should have an array of targets');
   });
 });
+
+// ========== DSM-1: non-object entry fails closed (no throw) ==========
+test('transitionDebtEntry fails closed on non-object entry (no throw)', () => {
+  for (const bad of [null, undefined, 'open', 42, true]) {
+    let result;
+    assert.doesNotThrow(() => { result = transitionDebtEntry(bad, 'acknowledged'); },
+      `entry=${String(bad)} should not throw`);
+    assert.strictEqual(result.success, false, `entry=${String(bad)} should return success:false`);
+    assert.ok(result.error, `entry=${String(bad)} should return an error message`);
+  }
+});
+
+// ========== DSM-2: prototype-chain keys as fromStatus are no-op ==========
+test('canTransition treats prototype-chain keys as no-op, never throws', () => {
+  for (const key of ['__proto__', 'constructor', 'prototype', 'hasOwnProperty', 'toString']) {
+    let result;
+    assert.doesNotThrow(() => { result = canTransition(key, 'open'); },
+      `fromStatus=${key} should not throw`);
+    assert.strictEqual(result, false, `fromStatus=${key} should be rejected (no own transitions)`);
+  }
+});

@@ -83,6 +83,7 @@ function defaultOutputPath() {
  * Returns null for unclassifiable verdicts (DELIBERATE, '—').
  */
 function classifyRoundOutcome(round) {
+  if (!round || typeof round !== 'object') return null;
   const v = round.verdict;
   if (!v) return null;
   if (POSITIVE_VERDICTS.has(v)) return 'positive';
@@ -107,10 +108,10 @@ function tallyVoteTypeOutcomes(rounds) {
 
     const votes = round.votes || {};
     for (const [, vote] of Object.entries(votes)) {
-      if (!vote || vote === '' || vote === 'UNAVAIL') continue;
+      if (!vote || typeof vote !== 'string' || vote === 'UNAVAIL') continue;
       // Map TP+ → TP, TN+ → TN for base type tallying
       const baseType = vote.replace('+', '');
-      if (tallies[baseType]) {
+      if (Object.prototype.hasOwnProperty.call(tallies, baseType)) {
         tallies[baseType][outcome] += 1;
         tallies[baseType].total += 1;
       }

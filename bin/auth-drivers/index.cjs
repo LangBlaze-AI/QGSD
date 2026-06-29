@@ -22,6 +22,10 @@ const REQUIRED_METHODS = ['list', 'switch', 'addCredentialFile', 'extractAccount
 function loadDriver(type) {
   if (!type) return null;
 
+  if (typeof type !== 'string' || !/^[a-z0-9_-]+$/i.test(type)) {
+    throw new Error(`Unknown auth driver "${type}" — expected ${path.join(DRIVER_DIR, String(type) + '.cjs')}`);
+  }
+
   const driverPath = path.join(DRIVER_DIR, type + '.cjs');
   let driver;
   try {

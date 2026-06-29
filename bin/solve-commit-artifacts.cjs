@@ -103,7 +103,7 @@ function doCommit(opts) {
       stderr: (r.stderr || '').trim(),
     };
   }
-  const hash = (r.stdout || '').match(/\[.*?([0-9a-f]{7,})/);
+  const hash = (r.stdout || '').match(/([0-9a-f]{7,})\]/);
   return { committed: true, hash: hash ? hash[1] : null };
 }
 

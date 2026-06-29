@@ -89,3 +89,54 @@ test('classifyDivergence: no guardEvaluations falls back gracefully', () => {
   assert.ok(typeof result.specBugConfidence === 'number');
   assert.ok(typeof result.implBugConfidence === 'number');
 });
+
+// ── ATD-1 ─────────────────────────────────────────────────────────────────────
+
+test('classifyDivergence: null / non-object ttrace fails open instead of throwing', () => {
+  for (const bad of [null, undefined, 42, 'oops']) {
+    assert.doesNotThrow(() => classifyDivergence(bad),
+      `classifyDivergence(${JSON.stringify(bad)}) must not throw`);
+    const result = classifyDivergence(bad);
+    assert.ok(typeof result.specBugConfidence === 'number');
+    assert.ok(typeof result.implBugConfidence === 'number');
+    assert.ok(Array.isArray(result.evidence));
+  }
+});
+
+test('analyzeTrace: null ttrace fails open with required output fields', () => {
+  assert.doesNotThrow(() => analyzeTrace(null, null, null));
+  const result = analyzeTrace(null, null, null);
+  assert.ok('event_action' in result);
+  assert.ok('spec_bug_confidence' in result);
+  assert.ok(Array.isArray(result.evidence));
+});
+
+// ── ATD-2 ─────────────────────────────────────────────────────────────────────
+
+test('classifyDivergence: null/primitive entries in guardEvaluations are skipped, not thrown', () => {
+  const ttrace = {
+    event: { action: 'quorum_complete' },
+    actualState: 'DECIDED',
+    expectedState: 'DELIBERATING',
+    divergenceType: 'state_mismatch',
+    guardEvaluations: [null, 'bad', { guardName: 'minQuorumMet', passed: false, context: { successCount: 0 } }],
+  };
+  assert.doesNotThrow(() => classifyDivergence(ttrace));
+  const result = classifyDivergence(ttrace);
+  assert.equal(result.failingGuard, 'minQuorumMet');
+});
+
+// ── ATD-3 ─────────────────────────────────────────────────────────────────────
+
+test('classifyDivergence: non-array guardEvaluations is treated as empty, not thrown', () => {
+  const ttrace = {
+    event: { action: 'x' },
+    actualState: 'A',
+    expectedState: 'B',
+    divergenceType: 'state_mismatch',
+    guardEvaluations: { guardName: 'g', passed: false },
+  };
+  assert.doesNotThrow(() => classifyDivergence(ttrace));
+  const result = classifyDivergence(ttrace);
+  assert.equal(result.failingGuard, null);
+});

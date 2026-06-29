@@ -470,3 +470,45 @@ test('--only=gates filtering returns exactly 3 steps', () => {
   // Verify Steps: 3 in output
   assert.ok(output.includes('Steps: 3'), 'Should report exactly 3 steps for --only=gates');
 });
+
+test('fail-open: non-string search_dirs element does not crash runner', { timeout: 30000 }, () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rfv-badsearchdir-'));
+  try {
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'formal', 'tla'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'formal', 'check-results.ndjson'), '');
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'formal', 'model-registry.json'),
+      JSON.stringify({ version: '1.0', search_dirs: [123, null, {}], models: {} })
+    );
+    const result = spawnSync(process.execPath, [RUN_FV, '--project-root=' + tmpDir, '--only=tla'], {
+      encoding: 'utf8',
+      timeout: 20000,
+    });
+    const output = (result.stdout || '') + (result.stderr || '');
+    assert.doesNotMatch(output, /ERR_INVALID_ARG_TYPE/, 'malformed search_dirs element must not crash the runner');
+    assert.doesNotMatch(output, /TypeError/, 'must not throw an uncaught TypeError');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('fail-open: search_dirs pointing at a file does not crash runner', { timeout: 30000 }, () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rfv-filesearchdir-'));
+  try {
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'formal', 'tla'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'formal', 'check-results.ndjson'), '');
+    fs.writeFileSync(path.join(tmpDir, 'afile.txt'), 'not a directory');
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'formal', 'model-registry.json'),
+      JSON.stringify({ version: '1.0', search_dirs: ['afile.txt'], models: {} })
+    );
+    const result = spawnSync(process.execPath, [RUN_FV, '--project-root=' + tmpDir, '--only=tla'], {
+      encoding: 'utf8',
+      timeout: 20000,
+    });
+    const output = (result.stdout || '') + (result.stderr || '');
+    assert.doesNotMatch(output, /ENOTDIR/, 'a file in search_dirs must not crash the runner with ENOTDIR');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

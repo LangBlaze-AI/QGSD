@@ -30,7 +30,8 @@ function clusterByTags(entries) {
   // Build tag -> entry index map
   const tagMap = new Map();
   for (let i = 0; i < entries.length; i++) {
-    const tags = entries[i].tags || [];
+    const entry = entries[i];
+    const tags = (entry && Array.isArray(entry.tags)) ? entry.tags : [];
     for (const tag of tags) {
       if (!tagMap.has(tag)) tagMap.set(tag, []);
       tagMap.get(tag).push(i);

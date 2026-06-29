@@ -26,8 +26,11 @@ function canTransition(fromStatus, toStatus) {
     return false;
   }
 
-  // Check if transition is in the allowed list
-  const allowed = ALLOWED_TRANSITIONS[fromStatus] || [];
+  // Check if transition is in the allowed list (own keys only — guard
+  // against __proto__/constructor resolving to non-array prototype members)
+  const allowed = Object.prototype.hasOwnProperty.call(ALLOWED_TRANSITIONS, fromStatus)
+    ? ALLOWED_TRANSITIONS[fromStatus]
+    : [];
   return allowed.includes(toStatus);
 }
 
@@ -39,6 +42,11 @@ function canTransition(fromStatus, toStatus) {
  */
 function transitionDebtEntry(entry, newStatus) {
   const errors = [];
+
+  // Guard: entry must be a non-null object before dereferencing entry.status
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    return { success: false, error: 'Invalid entry: must be an object' };
+  }
 
   // Validate target status is one of the allowed values
   const validStatuses = ['open', 'acknowledged', 'resolving', 'resolved'];

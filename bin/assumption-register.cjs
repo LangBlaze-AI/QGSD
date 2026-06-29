@@ -31,6 +31,7 @@ const JSON_FLAG = process.argv.includes('--json');
  * @returns {Array} Parsed assumption entries
  */
 function parseMarkdownTable(content) {
+  if (typeof content !== 'string') return [];
   const lines = content.split('\n');
   const assumptions = [];
   let skipped = 0;
@@ -40,7 +41,11 @@ function parseMarkdownTable(content) {
     if (!line.startsWith('|')) continue;
     if (line.includes('---')) continue;
 
-    const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
+    const cells = line.split('|').map(c => c.trim());
+    // Drop only the empty edges produced by the leading/trailing pipe,
+    // not genuinely-empty interior cells (which would misalign columns).
+    if (cells.length && cells[0] === '') cells.shift();
+    if (cells.length && cells[cells.length - 1] === '') cells.pop();
     if (cells.length < 7) {
       // Check if this is the header row
       if (cells[0] === '#' || cells[0] === 'Metric') continue;

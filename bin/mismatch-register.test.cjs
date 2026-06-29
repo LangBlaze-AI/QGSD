@@ -98,6 +98,44 @@ describe('buildMismatchRegister', () => {
   });
 });
 
+describe('buildMismatchRegister adversarial divergences', () => {
+  it('does not crash on null/non-object entries in divergences array', () => {
+    assert.doesNotThrow(() => buildMismatchRegister([], {}, [null]));
+    const result = buildMismatchRegister([], {}, [null, 'oops', 42]);
+    assert.strictEqual(result.entries.length, 0, 'malformed divergence entries should be skipped');
+  });
+
+  it('still processes valid divergences when a null is interleaved', () => {
+    const divergences = [
+      null,
+      { event: { action: 'circuit_break', phase: 'DECIDING' }, actualState: 'IDLE', expectedState: 'DECIDED', divergenceType: 'state_mismatch' },
+    ];
+    const result = buildMismatchRegister([], {}, divergences);
+    assert.strictEqual(result.entries.length, 1);
+    assert.strictEqual(result.entries[0].resolution, 'explained');
+  });
+});
+
+describe('buildMismatchRegister adversarial conformanceEvents', () => {
+  it('does not crash when conformanceEvents is null or undefined', () => {
+    assert.doesNotThrow(() => buildMismatchRegister(null, {}, []));
+    assert.doesNotThrow(() => buildMismatchRegister(undefined, {}, []));
+    const result = buildMismatchRegister(null, {}, []);
+    assert.strictEqual(result.summary.stats.total_events, 0);
+    assert.strictEqual(result.entries.length, 0);
+  });
+});
+
+describe('buildMismatchEntry adversarial', () => {
+  it('does not crash when event is null or undefined', () => {
+    assert.doesNotThrow(() => buildMismatchEntry(1, null, 0, 'A', 'B', 'state_mismatch', 'open', null, null));
+    const entry = buildMismatchEntry(7, undefined, 3, 'A', 'B', 'state_mismatch', 'open', null, null);
+    assert.strictEqual(entry.id, 'MISMATCH-007');
+    assert.strictEqual(entry.l1_trace_ref.session, 'standalone');
+    assert.ok(typeof entry.timestamp === 'string' && entry.timestamp.length > 0);
+  });
+});
+
 // ── Integration tests ────────────────────────────────────────────────────────
 
 describe('integration: JSONL output file', () => {

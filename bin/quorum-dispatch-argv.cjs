@@ -35,18 +35,20 @@ const DISPATCH_FLAG_SET = Object.freeze(new Set(DISPATCH_FLAGS));
  * @param {object} opts
  * @returns {string[]} spawnArgs
  */
-function buildDispatchArgv(cqsPath, {
-  slot,
-  timeout,
-  round,
-  cwd,
-  allowedTools = null,
-  outputFile = null,
-  dispatchNonce = null,
-} = {}) {
+function buildDispatchArgv(cqsPath, opts = {}) {
+  const {
+    slot,
+    timeout,
+    round,
+    cwd,
+    allowedTools = null,
+    outputFile = null,
+    dispatchNonce = null,
+  } = (opts && typeof opts === 'object') ? opts : {};
   const args = [cqsPath];
   const push = (flag, value) => {
     if (value === null || value === undefined) return;
+    if (typeof value === 'number' && Number.isNaN(value)) return;
     if (!DISPATCH_FLAG_SET.has(flag)) {
       throw new Error(`[quorum-dispatch-argv] unknown dispatch flag: ${flag}`);
     }
@@ -74,6 +76,7 @@ function buildDispatchArgv(cqsPath, {
  */
 function warnUnknownDispatchFlags(argv) {
   const unknown = [];
+  if (!Array.isArray(argv)) return unknown;
   for (const tok of argv) {
     if (typeof tok === 'string' && tok.startsWith('--') && !DISPATCH_FLAG_SET.has(tok)) {
       unknown.push(tok);

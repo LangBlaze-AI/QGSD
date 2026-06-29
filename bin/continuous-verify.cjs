@@ -77,6 +77,7 @@ function shouldTriggerVerification(toolName, toolInput, verifyState) {
   } else if (toolInput && typeof toolInput === 'object') {
     filePath = toolInput.file_path || toolInput.filePath || null;
   }
+  if (typeof filePath !== 'string') filePath = null;
 
   // Accumulate unique file paths
   if (filePath && Array.isArray(verifyState.accumulated_files) && !verifyState.accumulated_files.includes(filePath)) {
@@ -84,7 +85,7 @@ function shouldTriggerVerification(toolName, toolInput, verifyState) {
   }
 
   // Check boundaries
-  if (verifyState.accumulated_files.length >= 5) return true;
+  if (Array.isArray(verifyState.accumulated_files) && verifyState.accumulated_files.length >= 5) return true;
 
   if (filePath) {
     const basename = path.basename(filePath);

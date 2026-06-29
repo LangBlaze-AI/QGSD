@@ -273,3 +273,34 @@ describe('fetchReleases — gh release list field hygiene', () => {
     assert.deepEqual(fetchReleases('owner/repo', null, 5, execFn), []);
   });
 });
+
+describe('fetchReleases — unparseable since does not suppress all releases', () => {
+  it('surfaces releases when the cutoff date is corrupt (NaN)', () => {
+    const mockExec = () => JSON.stringify([
+      { tagName: 'v2.0.0', name: 'R2', publishedAt: '2026-05-01T00:00:00Z', isPrerelease: false },
+      { tagName: 'v1.0.0', name: 'R1', publishedAt: '2026-04-01T00:00:00Z', isPrerelease: false }
+    ]);
+    // 'not-a-date' -> new Date(...).getTime() === NaN -> every `> NaN` is false
+    const releases = fetchReleases('o/r', 'not-a-date', 10, mockExec);
+    assert.equal(releases.length, 2);
+  });
+});
+
+describe('fetchNotablePRs — unparseable since does not suppress all PRs', () => {
+  it('surfaces notable PRs when the cutoff date is corrupt (NaN)', () => {
+    const mockExec = () => JSON.stringify([
+      { number: 7, title: 'feat: x', mergedAt: '2026-05-01T00:00:00Z', changedFiles: 6, additions: 120, deletions: 1, url: '' }
+    ]);
+    const prs = fetchNotablePRs('o/r', 'not-a-date', 10, mockExec);
+    assert.equal(prs.length, 1);
+  });
+});
+
+describe('fetchReleases — non-array gh JSON fails open to []', () => {
+  it('returns [] (not a raw object) when gh emits non-array JSON and since is falsy', () => {
+    const mockExec = () => JSON.stringify({ unexpected: true });
+    const releases = fetchReleases('o/r', null, 10, mockExec);
+    assert.ok(Array.isArray(releases));
+    assert.equal(releases.length, 0);
+  });
+});

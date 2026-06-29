@@ -70,7 +70,7 @@ function detectProjectIntent(rootPath) {
     const depsStr = JSON.stringify(deps);
 
     // web frameworks
-    if (/next|nuxt|vite|gatsby|remix/.test(depsStr)) {
+    if (/\b(next|nuxt|vite|gatsby|remix)\b/.test(depsStr)) {
       suggested.base_profile = 'web';
       signals.push({
         dimension: 'base_profile',
@@ -80,7 +80,7 @@ function detectProjectIntent(rootPath) {
       baseProfileFound = true;
     }
     // mobile frameworks
-    else if (/react-native|expo/.test(depsStr)) {
+    else if (/\b(react-native|expo)\b/.test(depsStr)) {
       suggested.base_profile = 'mobile';
       signals.push({
         dimension: 'base_profile',
@@ -90,7 +90,7 @@ function detectProjectIntent(rootPath) {
       baseProfileFound = true;
     }
     // desktop frameworks
-    else if (/electron|tauri/.test(depsStr)) {
+    else if (/\b(electron|tauri)\b/.test(depsStr)) {
       suggested.base_profile = 'desktop';
       signals.push({
         dimension: 'base_profile',
@@ -206,10 +206,10 @@ function detectProjectIntent(rootPath) {
     const deps = { ...pkg.dependencies, ...pkg.devDependencies };
     const depsStr = JSON.stringify(deps);
 
-    if (/passport|next-auth|auth0|firebase|okta/.test(depsStr)) {
+    if (/\b(passport|next-auth|auth0|firebase|okta)\b/.test(depsStr)) {
       sensitiveSignals.push('Auth library detected (passport/next-auth/auth0/firebase/okta)');
     }
-    if (/stripe|paypal|square|shopify|commerce/.test(depsStr)) {
+    if (/\b(stripe|paypal|square|shopify|commerce)\b/.test(depsStr)) {
       sensitiveSignals.push('Payment library detected (stripe/paypal/square/shopify)');
     }
   }

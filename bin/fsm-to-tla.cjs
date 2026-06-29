@@ -54,7 +54,12 @@ const { detectFramework, getAdapter } = require('./adapters/detect.cjs');
 let adapter;
 
 if (frameworkArg) {
-  adapter = getAdapter(frameworkArg);
+  try {
+    adapter = getAdapter(frameworkArg);
+  } catch (e) {
+    process.stderr.write(TAG + ' ' + e.message + '\n');
+    process.exit(1);
+  }
 } else {
   const result = detectFramework(inputFile, content);
   if (!result) {

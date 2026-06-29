@@ -2891,3 +2891,57 @@ test('R3-INV: a single in-contract BLOCK voter (leading whitespace) at floor=1 c
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// TC-FORCE-QUORUM: --force-quorum in <command-args> must waive the MIN_LIVE_VOTERS floor.
+// Regression: hasForceQuorumFlag used /\b--force-quorum\b/, whose leading \b never matches a
+// flag beginning with '-' (a non-word char), so a standalone/space-separated --force-quorum was
+// silently undetected and the floor block fired anyway. FAILS before the fix, PASSES after.
+test('TC-FORCE-QUORUM: --force-quorum in command-args waives the min_live_voters floor', () => {
+  const homeDir = path.join(os.tmpdir(), `nf-home-fq-${Date.now()}`);
+  fs.mkdirSync(homeDir, { recursive: true });
+
+  // Boundary human message carries both the command-name and command-args tags.
+  const boundary = JSON.stringify({
+    type: 'user',
+    message: {
+      role: 'user',
+      content:
+        '<command-name>/qnf:plan-phase</command-name>\n' +
+        '<command-args>--force-quorum</command-args>\n\nPlan it.',
+    },
+    timestamp: '2026-02-20T00:00:00Z',
+    uuid: 'human-fq',
+  });
+
+  // One slot-worker dispatch round with a single APPROVE voter (below default floor of 2).
+  const swTask = {
+    type: 'tool_use',
+    id: 'toolu_sw1',
+    name: 'Task',
+    input: { subagent_type: 'nf-quorum-slot-worker', prompt: 'dispatch slot worker' },
+  };
+
+  const tmpFile = writeTempTranscript([
+    boundary,
+    assistantLine([swTask], 'assistant-dispatch'),
+    toolResultSuccessLine('toolu_sw1', 'verdict: APPROVE\nlooks good', 'tr-sw1'),
+    assistantLine([{ type: 'text', text: 'Plan complete.\n<!-- NF_DECISION -->' }], 'assistant-final'),
+  ]);
+
+  try {
+    const { stdout, exitCode } = runHookWithEnv(
+      {
+        stop_hook_active: false,
+        hook_event_name: 'Stop',
+        transcript_path: tmpFile,
+        last_assistant_message: 'Plan complete.',
+      },
+      { HOME: homeDir },
+      homeDir // isolate cwd from project .claude/nf.json so DEFAULT_CONFIG (min_live_voters=2) is used
+    );
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'stdout must be empty — --force-quorum waives the floor (1 live voter < min 2)');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

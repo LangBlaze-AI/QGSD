@@ -57,3 +57,39 @@ test('extract parses Squirrel Foundation fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract preserves whenMvel guard containing parentheses', () => {
+  const src = `
+import org.squirrelframework.foundation.fsm.annotation.Transit;
+@Transit(from="A", to="B", on="E", whenMvel="count > 0 && (a || b)")
+public class M {}
+`;
+  const tmpFile = path.join(os.tmpdir(), 'squirrel-guard-' + Date.now() + '.java');
+  fs.writeFileSync(tmpFile, src, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    const t = ir.transitions.find(x => x.fromState === 'A' && x.target === 'B');
+    assert.ok(t, 'transition A->B should be extracted');
+    assert.strictEqual(t.guard, 'count > 0 && (a || b)');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test('extract preserves builder whenMvel guard', () => {
+  const src = `
+import org.squirrelframework.foundation.fsm.StateMachineBuilder;
+builder.externalTransition().from(A).to(B).on(E).whenMvel("ready == true");
+TaskStateMachine sm = builder.newStateMachine(A);
+`;
+  const tmpFile = path.join(os.tmpdir(), 'squirrel-builder-guard-' + Date.now() + '.java');
+  fs.writeFileSync(tmpFile, src, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    const t = ir.transitions.find(x => x.fromState === 'A' && x.target === 'B');
+    assert.ok(t, 'builder transition A->B should be extracted');
+    assert.strictEqual(t.guard, 'ready == true');
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

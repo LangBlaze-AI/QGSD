@@ -15,6 +15,7 @@
 function compareDrift(entry, formalExpected) {
   const measured = entry?.meta?.measured_value;
   if (measured == null || formalExpected == null) return false;
+  if (Number.isNaN(measured) || Number.isNaN(formalExpected)) return false;
   return measured !== formalExpected;
 }
 

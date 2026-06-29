@@ -122,7 +122,8 @@ function findIntersections(changedFiles, specDir) {
       continue;
     }
 
-    if (!scope.source_files || !Array.isArray(scope.source_files) || scope.source_files.length === 0) {
+    if (!scope || typeof scope !== 'object' || Array.isArray(scope) ||
+        !scope.source_files || !Array.isArray(scope.source_files) || scope.source_files.length === 0) {
       continue;
     }
 

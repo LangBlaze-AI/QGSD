@@ -237,4 +237,46 @@ describe('test-recipe-gen', () => {
       assert.deepEqual(result.summary.by_risk_tier, {});
     });
   });
+
+  describe('derived_from hardening', () => {
+    it('does not throw when derived_from is a non-array object', () => {
+      const fm = { ...omissionFm, derived_from: {} };
+      let refs;
+      assert.doesNotThrow(() => { refs = buildDerivedFrom(fm); });
+      assert.equal(refs.length, 1);
+      assert.equal(refs[0].artifact, 'reasoning/failure-mode-catalog.json');
+    });
+
+    it('does not throw when derived_from is a string', () => {
+      const fm = { ...omissionFm, derived_from: 'reasoning/hazard-model.json' };
+      assert.doesNotThrow(() => buildDerivedFrom(fm));
+    });
+  });
+
+  describe('failureModes element hardening', () => {
+    it('skips null/non-object entries without crashing', () => {
+      let result;
+      assert.doesNotThrow(() => {
+        result = generateAllRecipes([omissionFm, null, 'bogus'], [], []);
+      });
+      assert.equal(result.recipes.length, 1);
+      assert.equal(result.summary.total_recipes, 1);
+      assert.equal(result.recipes[0].failure_mode_id, omissionFm.id);
+    });
+  });
+
+  describe('hazards/riskTransitions hardening', () => {
+    it('does not throw when hazards is a non-array object', () => {
+      let result;
+      assert.doesNotThrow(() => {
+        result = generateAllRecipes([omissionFm], {}, []);
+      });
+      assert.equal(result.recipes.length, 1);
+      assert.equal(result.recipes[0].risk_context.rpn, null);
+    });
+
+    it('does not throw when riskTransitions is a non-array object', () => {
+      assert.doesNotThrow(() => generateAllRecipes([omissionFm], [], {}));
+    });
+  });
 });

@@ -313,6 +313,8 @@ async function runCheckerViaChildProcess(modelPath, formalism, verificationMode,
  * @throws {Error} if verdict log corrupted or write-once violation detected
  */
 async function runConvergenceGates(models, config, checkerFns) {
+  if (!models || typeof models !== 'object') throw new Error('models required');
+  if (!config || typeof config !== 'object') throw new Error('config required');
   const { consequenceModelPath, reproducingModelPath, neighborModelPaths } = models;
   const { bugTrace, sessionId, formalism, projectRoot } = config;
 
@@ -345,9 +347,9 @@ async function runConvergenceGates(models, config, checkerFns) {
   const iterationNumber = existingVerdicts.length + 1;
 
   // Step 2: Check for prior convergence (ResolvedAtWriteOnce PRE-GATE enforcement)
-  const priorConverged = existingVerdicts.some(v => v.converged === true);
+  const priorConverged = existingVerdicts.some(v => v && v.converged === true);
   if (priorConverged) {
-    const priorIteration = existingVerdicts.find(v => v.converged === true).iteration;
+    const priorIteration = existingVerdicts.find(v => v && v.converged === true).iteration;
     // Log the fact but don't block yet — we'll enforce AFTER running gates
   }
 
@@ -436,7 +438,7 @@ async function runConvergenceGates(models, config, checkerFns) {
   // Step 5: CRITICAL — Write-once check BEFORE persisting
   if (priorConverged && !converged) {
     // ResolvedAtWriteOnce violation: prior convergence cannot revert
-    const priorIteration = existingVerdicts.find(v => v.converged === true).iteration;
+    const priorIteration = existingVerdicts.find(v => v && v.converged === true).iteration;
     throw new Error(
       `ResolvedAtWriteOnce VIOLATED: cannot revert convergence verdict from iteration ${priorIteration}. ` +
       `Current iteration would write converged=false. Aborting without persisting.`

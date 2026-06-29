@@ -21,7 +21,8 @@ function computeBudgetStatus(usedPct, budgetConfig, agentConfig, cooldownActive)
     return { active: false };
   }
 
-  const estimatedTokens = Math.round((usedPct / 100) * 200000);
+  const pct = Number.isFinite(usedPct) ? usedPct : 0;
+  const estimatedTokens = Math.round((pct / 100) * 200000);
   const budgetUsedPct = Math.round((estimatedTokens / budgetConfig.session_limit_tokens) * 100);
 
   return {
@@ -72,6 +73,8 @@ function checkCooldown(cwd, cooldownMs) {
 function detectOscillation(history) {
   if (!Array.isArray(history) || history.length < 3) return false;
   const recent = history.slice(-3);
+  // Reject malformed (null / non-object) entries before dereferencing .ts/.from/.to
+  if (recent.some((e) => e === null || typeof e !== 'object')) return false;
   // Check all within 10 minutes
   const first = new Date(recent[0].ts).getTime();
   const last = new Date(recent[recent.length - 1].ts).getTime();

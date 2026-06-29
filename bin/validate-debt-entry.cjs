@@ -137,14 +137,14 @@ function validateDebtEntry(entry) {
   }
 
   // Check optional fields: formal_ref
-  if (entry.hasOwnProperty('formal_ref')) {
+  if (Object.prototype.hasOwnProperty.call(entry, 'formal_ref')) {
     if (entry.formal_ref !== null && typeof entry.formal_ref !== 'string') {
       errors.push('formal_ref must be string or null');
     }
   }
 
   // Check optional fields: formal_ref_source
-  if (entry.hasOwnProperty('formal_ref_source')) {
+  if (Object.prototype.hasOwnProperty.call(entry, 'formal_ref_source')) {
     const validSources = ['manual', 'auto-detect', 'spec-inferred'];
     if (entry.formal_ref_source !== null &&
         (typeof entry.formal_ref_source !== 'string' || !validSources.includes(entry.formal_ref_source))) {

@@ -126,6 +126,42 @@ describe('extractErrorPatterns', () => {
     const patterns = extractErrorPatterns(lines);
     assert.equal(patterns.length, 0);
   });
+
+  it('skips null blocks inside a content array without crashing', () => {
+    const lines = [
+      JSON.stringify({
+        type: 'user',
+        message: {
+          content: [
+            null,
+            { type: 'tool_result', tool_use_id: 'tu_1', is_error: true, content: 'Error: boom' },
+          ],
+        },
+      }),
+      makeUserToolResult('tu_2', 'Fixed it'),
+    ];
+    const patterns = extractErrorPatterns(lines);
+    assert.equal(patterns.length, 1);
+    assert.ok(patterns[0].symptom.includes('boom'));
+  });
+
+  it('does not crash when a forward resolution entry has a null content block', () => {
+    const lines = [
+      makeUserToolResult('tu_1', 'Error: boom', true),
+      JSON.stringify({
+        type: 'user',
+        message: {
+          content: [
+            null,
+            { type: 'tool_result', tool_use_id: 'tu_2', is_error: false, content: 'Fixed it' },
+          ],
+        },
+      }),
+    ];
+    const patterns = extractErrorPatterns(lines);
+    assert.equal(patterns.length, 1);
+    assert.ok(patterns[0].fix.includes('Fixed it'));
+  });
 });
 
 describe('extractCorrections', () => {
@@ -251,5 +287,18 @@ describe('extractTextFromEntry', () => {
       },
     };
     assert.equal(extractTextFromEntry(entry), '');
+  });
+
+  it('returns text and ignores null/non-object blocks in array content', () => {
+    const entry = {
+      message: {
+        content: [null, 'junk', { type: 'text', text: 'The result is ready' }],
+      },
+    };
+    assert.equal(extractTextFromEntry(entry), 'The result is ready');
+  });
+
+  it('returns empty string when array content has only a null block', () => {
+    assert.equal(extractTextFromEntry({ message: { content: [null] } }), '');
   });
 });

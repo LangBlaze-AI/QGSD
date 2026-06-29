@@ -65,7 +65,7 @@ function extractAccountName(provider) {
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf8');
         const m = content.match(new RegExp(det.pattern, 'm'));
-        if (m) return m[1];
+        if (m && m[1] != null) return m[1];
       }
     }
   } catch (_) {}
@@ -81,7 +81,8 @@ function extractAccountName(provider) {
     const jwt = creds.id_token ?? creds.tokens?.id_token;
     if (!jwt) return null;
     const payload = Buffer.from(jwt.split('.')[1], 'base64url').toString('utf8');
-    return JSON.parse(payload).email ?? null;
+    const email = JSON.parse(payload).email;
+    return typeof email === 'string' ? email : null;
   } catch (_) {
     return null;
   }

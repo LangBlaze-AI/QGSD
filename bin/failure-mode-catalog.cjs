@@ -76,7 +76,8 @@ function findMismatches(fromState, event, mismatches) {
 
 function enumerateFailureModes(observedFsm, hazardModel, mismatches) {
   const missingInModel = new Set(
-    (observedFsm.model_comparison?.missing_in_model || [])
+    (observedFsm?.model_comparison?.missing_in_model || [])
+      .filter(m => m && typeof m === 'object')
       .map(m => `${m.from}-${m.event}`)
   );
 
@@ -88,8 +89,9 @@ function enumerateFailureModes(observedFsm, hazardModel, mismatches) {
 
   const failureModes = [];
 
-  for (const [fromState, events] of Object.entries(observedFsm.observed_transitions)) {
-    for (const [event, data] of Object.entries(events)) {
+  for (const [fromState, events] of Object.entries(observedFsm?.observed_transitions || {})) {
+    for (const [event, data] of Object.entries(events || {})) {
+      if (!data || typeof data !== 'object') continue;
       const key = `${fromState}-${event}`;
       const severity = severityMap[key] || 4;
       const toState = data.to_state;

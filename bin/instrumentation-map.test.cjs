@@ -9,6 +9,8 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
+const { scanFile } = require('./instrumentation-map.cjs');
+
 const ROOT = process.env.PROJECT_ROOT || path.join(__dirname, '..');
 const OUTPUT_PATH = path.join(ROOT, '.planning', 'formal', 'evidence', 'instrumentation-map.json');
 
@@ -97,5 +99,23 @@ describe('instrumentation-map integration', () => {
   it('has schema_version', () => {
     const result = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf8'));
     assert.strictEqual(result.schema_version, '1');
+  });
+});
+
+describe('instrumentation-map scanFile fail-open on bad filePath', () => {
+  it('returns [] for non-string filePath instead of throwing', () => {
+    assert.doesNotThrow(() => scanFile(null));
+    assert.deepStrictEqual(scanFile(null), []);
+    assert.deepStrictEqual(scanFile(undefined), []);
+    assert.deepStrictEqual(scanFile(123), []);
+    assert.deepStrictEqual(scanFile({}), []);
+  });
+});
+
+describe('instrumentation-map scanFile fail-open on directory path', () => {
+  it('returns [] for a directory path instead of throwing EISDIR', () => {
+    // 'bin' exists relative to ROOT but is a directory
+    assert.doesNotThrow(() => scanFile('bin'));
+    assert.deepStrictEqual(scanFile('bin'), []);
   });
 });

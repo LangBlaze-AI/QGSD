@@ -280,3 +280,29 @@ describe('handlePrometheus — Query mode', () => {
     assert.ok(result.issues[0].meta.includes('42'), 'Meta should include scalar value');
   });
 });
+
+describe('handlePrometheus — adversarial sourceConfig', () => {
+  it('does not reject when sourceConfig is null (fail-open contract)', async () => {
+    const fetchFn = async () => ({ ok: true, status: 200, json: async () => ({ status: 'success', data: { alerts: [] } }) });
+    const result = await handlePrometheus(null, { fetchFn });
+    assert.equal(result.source_type, 'prometheus');
+    assert.ok(Array.isArray(result.issues), 'issues must be an array');
+    assert.equal(result.status, 'ok');
+    assert.equal(result.issues.length, 0);
+  });
+});
+
+describe('handlePrometheus — malformed alert element', () => {
+  it('survives a null alert element without dropping valid siblings', async () => {
+    const body = { status: 'success', data: { alerts: [
+      null,
+      { labels: { alertname: 'Good', severity: 'critical' }, annotations: {}, state: 'firing', activeAt: '2026-03-04T10:00:00Z' }
+    ] } };
+    const result = await handlePrometheus(
+      { type: 'prometheus', label: 'Prom', endpoint: 'http://prom:9090' },
+      { fetchFn: mockFetch({ '/api/v1/alerts': { body } }) }
+    );
+    assert.equal(result.status, 'ok');
+    assert.ok(result.issues.some(i => i.title === 'Good'), 'valid alert must survive a malformed sibling');
+  });
+});

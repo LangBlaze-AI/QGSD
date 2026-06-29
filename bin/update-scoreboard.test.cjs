@@ -627,3 +627,33 @@ test('SC-Batch8: discuss/execute-phase snippets use --result "" and document --s
     assert.ok(/--slot <slot> --model-id/.test(md), `${rel}: must document the --slot/--model-id form for MCP slots`);
   }
 });
+
+// SC-HARDEN-1: a corrupt non-object model entry must degrade, not crash recompute
+test('SC-HARDEN-1: corrupt non-object model entry does not crash --model recompute (vote still recorded)', () => {
+  const sb = tmpScoreboard();
+  try {
+    fs.writeFileSync(sb, JSON.stringify({ models: { claude: 'corrupt' }, rounds: [] }), 'utf8');
+    const { exitCode } = runCLI([
+      '--model', 'claude', '--result', 'TP', '--task', 'h1', '--round', '1',
+      '--verdict', 'APPROVE', '--scoreboard', sb,
+    ]);
+    assert.strictEqual(exitCode, 0, 'a corrupt model entry must degrade, not crash (exit 1)');
+    const data = JSON.parse(fs.readFileSync(sb, 'utf8'));
+    assert.strictEqual(data.models.claude.score, 1, 'claude score recomputed to 1 after TP');
+  } finally { cleanup(sb); }
+});
+
+// SC-HARDEN-2: a corrupt non-object slot entry must degrade, not crash slot recompute
+test('SC-HARDEN-2: corrupt non-object slot entry does not crash --slot recompute (vote still recorded)', () => {
+  const sb = tmpScoreboard();
+  try {
+    fs.writeFileSync(sb, JSON.stringify({ slots: { 'claude-1:m': 7 }, rounds: [] }), 'utf8');
+    const { exitCode } = runCLI([
+      '--slot', 'claude-1', '--model-id', 'm', '--result', 'TP', '--task', 'h2',
+      '--round', '1', '--verdict', 'APPROVE', '--scoreboard', sb,
+    ]);
+    assert.strictEqual(exitCode, 0, 'a corrupt slot entry must degrade, not crash (exit 1)');
+    const data = JSON.parse(fs.readFileSync(sb, 'utf8'));
+    assert.strictEqual(data.slots['claude-1:m'].score, 1, 'slot score recomputed to 1 after TP');
+  } finally { cleanup(sb); }
+});

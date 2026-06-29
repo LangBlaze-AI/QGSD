@@ -630,4 +630,45 @@ describe('memory-store', () => {
       assert.equal(results[0].skill, 'Async IIFE');
     });
   });
+
+  describe('computeCurrentConfidence — malformed timestamp', () => {
+    it('returns a real number (not NaN) when last_confirmed is unparseable', () => {
+      const entry = { confidence: 0.7, last_confirmed: 'garbage' };
+      const result = computeCurrentConfidence(entry);
+      assert.ok(!Number.isNaN(result), `Expected a number, got ${result}`);
+      assert.equal(result, 0.7);
+    });
+
+    it('queryWithConfidence does not leak NaN-confidence entries past the minConfidence filter', () => {
+      const tmp = freshTmp();
+      writeRawEntry(tmp, 'failures', {
+        type: 'failure', approach: 'bad date', why_failed: 'x',
+        confidence: 0.7, last_confirmed: 'garbage', ts: 'garbage',
+      });
+      const results = queryWithConfidence(tmp, 'failures', 'approach', '', 0.9, 5);
+      assert.ok(results.every(r => !Number.isNaN(r._currentConfidence)), 'no NaN confidences');
+      assert.equal(results.length, 0, '0.7 < 0.9 so entry must be filtered out');
+      cleanTmp();
+    });
+  });
+
+  describe('isDuplicate — non-string stored field', () => {
+    beforeEach(() => freshTmp());
+    afterEach(() => cleanTmp());
+
+    it('does not throw when a stored entry has a non-string field value', () => {
+      writeRawEntry(tmpDir, 'decisions', { summary: 42, ts: new Date().toISOString() });
+      writeRawEntry(tmpDir, 'decisions', { summary: { nested: true }, ts: new Date().toISOString() });
+      assert.doesNotThrow(() => isDuplicate(tmpDir, 'decisions', 'summary', 'anything'));
+      assert.equal(isDuplicate(tmpDir, 'decisions', 'summary', 'anything'), false);
+    });
+  });
+
+  describe('computeCurrentConfidence — null entry', () => {
+    it('returns default 0.7 for null/undefined instead of throwing', () => {
+      assert.doesNotThrow(() => computeCurrentConfidence(null));
+      assert.equal(computeCurrentConfidence(null), 0.7);
+      assert.equal(computeCurrentConfidence(undefined), 0.7);
+    });
+  });
 });

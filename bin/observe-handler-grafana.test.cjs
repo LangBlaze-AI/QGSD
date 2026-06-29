@@ -244,3 +244,32 @@ describe('handleGrafana — State mapping', () => {
     assert.equal(result.issues[0].severity, 'info');
   });
 });
+
+describe('handleGrafana — Adversarial hardening', () => {
+  it('skips null/non-object rule entries instead of failing the whole batch', async () => {
+    const rules = [
+      { id: 1, title: 'High CPU', updated: '2026-03-04T10:00:00Z', labels: { grafana_state: 'alerting' }, annotations: {} },
+      null,
+      { id: 3, title: 'Disk', updated: '2026-03-04T12:00:00Z', labels: { grafana_state: 'normal' }, annotations: {} }
+    ];
+
+    const result = await handleGrafana(
+      { type: 'grafana', label: 'Grafana', endpoint: 'https://grafana.example.com', issue_type: 'drift' },
+      { fetchFn: mockFetch({ '/api/v1/provisioning/alert-rules': { body: rules } }) }
+    );
+
+    assert.equal(result.status, 'ok');
+    assert.equal(result.issues.length, 2, 'valid rules survive a null entry');
+    assert.equal(result.issues[0].title, 'High CPU');
+    assert.equal(result.issues[1].title, 'Disk');
+  });
+
+  it('returns the standard error shape for a null sourceConfig (does not reject)', async () => {
+    const result = await handleGrafana(null, { fetchFn: async () => ({ ok: true, status: 200, json: async () => [] }) });
+
+    assert.equal(result.source_type, 'grafana');
+    assert.equal(result.status, 'error');
+    assert.ok(Array.isArray(result.issues));
+    assert.equal(result.issues.length, 0);
+  });
+});

@@ -18,6 +18,9 @@ const STATUS_ORDER = { open: 0, acknowledged: 1, resolving: 2, resolved: 3 };
  * @returns {object} Merged debt entry
  */
 function mergeDebtEntries(entryA, entryB) {
+  if (entryA == null || typeof entryA !== 'object') return entryB;
+  if (entryB == null || typeof entryB !== 'object') return entryA;
+
   // Determine primary: entry with higher occurrences (if equal, entryA is primary)
   let primary, secondary;
   if ((entryB.occurrences || 1) > (entryA.occurrences || 1)) {
@@ -73,6 +76,7 @@ function deduplicateEntries(entries, options = {}) {
   // Phase 1: Fingerprint exact-match
   const fpGroups = new Map();
   for (const entry of entries) {
+    if (entry == null || typeof entry !== 'object') continue;
     const fp = entry.fingerprint;
     if (!fpGroups.has(fp)) {
       fpGroups.set(fp, []);
@@ -117,10 +121,9 @@ function deduplicateEntries(entries, options = {}) {
     for (let j = i + 1; j < afterPhase1.length; j++) {
       if (merged.has(j)) continue;
 
-      const sim = levenshteinSimilarity(
-        current.title.toLowerCase(),
-        afterPhase1[j].title.toLowerCase()
-      );
+      const titleA = typeof current.title === 'string' ? current.title.toLowerCase() : '';
+      const titleB = typeof afterPhase1[j].title === 'string' ? afterPhase1[j].title.toLowerCase() : '';
+      const sim = levenshteinSimilarity(titleA, titleB);
 
       if (sim >= threshold) {
         mergeLog.push({

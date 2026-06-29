@@ -530,3 +530,58 @@ describe('state_space integration', () => {
     assert.ok(Object.keys(data.state_space).length > 0, 'state_space should not be empty');
   });
 });
+
+// ── Adversarial Hardening (fail-open / malformed inputs) ─────────────────────
+
+describe('adversarial hardening', () => {
+  test('NDJSON line that parses to bare null is skipped, not crashed (fail-open)', () => {
+    const os = require('os');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gtm-'));
+    const fdir = path.join(dir, '.planning', 'formal');
+    fs.mkdirSync(fdir, { recursive: true });
+    fs.writeFileSync(path.join(fdir, 'model-registry.json'), JSON.stringify({ models: {} }));
+    fs.writeFileSync(
+      path.join(fdir, 'check-results.ndjson'),
+      JSON.stringify({ check_id: 'C1', result: 'PASS', requirement_ids: ['R-1'] }) + '\nnull\n'
+    );
+    const result = run('--json', '--project-root=' + dir);
+    assert.strictEqual(result.status, 0,
+      'A bare-null NDJSON line should be skipped, not crash. stderr: ' + result.stderr);
+    const data = JSON.parse(result.stdout);
+    assert.ok(data.metadata, 'should still produce a matrix');
+  });
+
+  test('null-valued model-registry entry is tolerated, not crashed', () => {
+    const os = require('os');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gtm-'));
+    const fdir = path.join(dir, '.planning', 'formal');
+    fs.mkdirSync(fdir, { recursive: true });
+    fs.writeFileSync(
+      path.join(fdir, 'model-registry.json'),
+      JSON.stringify({ models: { '.planning/formal/tla/Foo.tla': null } })
+    );
+    const result = run('--json', '--project-root=' + dir);
+    assert.strictEqual(result.status, 0,
+      'A null model entry should be tolerated. stderr: ' + result.stderr);
+    const data = JSON.parse(result.stdout);
+    assert.ok(data.metadata, 'should still produce a matrix');
+  });
+
+  test('requirements.json with object-valued requirements is treated as empty, not crashed', () => {
+    const os = require('os');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gtm-'));
+    const fdir = path.join(dir, '.planning', 'formal');
+    fs.mkdirSync(fdir, { recursive: true });
+    fs.writeFileSync(path.join(fdir, 'model-registry.json'), JSON.stringify({ models: {} }));
+    fs.writeFileSync(
+      path.join(fdir, 'requirements.json'),
+      JSON.stringify({ requirements: { 'R-1': { id: 'R-1' } } })
+    );
+    const result = run('--json', '--project-root=' + dir);
+    assert.strictEqual(result.status, 0,
+      'Non-array requirements should be treated as empty, not crash. stderr: ' + result.stderr);
+    const data = JSON.parse(result.stdout);
+    assert.strictEqual(data.coverage_summary.total_requirements, 0,
+      'object-shaped requirements should yield 0 total');
+  });
+});

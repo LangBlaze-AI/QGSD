@@ -40,10 +40,11 @@ function extract(filePath, options = {}) {
 
     const afterConfig = content.slice(configMatch.index + configMatch[0].length);
 
-    // Get the chain of method calls
-    const chainMatch = afterConfig.match(/^((?:\s*\.\w+\s*\([^)]*\))*)/);
-    if (!chainMatch) continue;
-    const chain = chainMatch[1];
+    // Get the chain of method calls up to the statement terminator. The prior
+    // paren-bounded regex stopped at the first ')', so a lambda like
+    // `.OnEntry(() => Foo())` truncated the chain and dropped every Permit after it.
+    const semicolonIdx = afterConfig.indexOf(';');
+    const chain = semicolonIdx === -1 ? afterConfig : afterConfig.slice(0, semicolonIdx);
 
     // .Permit(Trigger.X, State.Y)
     const permitPattern = /\.Permit\s*\(\s*(?:\w+\.)?(\w+)\s*,\s*(?:\w+\.)?(\w+)\s*\)/g;

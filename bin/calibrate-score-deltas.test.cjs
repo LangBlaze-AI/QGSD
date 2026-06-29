@@ -323,6 +323,42 @@ test('CAL-TC19: update-scoreboard exports loadScoreDeltas and DEFAULT_SCORE_DELT
   assert.strictEqual(mod.DEFAULT_SCORE_DELTAS.TP, 1);
 });
 
+test('CAL-TC21: classifyRoundOutcome treats null/non-object round as unclassifiable', () => {
+  assert.strictEqual(classifyRoundOutcome(null), null);
+  assert.strictEqual(classifyRoundOutcome(undefined), null);
+  assert.strictEqual(classifyRoundOutcome('APPROVE'), null);
+});
+
+test('CAL-TC21b: tallyVoteTypeOutcomes skips null rounds without crashing', () => {
+  const rounds = [null, { verdict: 'APPROVE', votes: { a: 'TP' } }];
+  let tallies;
+  assert.doesNotThrow(() => { tallies = tallyVoteTypeOutcomes(rounds); });
+  assert.strictEqual(tallies.TP.positive, 1);
+  assert.strictEqual(tallies.TP.total, 1);
+});
+
+test('CAL-TC22: tallyVoteTypeOutcomes does not pollute Object.prototype via __proto__ vote', () => {
+  try {
+    const rounds = [{ verdict: 'APPROVE', votes: { a: '__proto__', b: 'constructor' } }];
+    const tallies = tallyVoteTypeOutcomes(rounds);
+    assert.strictEqual(({}).positive, undefined, 'Object.prototype must not gain a positive key');
+    assert.strictEqual(({}).total, undefined, 'Object.prototype must not gain a total key');
+    assert.strictEqual(tallies.TP.total, 0);
+  } finally {
+    delete Object.prototype.positive;
+    delete Object.prototype.negative;
+    delete Object.prototype.total;
+  }
+});
+
+test('CAL-TC23: tallyVoteTypeOutcomes skips non-string vote values without crashing', () => {
+  const rounds = [{ verdict: 'APPROVE', votes: { a: 5, b: { nested: 'TP' }, c: 'TP' } }];
+  let tallies;
+  assert.doesNotThrow(() => { tallies = tallyVoteTypeOutcomes(rounds); });
+  assert.strictEqual(tallies.TP.total, 1);
+  assert.strictEqual(tallies.TP.positive, 1);
+});
+
 test('CAL-TC20: update-scoreboard uses calibrated deltas when config file exists', () => {
   // Set up a temp project root with .planning/quorum/ structure
   // loadScoreDeltas() resolves relative to CWD, so we spawn with cwd=calDir

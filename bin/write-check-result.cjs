@@ -63,8 +63,8 @@ function writeCheckResult(entry) {
   if (typeof entry.property !== 'string' || entry.property.length === 0) {
     throw new Error('[write-check-result] property is required and must be a non-empty string');
   }
-  if (typeof entry.runtime_ms !== 'number') {
-    throw new Error('[write-check-result] runtime_ms is required and must be a number');
+  if (typeof entry.runtime_ms !== 'number' || !Number.isFinite(entry.runtime_ms)) {
+    throw new Error('[write-check-result] runtime_ms is required and must be a finite number');
   }
   if (typeof entry.summary !== 'string' || entry.summary.length === 0) {
     throw new Error('[write-check-result] summary is required and must be a non-empty string');
@@ -102,7 +102,7 @@ function writeCheckResult(entry) {
     summary:    entry.summary,
     triage_tags: entry.triage_tags || [],
     requirement_ids: Array.isArray(entry.requirement_ids) ? entry.requirement_ids : [],
-    metadata:   entry.metadata || {},
+    metadata:   (entry.metadata && typeof entry.metadata === 'object' && !Array.isArray(entry.metadata)) ? entry.metadata : {},
   };
 
   if (entry.observation_window !== undefined) {
@@ -113,6 +113,7 @@ function writeCheckResult(entry) {
     record.failure_class = entry.failure_class;
   }
 
+  fs.mkdirSync(path.dirname(NDJSON_PATH), { recursive: true });
   fs.appendFileSync(NDJSON_PATH, JSON.stringify(record) + '\n', 'utf8');
 }
 

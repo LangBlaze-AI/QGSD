@@ -31,6 +31,11 @@ const DEFAULT_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
  * or null if required fields are missing or consensus is INCONCLUSIVE.
  */
 function extractPrecedentMetadata(filePath, content) {
+  // Guard: content must be a string to run regex matches against
+  if (typeof content !== 'string') {
+    return null;
+  }
+
   // Extract Question (case-insensitive, whitespace-tolerant)
   const questionMatch = content.match(/^question:\s*(.+)/im);
   if (!questionMatch) {
@@ -119,7 +124,14 @@ async function main(debatesDir, outputPath) {
 
   for (const file of files) {
     const filePath = path.join(dir, file);
-    const content = fs.readFileSync(filePath, 'utf8');
+    let content;
+    try {
+      content = fs.readFileSync(filePath, 'utf8');
+    } catch {
+      // Unreadable entry (directory named *.md, broken symlink, EACCES) — skip
+      skippedMalformed++;
+      continue;
+    }
     const meta = extractPrecedentMetadata(filePath, content);
 
     if (!meta) {

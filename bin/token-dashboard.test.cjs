@@ -238,3 +238,53 @@ describe('token-dashboard default path resolution', () => {
     }
   });
 });
+
+describe('aggregate functions: non-object record hardening', () => {
+  const { aggregateBySlot, aggregateBySession, formatDashboard } = require('./token-dashboard.cjs');
+
+  it('aggregateBySlot skips null/non-object records instead of crashing', () => {
+    assert.doesNotThrow(() => aggregateBySlot([null]));
+    const result = aggregateBySlot([null, 42, { slot: 'codex-1', input_tokens: 10, output_tokens: 5 }]);
+    assert.strictEqual(result.get('codex').input, 10);
+    assert.strictEqual(result.has('unknown'), false);
+  });
+
+  it('aggregateBySession skips null records instead of crashing', () => {
+    assert.doesNotThrow(() => aggregateBySession([null]));
+    const result = aggregateBySession([null, { session_id: 's1', input_tokens: 3, output_tokens: 1 }]);
+    assert.strictEqual(result.get('s1').input, 3);
+  });
+
+  it('formatDashboard tolerates a null record (parseTokenUsage fail-open contract)', () => {
+    assert.doesNotThrow(() => formatDashboard([null]));
+  });
+});
+
+describe('slotFamily: non-string slot hardening', () => {
+  const { slotFamily, aggregateBySlot } = require('./token-dashboard.cjs');
+
+  it('returns "unknown" for non-string slot values instead of crashing', () => {
+    assert.strictEqual(slotFamily(123), 'unknown');
+    assert.strictEqual(slotFamily({}), 'unknown');
+    assert.strictEqual(slotFamily([]), 'unknown');
+  });
+
+  it('aggregateBySlot tolerates a numeric slot record', () => {
+    assert.doesNotThrow(() => aggregateBySlot([{ slot: 123, input_tokens: 10, output_tokens: 5 }]));
+    const result = aggregateBySlot([{ slot: 123, input_tokens: 10, output_tokens: 5 }]);
+    assert.strictEqual(result.get('unknown').input, 10);
+  });
+});
+
+describe('estimateCost: prototype-key family hardening', () => {
+  const { estimateCost, COST_PER_M } = require('./token-dashboard.cjs');
+
+  it('treats __proto__/constructor family as unknown -> default rates, never NaN', () => {
+    for (const family of ['__proto__', 'constructor', 'prototype']) {
+      const result = estimateCost(family, 1000000, 500000);
+      assert.ok(Number.isFinite(result.cost), `expected finite cost for ${family}, got ${result.cost}`);
+      // default: 1M input @ $3 + 500K output @ $15 = $3 + $7.50 = $10.50
+      assert.strictEqual(result.cost, COST_PER_M.default.input + COST_PER_M.default.output * 0.5);
+    }
+  });
+});

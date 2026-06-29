@@ -175,7 +175,7 @@ function generateMetrics(events) {
  * @returns {{ bugs: object[] }}
  */
 function generateBugLinks(events) {
-  const bugMap = {};
+  const bugMap = Object.create(null);
 
   for (const evt of events) {
     if (!evt.bug_link) continue;
@@ -291,6 +291,7 @@ function generateInsights(metrics, bugLinks, window) {
  * @returns {object} Report object
  */
 function generateReport(root, opts = {}) {
+  if (!opts || typeof opts !== 'object') opts = {};
   const since = opts.since || '30d';
   const sinceMs = parseSince(since);
   const cutoffMs = Date.now() - sinceMs;

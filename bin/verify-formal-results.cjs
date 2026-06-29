@@ -42,8 +42,9 @@ function parseNDJSON(ndjsonPath) {
  * @returns {Object.<string, {pass: number, fail: number, warn: number, inconclusive: number}>}
  */
 function groupByFormalism(results) {
-  const grouped = {};
+  const grouped = Object.create(null); // null prototype: prevents '__proto__'/'constructor' formalisms being swallowed by the prototype chain
   for (const result of results) {
+    if (!result || typeof result !== 'object') continue; // skip null/non-object records (fail-open, matches parseNDJSON policy)
     const formalism = result.formalism || 'unknown';
     if (!grouped[formalism]) {
       grouped[formalism] = { pass: 0, fail: 0, warn: 0, inconclusive: 0 };

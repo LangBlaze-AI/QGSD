@@ -96,7 +96,9 @@ const COMPLEXITY_BUDGET_KEY = {
  * @returns {{ complexity: string, tier: string, thinking_budget: number, description: string }}
  */
 function getModelRecommendation(complexity, config) {
-  const base = COMPLEXITY_MAP[complexity] || COMPLEXITY_MAP.moderate;
+  const base = Object.prototype.hasOwnProperty.call(COMPLEXITY_MAP, complexity)
+    ? COMPLEXITY_MAP[complexity]
+    : COMPLEXITY_MAP.moderate;
   const result = {
     complexity,
     tier: base.tier,
@@ -110,7 +112,9 @@ function getModelRecommendation(complexity, config) {
   }
 
   // Apply thinking_budget_scaling override
-  const budgetKey = COMPLEXITY_BUDGET_KEY[complexity];
+  const budgetKey = Object.prototype.hasOwnProperty.call(COMPLEXITY_BUDGET_KEY, complexity)
+    ? COMPLEXITY_BUDGET_KEY[complexity]
+    : undefined;
   if (budgetKey && config && config.thinking_budget_scaling &&
       config.thinking_budget_scaling[budgetKey] !== undefined) {
     result.thinking_budget = config.thinking_budget_scaling[budgetKey];

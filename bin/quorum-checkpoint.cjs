@@ -98,7 +98,7 @@ function validateAgainstSchema(value, schema, p) {
     }
     if (schema.additionalProperties === false && schema.properties) {
       for (const k of Object.keys(value)) {
-        if (!(k in schema.properties)) errors.push(`${label}: unexpected field "${k}"`);
+        if (!Object.prototype.hasOwnProperty.call(schema.properties, k)) errors.push(`${label}: unexpected field "${k}"`);
       }
     }
     if (schema.properties) {
@@ -137,6 +137,7 @@ function validateCheckpoint(obj) {
  * tier was exhausted. The Stop hook gates on exactly this predicate.
  */
 function checkpointSatisfiesFallback(cp) {
+  if (cp === null || typeof cp !== 'object') return false;
   return cp.fallback_dispatched === true || cp.all_tiers_exhausted === true;
 }
 

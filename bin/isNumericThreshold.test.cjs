@@ -57,4 +57,28 @@ describe('isNumericThreshold', () => {
   it('returns false for missing spec file (fail-open)', () => {
     assert.strictEqual(isNumericThreshold('spec:nonexistent/file.cfg:Param', { specDir: tmpDir }), false);
   });
+
+  it('returns false (fail-open) when options.specDir is a non-string', () => {
+    // path.join inside extractFormalExpected throws ERR_INVALID_ARG_TYPE on a
+    // non-string specDir (it runs before that module's try block);
+    // isNumericThreshold must absorb it, not propagate.
+    assert.strictEqual(
+      isNumericThreshold('spec:safety/MCsafety.cfg:MaxDeliberation', { specDir: 5 }),
+      false
+    );
+    assert.strictEqual(
+      isNumericThreshold('spec:safety/MCsafety.cfg:MaxDeliberation', { specDir: ['a'] }),
+      false
+    );
+  });
+
+  it('returns false for a non-finite (Infinity) cfg value', () => {
+    const safetyDir = path.join(tmpDir, 'safety');
+    fs.mkdirSync(safetyDir, { recursive: true });
+    fs.writeFileSync(path.join(safetyDir, 'MCsafety.cfg'), 'MaxDeliberation = Infinity\n');
+    assert.strictEqual(
+      isNumericThreshold('spec:safety/MCsafety.cfg:MaxDeliberation', { specDir: tmpDir }),
+      false
+    );
+  });
 });

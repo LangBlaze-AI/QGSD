@@ -20,8 +20,13 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('File not found: ' + String(filePath));
+  }
   const absInput = path.resolve(filePath);
-  if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
+  if (!fs.existsSync(absInput) || !fs.statSync(absInput).isFile()) {
+    throw new Error('File not found: ' + absInput);
+  }
 
   const content = fs.readFileSync(absInput, 'utf8');
 

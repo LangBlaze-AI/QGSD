@@ -136,3 +136,26 @@ describe('integration', () => {
     assert.ok(Array.isArray(fsm.model_comparison.missing_in_model));
   });
 });
+
+// ── Adversarial hardening tests ───────────────────────────────────────────────
+
+describe('replayPerSession — adversarial traceStats', () => {
+  it('does not crash on a null session entry in traceStats.sessions', () => {
+    assert.doesNotThrow(() =>
+      buildObservedFSM([], { sessions: [null] }));
+  });
+
+  it('does not crash on a non-object session entry', () => {
+    assert.doesNotThrow(() =>
+      buildObservedFSM([], { sessions: ['oops', 42] }));
+  });
+});
+
+describe('replayPerSession — adversarial conformance events', () => {
+  it('does not crash on a null event entry when a valid session exists', () => {
+    assert.doesNotThrow(() =>
+      buildObservedFSM([null], {
+        sessions: [{ start: '2020-01-01T00:00:00Z', end: '2030-01-01T00:00:00Z' }]
+      }));
+  });
+});

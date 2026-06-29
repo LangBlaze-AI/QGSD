@@ -72,3 +72,28 @@ test('loadDriver with incomplete driver throws interface error naming the missin
     else delete require.cache[POOL_PATH];
   }
 });
+
+// ─── 5. Path-traversal type must not escape the driver dir ────────────────────
+
+test('loadDriver rejects path-traversal type instead of requiring outside the driver dir', () => {
+  // '../auth-drivers/pool' resolves back to pool.cjs today, proving traversal works.
+  assert.throws(
+    () => loadDriver('../auth-drivers/pool'),
+    (err) => {
+      assert.ok(/Unknown auth driver/.test(err.message), `got: ${err.message}`);
+      return true;
+    }
+  );
+});
+
+// ─── 6. Non-string type must not be coerced into a valid driver ───────────────
+
+test('loadDriver does not coerce a non-string (array) type into a valid driver', () => {
+  assert.throws(
+    () => loadDriver(['pool']),
+    (err) => {
+      assert.ok(/Unknown auth driver/.test(err.message), `got: ${err.message}`);
+      return true;
+    }
+  );
+});

@@ -36,6 +36,15 @@ function normalizeSeverity(level) {
  * @returns {Promise<object>} Standard schema result
  */
 async function handleLogstash(sourceConfig, options) {
+  if (!sourceConfig || typeof sourceConfig !== 'object') {
+    return {
+      source_label: 'Logstash',
+      source_type: 'logstash',
+      status: 'error',
+      error: 'Invalid sourceConfig: expected an object',
+      issues: []
+    };
+  }
   const label = sourceConfig.label || 'Logstash';
   const endpoint = (sourceConfig.endpoint || '').replace(/\/$/, '');
   const index = sourceConfig.index || 'logstash-*';
@@ -93,7 +102,7 @@ async function handleLogstash(sourceConfig, options) {
 
     const issues = hits.map((hit, idx) => {
       const source = hit._source || {};
-      const message = source.message || 'No message';
+      const message = source.message ? String(source.message) : 'No message';
       const title = message.length > 120 ? message.slice(0, 120) + '...' : message;
       const level = source.level || '';
       const timestamp = source['@timestamp'] || new Date().toISOString();

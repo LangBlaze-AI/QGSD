@@ -435,3 +435,56 @@ test('0-requirement envelope returns agreement_threshold (not undefined)', async
     fsH.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Adversarial: malformed envelope shapes (JSON.parse succeeds, shape is wrong)
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('validateRequirements fails open on a null-literal envelope (no uncaught crash)', async () => {
+  const dir = createTempDir();
+  const envPath = path.join(dir, 'requirements.json');
+  fs.writeFileSync(envPath, 'null', 'utf8');
+  try {
+    const result = await validateRequirements({
+      envelopePath: envPath,
+      apiKey: 'dummy-key',
+      mockCall: () => JSON.stringify({ findings: [], summary: 'No issues' }),
+    });
+    assert.equal(result.status, 'error', 'Should return error status, not throw');
+  } finally {
+    cleanupTempDir(dir);
+  }
+});
+
+test('validateRequirements does not crash on a null entry in requirements[]', async () => {
+  const dir = createTempDir();
+  const envPath = createTempEnvelope(dir, {
+    requirements: [{ id: 'ENV-01', text: 'Valid', category: 'cat', phase: 'p' }, null],
+  });
+  try {
+    const result = await validateRequirements({
+      envelopePath: envPath,
+      apiKey: 'dummy-key',
+      passes: 2,
+      mockCall: () => JSON.stringify({ findings: [], summary: 'No issues' }),
+    });
+    assert.equal(result.status, 'validated', 'Should validate despite a malformed entry');
+  } finally {
+    cleanupTempDir(dir);
+  }
+});
+
+test('freezeEnvelope rejects a non-object (array) envelope instead of silently not freezing', () => {
+  const dir = createTempDir();
+  const envPath = path.join(dir, 'requirements.json');
+  fs.writeFileSync(envPath, JSON.stringify([{ id: 'ENV-01' }]), 'utf8');
+  try {
+    assert.throws(
+      () => freezeEnvelope(envPath),
+      /not a valid object|Envelope/,
+      'Should throw a descriptive Error, not return {frozen:true} with no frozen_at written'
+    );
+  } finally {
+    cleanupTempDir(dir);
+  }
+});

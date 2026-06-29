@@ -23,7 +23,7 @@ const path = require('path');
  * @returns {string} full path like "/opt/homebrew/bin/codex" or bare name if not found
  */
 function resolveCli(name) {
-  if (!name || typeof name !== 'string') return name || '';
+  if (typeof name !== 'string' || !name) return '';
 
   // 1. which <name>
   try {
@@ -106,7 +106,7 @@ function resolveCli(name) {
  */
 function resolveSpawnTarget(provider) {
   if (!provider || typeof provider !== 'object') return '';
-  if (provider.resolvedCli) return provider.resolvedCli;
+  if (typeof provider.resolvedCli === 'string' && provider.resolvedCli) return provider.resolvedCli;
   const bare = provider.cli || provider.mainTool;
   if (!bare) return '';
   return resolveCli(bare);

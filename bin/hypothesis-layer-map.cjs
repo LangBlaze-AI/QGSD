@@ -39,7 +39,7 @@ const KEYWORD_TO_LAYERS = {
  * @returns {string[]} — array of matching layer keys (may be empty)
  */
 function mapSourceToLayer(sourceModel) {
-  if (!sourceModel) return [];
+  if (!sourceModel || typeof sourceModel !== 'string') return [];
 
   // Extract filename without extension, lowercase
   const basename = path.basename(sourceModel, path.extname(sourceModel)).toLowerCase();
@@ -84,18 +84,21 @@ function loadHypothesisTransitions(root, previousPath) {
     return [];
   }
 
-  const currentMeasurements = current.measurements || [];
-  const previousMeasurements = previous.measurements || [];
+  const isObj = (v) => v !== null && typeof v === 'object';
+  const currentMeasurements = isObj(current) && Array.isArray(current.measurements) ? current.measurements : [];
+  const previousMeasurements = isObj(previous) && Array.isArray(previous.measurements) ? previous.measurements : [];
 
   // Build lookup by assumption_name for previous measurements
   const prevByName = new Map();
   for (const m of previousMeasurements) {
+    if (!m || typeof m !== 'object') continue;
     prevByName.set(m.assumption_name, m);
   }
 
   const transitions = [];
 
   for (const curr of currentMeasurements) {
+    if (!curr || typeof curr !== 'object') continue;
     const prev = prevByName.get(curr.assumption_name);
     if (!prev) continue;
 

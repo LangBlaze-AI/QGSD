@@ -858,11 +858,11 @@ function getNodeDegree(index, nodeKey) {
 function proximity(index, nodeKeyA, nodeKeyB, maxDepth, opts) {
   if (typeof maxDepth === 'undefined') maxDepth = 5;
   if (nodeKeyA === nodeKeyB) return 1.0;
-  if (!index.nodes[nodeKeyA] || !index.nodes[nodeKeyB]) return 0;
+  if (!index || !index.nodes || !index.nodes[nodeKeyA] || !index.nodes[nodeKeyB]) return 0;
 
-  const config = (opts && opts.methodConfig) ||
-    SCORING_METHODS[(opts && opts.method) || DEFAULT_SCORING_METHOD] ||
-    SCORING_METHODS[DEFAULT_SCORING_METHOD];
+  let config = (opts && opts.methodConfig) ||
+    SCORING_METHODS[(opts && opts.method) || DEFAULT_SCORING_METHOD];
+  if (!config || !config.weights) config = SCORING_METHODS[DEFAULT_SCORING_METHOD];
   const weights = config.weights;
   const useHubDampen = config.hubDampen;
   const useTfidf = config.tfidf;
@@ -953,7 +953,7 @@ function proximity(index, nodeKeyA, nodeKeyB, maxDepth, opts) {
 function countEmbeddedEdges(index) {
   let totalEdges = 0;
   const byType = {};
-  for (const node of Object.values(index.nodes || {})) {
+  for (const node of Object.values((index && index.nodes) || {})) {
     const count = (node.edges || []).length;
     totalEdges += count;
     byType[node.type] = (byType[node.type] || 0) + count;

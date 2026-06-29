@@ -140,3 +140,55 @@ describe('renderObserveOutput', () => {
     assert.ok(output.includes('All clear'));
   });
 });
+
+describe('renderObserveOutput hardening', () => {
+  it('skips null / non-object entries in the results array without crashing', () => {
+    const results = [
+      null,
+      undefined,
+      'garbage',
+      {
+        source_label: 'GH', source_type: 'github', status: 'ok',
+        issues: [
+          { id: 'gh-1', title: 'Real issue', severity: 'bug', age: '1h', created_at: new Date().toISOString(), issue_type: 'issue' }
+        ]
+      }
+    ];
+    let output;
+    assert.doesNotThrow(() => { output = renderObserveOutput(results); });
+    assert.ok(output.includes('Real issue'));
+  });
+});
+
+describe('renderObserveOutput non-array issues', () => {
+  it('treats a non-array issues field as empty instead of throwing', () => {
+    const results = [
+      { source_label: 'Bad', source_type: 'custom', status: 'ok', issues: { 'gh-1': { title: 'x' } } },
+      {
+        source_label: 'GH', source_type: 'github', status: 'ok',
+        issues: [
+          { id: 'gh-2', title: 'Good issue', severity: 'bug', age: '1h', created_at: new Date().toISOString(), issue_type: 'issue' }
+        ]
+      }
+    ];
+    let output;
+    assert.doesNotThrow(() => { output = renderObserveOutput(results); });
+    assert.ok(output.includes('Good issue'));
+  });
+});
+
+describe('renderObserveOutput null issue entries', () => {
+  it('skips null / non-object issue entries without crashing', () => {
+    const results = [{
+      source_label: 'GH', source_type: 'github', status: 'ok',
+      issues: [
+        null,
+        'garbage',
+        { id: 'gh-1', title: 'Survivor', severity: 'bug', age: '1h', created_at: new Date().toISOString(), issue_type: 'issue' }
+      ]
+    }];
+    let output;
+    assert.doesNotThrow(() => { output = renderObserveOutput(results); });
+    assert.ok(output.includes('Survivor'));
+  });
+});

@@ -288,4 +288,46 @@ Just content.`
       assert(lines.length < 50, 'Index should stay compact (< 50 lines for 2 entries)');
     });
   });
+
+  describe('parseVerificationFrontmatter adversarial input', () => {
+    it('should return empty object for non-string input (null/undefined/number)', () => {
+      assert.deepStrictEqual(parseVerificationFrontmatter(null), {});
+      assert.deepStrictEqual(parseVerificationFrontmatter(undefined), {});
+      assert.deepStrictEqual(parseVerificationFrontmatter(42), {});
+      assert.deepStrictEqual(parseVerificationFrontmatter({ phase: 'v0.1-01' }), {});
+    });
+  });
+
+  describe('extractKeywords adversarial input', () => {
+    it('should not throw when dirName is null or undefined', () => {
+      assert.doesNotThrow(() => extractKeywords(null, 'distinctive goal words', ''));
+      const result = extractKeywords(undefined, 'alpha beta gamma', 'NDJSON truths');
+      assert(Array.isArray(result));
+      assert(result.includes('alpha'));
+      assert(result.includes('ndjson'));
+    });
+  });
+
+  describe('appendPhaseEntry poisoned existing index', () => {
+    let tempDir;
+    before(() => {
+      tempDir = fs.mkdtempSync(path.join('/tmp', 'phase-index-poison-'));
+      fs.mkdirSync(path.join(tempDir, '.planning', 'formal'), { recursive: true });
+      process.chdir(tempDir);
+    });
+    after(() => {
+      process.chdir('/Users/jonathanborduas/code/QGSD');
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+    it('should still upsert when existing phases array contains a null entry', () => {
+      const indexPath = path.join(tempDir, '.planning', 'formal', 'phase-index.json');
+      fs.writeFileSync(indexPath, JSON.stringify({ version: '1.0', generated_at: 'x', phases: [null] }));
+      const verPath = path.join(tempDir, 'ver.md');
+      fs.writeFileSync(verPath, '---\nphase: v0.99-09\nstatus: passed\n---\n# Phase v0.99-09: Poison Test');
+      appendPhaseEntry(tempDir, verPath);
+      const index = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+      const matching = index.phases.filter(p => p && p.phase_id === 'v0.99-09');
+      assert.strictEqual(matching.length, 1, 'new entry should be persisted despite null poison');
+    });
+  });
 });

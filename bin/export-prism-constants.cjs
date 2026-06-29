@@ -32,8 +32,9 @@ function computeSlotRates(rounds, slot, minRounds, tpPrior, unavailPrior) {
   // Filter to rounds where this slot has a classifiable vote.
   // Exclude Mode A empty-string results and the UNAVAILABLE typo variant —
   // they carry no binary signal and would inflate apparent unavailability.
-  const participated = rounds.filter(r => {
-    const v = r.votes && r.votes[slot];
+  const safeRounds = Array.isArray(rounds) ? rounds : [];
+  const participated = safeRounds.filter(r => {
+    const v = r && r.votes ? r.votes[slot] : undefined;
     return v !== undefined && v !== '' && v !== 'UNAVAILABLE';
   });
   const n = participated.length;

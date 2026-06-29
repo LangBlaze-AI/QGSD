@@ -17,8 +17,13 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('Robot extract: filePath must be a non-empty string');
+  }
   const absInput = path.resolve(filePath);
-  if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
+  let stat = null;
+  try { stat = fs.statSync(absInput); } catch (_) { stat = null; }
+  if (!stat || !stat.isFile()) throw new Error('File not found: ' + absInput);
 
   const content = fs.readFileSync(absInput, 'utf8');
 
@@ -54,7 +59,7 @@ function extract(filePath, options = {}) {
     }
 
     const block = content.slice(startIdx, endIdx);
-    const transPattern = /transition\s*\(\s*['"](\w+)['"]\s*,\s*['"](\w+)['"]/g;
+    const transPattern = /transition\s*\(\s*['"]([\w-]+)['"]\s*,\s*['"]([\w-]+)['"]/g;
     let tm;
     while ((tm = transPattern.exec(block)) !== null) {
       transitions.push({

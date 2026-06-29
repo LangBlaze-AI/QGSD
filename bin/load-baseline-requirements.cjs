@@ -20,8 +20,8 @@ function loadBaselineRequirements(profile, basePath) {
   const indexContent = fs.readFileSync(indexPath, 'utf8');
   const index = JSON.parse(indexContent);
 
-  // Validate profile
-  if (!index.profiles[profile]) {
+  // Validate profile (own-property check so __proto__/constructor/toString are rejected)
+  if (!Object.prototype.hasOwnProperty.call(index.profiles, profile)) {
     throw new Error(`Invalid profile: ${profile}. Supported profiles: ${Object.keys(index.profiles).join(', ')}`);
   }
 
@@ -118,8 +118,8 @@ function loadBaselineRequirementsFromIntent(intent, basePath) {
   const indexContent = fs.readFileSync(indexPath, 'utf8');
   const index = JSON.parse(indexContent);
 
-  // Validate base_profile exists
-  if (!index.profiles[intent.base_profile]) {
+  // Validate base_profile exists (own-property check so __proto__/constructor/toString are rejected)
+  if (!Object.prototype.hasOwnProperty.call(index.profiles, intent.base_profile)) {
     throw new Error(`Invalid base_profile: ${intent.base_profile}. Supported profiles: ${Object.keys(index.profiles).join(', ')}`);
   }
 

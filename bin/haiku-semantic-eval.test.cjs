@@ -82,6 +82,15 @@ describe('haiku-semantic-eval', () => {
 
   });
 
+  describe('shouldSkipCached (adversarial)', () => {
+    it('should not crash on null / non-object candidate', () => {
+      assert.equal(shouldSkipCached(null), false);
+      assert.equal(shouldSkipCached(undefined), false);
+      assert.equal(shouldSkipCached('not-an-object'), false);
+      assert.equal(shouldSkipCached(42), false);
+    });
+  });
+
   describe('evaluateCandidatesBatch', () => {
 
     it('should batch candidates and call API for each', async () => {
@@ -142,6 +151,30 @@ describe('haiku-semantic-eval', () => {
       assert.ok(results[0].reasoning.includes('failed after retries'));
     });
 
+  });
+
+  describe('evaluateCandidatesBatch (adversarial)', () => {
+    it('should not crash when the batch contains a null entry', async () => {
+      const mockApi = async () => '{"verdict":"yes","confidence":0.9,"reasoning":"ok"}';
+      const candidates = [
+        null,
+        { model: 'a.als', requirement: 'REQ-01', proximity_score: 0.8 },
+      ];
+      const results = await evaluateCandidatesBatch(candidates, 'test-key', { apiCall: mockApi });
+      assert.equal(results.length, 2);
+      assert.equal(results[1].verdict, 'yes');
+    });
+  });
+
+  describe('parseHaikuResponse (confidence bounds)', () => {
+    it('should clamp out-of-range confidence into [0,1]', () => {
+      assert.equal(parseHaikuResponse('{"verdict":"yes","confidence":1.5}').confidence, 1);
+      assert.equal(parseHaikuResponse('{"verdict":"no","confidence":-0.3}').confidence, 0);
+    });
+    it('should clamp confidence inside a markdown fence too', () => {
+      const text = '```json\n{"verdict":"yes","confidence":99}\n```';
+      assert.equal(parseHaikuResponse(text).confidence, 1);
+    });
   });
 
 });

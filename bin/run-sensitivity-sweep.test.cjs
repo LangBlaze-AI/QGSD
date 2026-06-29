@@ -175,6 +175,51 @@ test('sensitivity-report.cjs generates .planning/formal/sensitivity-report.md (S
   );
 });
 
+// Test 8 (RSS-1): baseline_result and delta resolved against baseline
+test('records resolve baseline_result and delta against the baseline (prism baseline 0.85 must not stay unknown) (SENS-01)', () => {
+  const { tmpDir, ndjsonOut } = runSweep({});
+  let records = [];
+  if (fs.existsSync(ndjsonOut)) {
+    const lines = fs.readFileSync(ndjsonOut, 'utf8').trim().split('\n').filter(l => l.trim());
+    records = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  }
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+
+  const prism = records.filter(r => r.formalism === 'prism');
+  assert.ok(prism.length >= 3, 'expected >=3 prism records, got ' + prism.length);
+  assert.ok(
+    prism.every(r => r.metadata && r.metadata.baseline_result !== null),
+    'prism baseline_result must be resolved (baseline 0.85 is not a swept value, so it must be evaluated explicitly) — got null'
+  );
+  assert.ok(
+    prism.every(r => r.metadata && r.metadata.delta !== 'unknown'),
+    'prism delta must be computed against baseline, not left as "unknown"'
+  );
+});
+
+// Test 9 (RSS-2): exits 0 even when report path is unwritable
+test('run-sensitivity-sweep.cjs exits 0 even when report path is unwritable (always-exit-0 contract) (SENS-01)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sens-unwritable-'));
+  // Point the report path at an existing directory -> appendFileSync throws EISDIR
+  const dirAsReport = path.join(tmpDir, 'report-dir');
+  fs.mkdirSync(dirAsReport, { recursive: true });
+  const result = spawnSync(process.execPath, [TOOL_PATH], {
+    cwd: tmpDir,
+    encoding: 'utf8',
+    timeout: 30000,
+    env: {
+      ...process.env,
+      SENSITIVITY_REPORT_PATH: dirAsReport,
+      PATH: '/nonexistent:' + (process.env.PATH || ''),
+    },
+  });
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  assert.strictEqual(
+    result.status, 0,
+    'must exit 0 even when report path is unwritable (graceful degradation): ' + (result.stderr || result.error)
+  );
+});
+
 // Test 7: plan-phase.md step 8.3 exists and references run-sensitivity-sweep.cjs
 test('plan-phase.md step 8.3 exists and references run-sensitivity-sweep.cjs (SENS-02)', () => {
   assert.ok(

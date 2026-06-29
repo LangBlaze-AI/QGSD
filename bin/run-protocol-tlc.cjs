@@ -29,11 +29,13 @@ for (const arg of process.argv) {
 }
 
 const CHECK_ID_MAP = {
+  __proto__: null,
   'MCdeliberation': 'tla:deliberation',
   'MCprefilter':    'tla:prefilter',
 };
 
 const PROPERTY_MAP = {
+  __proto__: null,
   'MCdeliberation': 'R3 deliberation loop — max 10 rounds + 10 improvement iterations',
   'MCprefilter':    'R4 pre-filter protocol — max 3 rounds bounded termination',
 };
@@ -53,7 +55,7 @@ if (!VALID_CONFIGS.includes(configName)) {
   );
   const _startMs = Date.now();
   const _runtimeMs = 0;
-  try { writeCheckResult({ tool: 'run-protocol-tlc', formalism: 'tla', result: 'error', check_id: CHECK_ID_MAP[configName] || ('tla:' + configName.toLowerCase()), surface: 'tla', property: PROPERTY_MAP[configName] || configName, runtime_ms: _runtimeMs, summary: 'error: unknown config in ' + _runtimeMs + 'ms', requirement_ids: getRequirementIds(CHECK_ID_MAP[configName] || ('tla:' + configName.toLowerCase())), metadata: { config: configName } }); } catch (e) { process.stderr.write('[run-protocol-tlc] Warning: failed to write check result: ' + e.message + '\n'); }
+  try { writeCheckResult({ tool: 'run-protocol-tlc', formalism: 'tla', result: 'error', check_id: CHECK_ID_MAP[configName] || ('tla:' + configName.toLowerCase()), surface: 'tla', property: PROPERTY_MAP[configName] || configName || 'unknown config', runtime_ms: _runtimeMs, summary: 'error: unknown config in ' + _runtimeMs + 'ms', requirement_ids: getRequirementIds(CHECK_ID_MAP[configName] || ('tla:' + configName.toLowerCase())), metadata: { config: configName } }); } catch (e) { process.stderr.write('[run-protocol-tlc] Warning: failed to write check result: ' + e.message + '\n'); }
   process.exit(1);
 }
 

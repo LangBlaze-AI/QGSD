@@ -58,4 +58,14 @@ describe('compareDrift', () => {
     const entry = { meta: {} };
     assert.strictEqual(compareDrift(entry, 100), false);
   });
+
+  it('returns false when both measured and expected are NaN (fail-open on unreliable measurement)', () => {
+    const entry = { meta: { measured_value: NaN } };
+    assert.strictEqual(compareDrift(entry, NaN), false);
+  });
+
+  it('returns false when measured_value is NaN (fail-open, garbage measurement)', () => {
+    const entry = { meta: { measured_value: NaN } };
+    assert.strictEqual(compareDrift(entry, 100), false);
+  });
 });

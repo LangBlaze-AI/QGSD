@@ -58,3 +58,37 @@ test('extract parses useStateMachine fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract throws a clean error (not ERR_INVALID_ARG_TYPE) on null filePath', () => {
+  assert.throws(
+    () => extract(null),
+    (err) => {
+      assert.notStrictEqual(err.code, 'ERR_INVALID_ARG_TYPE');
+      assert.ok(!/must be of type string/i.test(err.message), 'should not leak a raw path TypeError');
+      assert.match(err.message, /File not found/);
+      return true;
+    }
+  );
+});
+
+test('extract throws a clean error on undefined filePath (no args)', () => {
+  assert.throws(
+    () => extract(),
+    (err) => {
+      assert.notStrictEqual(err.code, 'ERR_INVALID_ARG_TYPE');
+      assert.match(err.message, /File not found/);
+      return true;
+    }
+  );
+});
+
+test('extract throws a clean error (not EISDIR) on a directory path', () => {
+  assert.throws(
+    () => extract(os.tmpdir()),
+    (err) => {
+      assert.notStrictEqual(err.code, 'EISDIR');
+      assert.match(err.message, /File not found/);
+      return true;
+    }
+  );
+});

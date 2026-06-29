@@ -47,3 +47,18 @@ test('extract parses python-statemachine fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract throws a clear error for a non-string filePath', () => {
+  assert.throws(() => extract(undefined), /must be a non-empty string/);
+  assert.throws(() => extract(12345), /must be a non-empty string/);
+  assert.throws(() => extract(''), /must be a non-empty string/);
+});
+
+test('extract throws a clear error when given a directory path', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psm-dir-'));
+  try {
+    assert.throws(() => extract(dir), /not a regular file/);
+  } finally {
+    fs.rmdirSync(dir);
+  }
+});

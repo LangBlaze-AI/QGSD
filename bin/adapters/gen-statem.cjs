@@ -22,6 +22,9 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('gen_statem extract requires a non-empty file path');
+  }
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
 
@@ -44,7 +47,7 @@ function extract(filePath, options = {}) {
 
     // handle_event(cast, EventAtom, StateAtom, Data) -> {next_state, TargetAtom, Data}
     // handle_event({call, From}, Event, State, Data) -> {next_state, Target, Data}
-    const handlePattern = /handle_event\s*\(\s*(?:cast|info|\{call\s*,\s*\w+\})\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*\w+\s*\)\s*->\s*[\s\S]*?\{next_state\s*,\s*(\w+)/g;
+    const handlePattern = /handle_event\s*\(\s*(?:cast|info|\{call\s*,\s*\w+\})\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*\w+\s*\)\s*->\s*(?:(?!handle_event\s*\()[\s\S])*?\{next_state\s*,\s*(\w+)/g;
     let hm;
     while ((hm = handlePattern.exec(content)) !== null) {
       const event = hm[1];
@@ -100,7 +103,7 @@ function extract(filePath, options = {}) {
     }
 
     // def handle_event(:cast, :event, :state, data) do {:next_state, :target, data}
-    const handlePattern = /def\s+handle_event\s*\(\s*:(?:cast|info|call)\s*,\s*:(\w+)\s*,\s*:(\w+)\s*,\s*\w+\s*\)\s+do[\s\S]*?\{\s*:next_state\s*,\s*:(\w+)/g;
+    const handlePattern = /def\s+handle_event\s*\(\s*:(?:cast|info|call)\s*,\s*:(\w+)\s*,\s*:(\w+)\s*,\s*\w+\s*\)\s+do(?:(?!def\s+handle_event)[\s\S])*?\{\s*:next_state\s*,\s*:(\w+)/g;
     let hm;
     while ((hm = handlePattern.exec(content)) !== null) {
       const event = hm[1];
@@ -120,7 +123,7 @@ function extract(filePath, options = {}) {
 
     // Also try pattern with atoms in variables: def handle_event(:cast, event, state, data)
     // where the body has pattern matching
-    const handlePatternAlt = /def\s+handle_event\s*\(\s*:(?:cast|info)\s*,\s*:(\w+)\s*,\s*:(\w+)\s*,[^)]+\)[\s\S]*?\{\s*:next_state\s*,\s*:(\w+)/g;
+    const handlePatternAlt = /def\s+handle_event\s*\(\s*:(?:cast|info)\s*,\s*:(\w+)\s*,\s*:(\w+)\s*,[^)]+\)(?:(?!def\s+handle_event)[\s\S])*?\{\s*:next_state\s*,\s*:(\w+)/g;
     let ham;
     while ((ham = handlePatternAlt.exec(content)) !== null) {
       const event = ham[1];

@@ -36,7 +36,7 @@ function migrateClaudeJson(claudeJsonPath, dryRun = false) {
     throw new Error(`Failed to read ${claudeJsonPath}: ${e.message}`);
   }
 
-  const servers = raw.mcpServers || {};
+  const servers = (raw && typeof raw === 'object' && raw.mcpServers) || {};
   let changed = 0;
   const renamed = [];
 
@@ -145,6 +145,9 @@ function populateActiveSlots(nfJsonPath, claudeJsonPath, dryRun = false) {
     // nf.json absent — create minimal object
   }
 
+  if (!nfConfig || typeof nfConfig !== 'object' || Array.isArray(nfConfig)) {
+    nfConfig = {};
+  }
   // Idempotent: skip if already set and non-empty
   if (Array.isArray(nfConfig.quorum_active) && nfConfig.quorum_active.length > 0) {
     return { skipped: true, slots: nfConfig.quorum_active };
@@ -240,6 +243,9 @@ function addSlotToQuorumActive(slotName, nfJsonPath, dryRun = false) {
     return { added: false, slot: slotName, skipped: true, error: e.message };
   }
 
+  if (!nfConfig || typeof nfConfig !== 'object' || Array.isArray(nfConfig)) {
+    nfConfig = {};
+  }
   const active = Array.isArray(nfConfig.quorum_active) ? nfConfig.quorum_active : [];
   if (active.includes(slotName)) {
     return { added: false, slot: slotName, skipped: true, reason: 'already present' };

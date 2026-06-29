@@ -21,7 +21,11 @@ function extract(filePath, options = {}) {
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
 
-  const content = fs.readFileSync(absInput, 'utf8');
+  const rawContent = fs.readFileSync(absInput, 'utf8');
+  // Strip Ruby line/trailing comments so the do/end depth counter (and the
+  // transition regexes) never treat the words "do"/"end" inside a comment as
+  // block delimiters.
+  const content = rawContent.replace(/#.*$/gm, '');
 
   const stateSet = new Set();
   const transitions = [];
@@ -120,6 +124,10 @@ function extract(filePath, options = {}) {
 
   if (initial) stateSet.add(initial);
   const stateNames = [...stateSet];
+  // AASM uses the first declared state as the initial state when none is
+  // marked `initial: true`. Without this, validateIR rejects the empty
+  // `initial` and extract throws on perfectly valid AASM source.
+  if (!initial && stateNames.length > 0) initial = stateNames[0];
 
   const ir = {
     machineId: path.basename(filePath, '.rb'),

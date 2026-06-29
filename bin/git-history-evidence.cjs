@@ -145,11 +145,17 @@ function buildTlaCoverageReverseMap(root) {
  * Look up TLA+ specs covering a file, checking both direct and suffix matches.
  */
 function getTlaCrossRefs(file, reverseMap) {
-  // Direct match
-  if (reverseMap[file]) return reverseMap[file];
+  if (typeof file !== 'string' || file === '') return [];
+  if (!reverseMap || typeof reverseMap !== 'object') return [];
+
+  // Direct match — own-property only, never inherited keys like "constructor"
+  if (Object.prototype.hasOwnProperty.call(reverseMap, file) && Array.isArray(reverseMap[file])) {
+    return reverseMap[file];
+  }
 
   // Suffix matching (e.g., file = "hooks/nf-prompt.js", key = "hooks/nf-prompt.js")
   for (const [key, specs] of Object.entries(reverseMap)) {
+    if (key === '') continue;
     if (file.endsWith(key) || key.endsWith(file)) return specs;
   }
   return [];

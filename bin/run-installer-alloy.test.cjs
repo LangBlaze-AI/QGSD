@@ -56,3 +56,38 @@ test('exits non-zero and lists valid specs (install-scope, taxonomy-safety) in e
   assert.strictEqual(result.status, 1);
   assert.match(result.stderr, /install-scope|taxonomy-safety/i);
 });
+
+test('records invalid-spec error for prototype-key --spec (no swallowed writeCheckResult)', () => {
+  const os = require('os');
+  const outPath = path.join(os.tmpdir(), 'nf-alloy-proto-' + process.pid + '-' + Date.now() + '.ndjson');
+  try { fs.unlinkSync(outPath); } catch (_) {}
+  const result = spawnSync(process.execPath, [RUN_INSTALLER_ALLOY, '--spec=__proto__'], {
+    encoding: 'utf8',
+    env: { ...process.env, CHECK_RESULTS_PATH: outPath },
+  });
+  assert.strictEqual(result.status, 1);
+  // fail-open writeCheckResult must succeed, not throw on a polluted check_id/property
+  assert.doesNotMatch(result.stderr, /failed to write check result/i);
+  assert.ok(fs.existsSync(outPath), 'expected an NDJSON error record to be written');
+  const rec = JSON.parse(fs.readFileSync(outPath, 'utf8').trim().split('\n').pop());
+  assert.strictEqual(rec.check_id, 'alloy:__proto__');
+  assert.strictEqual(rec.result, 'error');
+  try { fs.unlinkSync(outPath); } catch (_) {}
+});
+
+test('records invalid-spec error for empty --spec= value (non-empty property)', () => {
+  const os = require('os');
+  const outPath = path.join(os.tmpdir(), 'nf-alloy-empty-' + process.pid + '-' + Date.now() + '.ndjson');
+  try { fs.unlinkSync(outPath); } catch (_) {}
+  const result = spawnSync(process.execPath, [RUN_INSTALLER_ALLOY, '--spec='], {
+    encoding: 'utf8',
+    env: { ...process.env, CHECK_RESULTS_PATH: outPath },
+  });
+  assert.strictEqual(result.status, 1);
+  assert.doesNotMatch(result.stderr, /failed to write check result/i);
+  assert.ok(fs.existsSync(outPath), 'expected an NDJSON error record for empty spec');
+  const rec = JSON.parse(fs.readFileSync(outPath, 'utf8').trim().split('\n').pop());
+  assert.strictEqual(rec.result, 'error');
+  assert.ok(typeof rec.property === 'string' && rec.property.length > 0, 'property must be non-empty');
+  try { fs.unlinkSync(outPath); } catch (_) {}
+});

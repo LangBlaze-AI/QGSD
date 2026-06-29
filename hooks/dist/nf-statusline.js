@@ -18,7 +18,7 @@ function detectContextSize(data) {
   if (explicit && explicit > 0) return explicit;
 
   // Tier 2: parse display_name for context tier hint
-  const displayName = data.model?.display_name || '';
+  const displayName = typeof data.model?.display_name === 'string' ? data.model.display_name : '';
   const match = displayName.match(/\((?:with\s+)?(\d+)([KM])\s*context/i);
   if (match) {
     const num = parseInt(match[1], 10);
@@ -176,8 +176,8 @@ function buildSlotsLine(homeDir, ctx) {
 
   const parts = [];
   for (const p of providers) {
-    const inMcp = !!mcpServers[p.name];
-    const entry = cache && cache.slots && cache.slots[p.name];
+    const inMcp = Object.prototype.hasOwnProperty.call(mcpServers, p.name);
+    const entry = cache && cache.slots && Object.prototype.hasOwnProperty.call(cache.slots, p.name) ? cache.slots[p.name] : undefined;
     let glyph, color;
     if (!inMcp) {
       glyph = '·'; color = '\x1b[2m'; // dim — listed but not MCP-registered
@@ -206,18 +206,18 @@ function buildQuorumSummary(homeDir, ctx) {
   if (!h) return null;
   const { providers, mcpServers, cache, fresh } = h;
 
-  const mcpSlots = providers.filter(p => mcpServers[p.name]);
+  const mcpSlots = providers.filter(p => Object.prototype.hasOwnProperty.call(mcpServers, p.name));
   const total = mcpSlots.length;
   if (total === 0) return null;
 
   if (!fresh) return `\x1b[2m${total}○ quorum\x1b[0m`;
-  const healthy = mcpSlots.filter(p => { const e = cache && cache.slots && cache.slots[p.name]; return e && e.ok; }).length;
+  const healthy = mcpSlots.filter(p => { const e = cache && cache.slots && Object.prototype.hasOwnProperty.call(cache.slots, p.name) ? cache.slots[p.name] : undefined; return e && e.ok; }).length;
   if (healthy === total) return `\x1b[32m${total}● quorum\x1b[0m`;
 
   // A slot counts as DOWN only if it was actually probed and FAILED (ok === false).
   // Slots merely MISSING from the cache (added since the last probe) are unknown,
   // not failures — don't raise a repair CTA for them, just show a dim count.
-  const down = mcpSlots.filter(p => { const e = cache && cache.slots && cache.slots[p.name]; return e && e.ok === false; });
+  const down = mcpSlots.filter(p => { const e = cache && cache.slots && Object.prototype.hasOwnProperty.call(cache.slots, p.name) ? cache.slots[p.name] : undefined; return e && e.ok === false; });
   if (down.length === 0) return `\x1b[2m${healthy}/${total}○ quorum\x1b[0m`;
 
   // Real failure → make it a call-to-action, not just a status (like ⬆ /nf:update).

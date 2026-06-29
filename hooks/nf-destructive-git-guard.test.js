@@ -10,6 +10,7 @@ const os = require('os');
 const path = require('path');
 
 const HOOK_PATH = path.join(__dirname, 'nf-destructive-git-guard.js');
+const { getGitRoot } = require('./nf-destructive-git-guard.js');
 
 function runHook(input) {
   const result = spawnSync('node', [HOOK_PATH], {
@@ -184,4 +185,33 @@ test('TC-DG-09: malformed JSON exits 0 (fail-open)', () => {
   });
   assert.strictEqual(result.status, 0, 'must exit 0');
   assert.strictEqual((result.stdout || '').trim(), '', 'stdout must be empty');
+});
+
+// TC-DG-10: chained destructive git (X && git reset --hard) with dirty tree warns
+test('TC-DG-10: chained destructive git with dirty tree exits 0 with stderr warning', () => {
+  const tempDir = setupRepo();
+  try {
+    fs.writeFileSync(path.join(tempDir, 'dirty.txt'), 'uncommitted\n', 'utf8');
+    const { stdout, stderr, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'git add -A && git reset --hard HEAD~1' },
+      cwd: tempDir,
+      hook_event_name: 'PreToolUse',
+    });
+    assert.strictEqual(exitCode, 0);
+    assert.strictEqual(stdout, '', 'stdout must be empty -- warn-only');
+    assert.ok(
+      stderr.includes('Destructive git operation'),
+      'must warn when destructive git is chained after another command'
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+// TC-DG-11: getGitRoot tolerates non-string cwd (returns null, no throw)
+test('TC-DG-11: getGitRoot with non-string cwd returns null without throwing', () => {
+  assert.strictEqual(getGitRoot(12345), null);
+  assert.strictEqual(getGitRoot({}), null);
+  assert.strictEqual(getGitRoot([]), null);
 });

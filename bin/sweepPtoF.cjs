@@ -30,7 +30,8 @@ function sweepPtoF(options = {}) {
   const ledger = readDebtLedger(ledgerPath);
 
   // 2. Filter for acknowledged entries only (PF-03)
-  const acknowledged = (ledger.debt_entries || []).filter(e => e.status === 'acknowledged');
+  const entries = Array.isArray(ledger && ledger.debt_entries) ? ledger.debt_entries : [];
+  const acknowledged = entries.filter(e => e && e.status === 'acknowledged');
 
   // 3. Separate linked vs unlinked
   const withRef = acknowledged.filter(e => e.formal_ref != null);

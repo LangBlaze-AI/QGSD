@@ -1519,3 +1519,38 @@ test('ADV-R7-1: INVARIANT — full corrupt element+field matrix degrades to an a
     'keyword match lookup');
   assert.ok(Array.isArray(outPrec), 'matchPrecedentsByKeywords must return an array on a mixed corrupt/clean list');
 });
+// ── ADVERSARIAL TESTS — formatDiagnosticForPrompt fail-open (QSD-DIAG) ────────
+
+test('QSD-DIAG-1: formatDiagnosticForPrompt must fail-open on a null/non-object proposal element (not throw)', () => {
+  assert.ok(mod, 'module not loaded');
+  // A model can emit a malformed diagnostic where a correction_proposals entry is null
+  // or a scalar. Array.isArray() passes, but the per-element loop dereferences p.type.
+  assert.doesNotThrow(
+    () => mod.formatDiagnosticForPrompt({ mismatch_diff: 'm', correction_proposals: [null] }),
+    'formatDiagnosticForPrompt must not throw on a null proposal element');
+  assert.doesNotThrow(
+    () => mod.formatDiagnosticForPrompt({ mismatch_diff: 'm', correction_proposals: [42, 'foo'] }),
+    'formatDiagnosticForPrompt must not throw on scalar proposal elements');
+  // A valid proposal interleaved with a null one must still render.
+  const out = mod.formatDiagnosticForPrompt({
+    mismatch_diff: 'm',
+    correction_proposals: [null, { type: 'ADD', target: 't', reasoning: 'r', example: 'e' }],
+  });
+  assert.ok(typeof out === 'string', 'must return a string');
+  assert.ok(out.includes('[ADD]'), 'the valid proposal must still be formatted');
+});
+
+test('QSD-DIAG-2: formatDiagnosticForPrompt must fail-open when trace_alignment.diverged_fields is not an array', () => {
+  assert.ok(mod, 'module not loaded');
+  // A model may emit diverged_fields as a string/number/object rather than an array.
+  // `(x || []).join` then calls .join on the non-array and throws.
+  assert.doesNotThrow(
+    () => mod.formatDiagnosticForPrompt({ mismatch_diff: 'm', correction_proposals: [], trace_alignment: { diverged_fields: 'a,b' } }),
+    'formatDiagnosticForPrompt must not throw on a string diverged_fields');
+  assert.doesNotThrow(
+    () => mod.formatDiagnosticForPrompt({ mismatch_diff: 'm', correction_proposals: [], trace_alignment: { diverged_fields: { a: 1 } } }),
+    'formatDiagnosticForPrompt must not throw on an object diverged_fields');
+  // A real array still renders joined.
+  const out = mod.formatDiagnosticForPrompt({ mismatch_diff: 'm', correction_proposals: [], trace_alignment: { diverged_fields: ['x', 'y'] } });
+  assert.ok(out.includes('x, y'), 'array diverged_fields must still be joined');
+});

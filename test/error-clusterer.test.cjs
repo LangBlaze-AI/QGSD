@@ -180,4 +180,42 @@ describe('clusterErrors', () => {
     const clusters = clusterErrors(entries);
     assert.equal(clusters[0].representative.confidence, 'high');
   });
+
+  it('does not crash on a null or non-object entry in the array', () => {
+    const entries = [
+      { symptom: 'Error: ENOENT: file a', ts: new Date().toISOString() },
+      { symptom: 'Error: ENOENT: file b', ts: new Date().toISOString() },
+      null,
+      'not-an-object',
+    ];
+    let clusters;
+    assert.doesNotThrow(() => { clusters = clusterErrors(entries); });
+    // The two valid ENOENT entries still cluster together
+    const enoent = clusters.filter(c => c.errorType === 'ENOENT');
+    assert.equal(enoent.length, 1);
+    assert.equal(enoent[0].count, 2);
+  });
+
+  it('does not crash when symptom is a non-string value', () => {
+    const entries = [
+      { symptom: 42, ts: new Date().toISOString() },
+      { symptom: { nested: 'oops' }, ts: new Date().toISOString() },
+    ];
+    let clusters;
+    assert.doesNotThrow(() => { clusters = clusterErrors(entries); });
+    assert.ok(clusters.length >= 1);
+    // Non-string symptoms classify as Unknown and roll into Other
+    for (const c of clusters) {
+      assert.ok(['Unknown', 'Other'].includes(c.errorType));
+      assert.equal(typeof c.label, 'string');
+    }
+  });
+
+  it('does not crash when options is null', () => {
+    const entries = [{ symptom: 'Error: ENOENT: x', ts: new Date().toISOString() }];
+    let clusters;
+    assert.doesNotThrow(() => { clusters = clusterErrors(entries, null); });
+    assert.equal(clusters.length, 1);
+    assert.equal(clusters[0].count, 1);
+  });
 });

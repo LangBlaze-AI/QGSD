@@ -61,7 +61,7 @@ async function main() {
     process.exit(1);
   }
 
-  if (!Array.isArray(config.providers)) {
+  if (!config || typeof config !== 'object' || !Array.isArray(config.providers)) {
     process.stderr.write('[ccr-secure-config] config.json has no providers array\n');
     process.exit(1);
   }
@@ -74,9 +74,9 @@ async function main() {
 
   let patched = 0;
   for (const provider of config.providers) {
-    if (!provider.name) continue;
+    if (!provider.name || typeof provider.name !== 'string') continue;
     const keyName = provider.name.toLowerCase();
-    if (keyName in providerKeyMap && providerKeyMap[keyName]) {
+    if (Object.prototype.hasOwnProperty.call(providerKeyMap, keyName) && providerKeyMap[keyName]) {
       provider.api_key = providerKeyMap[keyName];
       patched++;
     }

@@ -385,6 +385,56 @@ test('Consequence Model Generator - Fail-Open Behavior', async (t) => {
   });
 });
 
+test('Consequence Model Generator - Null Mutation Entry', async (t) => {
+  await t.test('fail-open: null mutation entry does not crash, records applied=false', () => {
+    const { tempDir, filePath } = createTempFile(
+      '---- MODULE Test ----\nEXTENDS Naturals\n===='
+    );
+
+    try {
+      const mutations = [null];
+
+      let result;
+      assert.doesNotThrow(() => {
+        result = generateConsequenceModel(filePath, mutations);
+      });
+
+      assert.equal(result.appliedMutations.length, 1);
+      assert.equal(result.appliedMutations[0].applied, false);
+      assert.equal(result.diagnostics.skippedCount, 1);
+
+      fs.rmSync(result.sessionDir, { recursive: true, force: true });
+    } finally {
+      cleanup(tempDir);
+    }
+  });
+});
+
+test('Consequence Model Generator - Null Options', async (t) => {
+  await t.test('does not crash when options is explicitly null', () => {
+    const { tempDir, filePath } = createTempFile(
+      '---- MODULE Test ----\nEXTENDS Naturals\n===='
+    );
+
+    try {
+      const mutations = [
+        { type: 'add_invariant', target: 'Inv1', content: 'x > 0' }
+      ];
+
+      let result;
+      assert.doesNotThrow(() => {
+        result = generateConsequenceModel(filePath, mutations, null);
+      });
+
+      assert(result.consequenceModelPath.endsWith('.tla'));
+
+      fs.rmSync(result.sessionDir, { recursive: true, force: true });
+    } finally {
+      cleanup(tempDir);
+    }
+  });
+});
+
 test('Consequence Model Generator - Input Validation', async (t) => {
   await t.test('throws error for non-existent reproducing model', () => {
     const nonExistentPath = '/nonexistent/path/model.tla';

@@ -83,3 +83,40 @@ test('missing agent_id: exits 0 gracefully', () => {
   assert.equal(exitCode, 0);
   // No crash — exits gracefully when agent_id is null
 });
+
+test('path-traversal agent_id: exits 0, writes nothing outside correlations dir', () => {
+  const tmpDir = makeTmpDir();
+
+  const payload = {
+    hook_event_name: 'SubagentStart',
+    agent_type: 'nf-quorum-slot-worker',
+    // Escapes .planning/quorum/correlations back up to the cwd root.
+    agent_id: '../../../../../pwned',
+  };
+
+  const { exitCode } = runHook(payload, tmpDir);
+  assert.equal(exitCode, 0);
+
+  // Vulnerable code resolves the write target to <tmpDir>/pwned.json (escaped).
+  const escaped = path.join(tmpDir, 'pwned.json');
+  assert.equal(fs.existsSync(escaped), false,
+    'Unsafe agent_id must not write a file outside the correlations directory');
+  // And the hook should refuse before creating any planning tree at all.
+  assert.equal(fs.existsSync(path.join(tmpDir, '.planning')), false,
+    'No correlation tree should be created for a traversal agent_id');
+});
+
+test('non-string agent_id (object): exits 0, no file written', () => {
+  const tmpDir = makeTmpDir();
+
+  const payload = {
+    hook_event_name: 'SubagentStart',
+    agent_type: 'nf-quorum-slot-worker',
+    agent_id: { evil: true },
+  };
+
+  const { exitCode } = runHook(payload, tmpDir);
+  assert.equal(exitCode, 0);
+  assert.equal(fs.existsSync(path.join(tmpDir, '.planning')), false,
+    'Non-string agent_id must not produce a correlation file');
+});

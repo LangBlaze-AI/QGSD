@@ -71,6 +71,7 @@ function readPrismResults(ndjsonPath) {
  * @returns {Array<{ check_id: string, priority: number, p_failure: number, impact: number, summary: string }>}
  */
 function rankFailureModes(prismResults) {
+  if (!Array.isArray(prismResults)) return [];
   const failures = prismResults.filter(e => e.result === 'fail' || e.result === 'warn');
   if (failures.length === 0) return [];
 
@@ -85,7 +86,9 @@ function rankFailureModes(prismResults) {
     }
 
     // Determine impact
-    const impact = IMPACT_SCORES[entry.check_id] || DEFAULT_IMPACT;
+    const impact = Object.prototype.hasOwnProperty.call(IMPACT_SCORES, entry.check_id)
+      ? IMPACT_SCORES[entry.check_id]
+      : DEFAULT_IMPACT;
 
     // Compute priority
     const priority = Math.round(p_failure * impact * 100) / 100;

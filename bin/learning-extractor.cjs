@@ -47,7 +47,7 @@ function extractTextFromEntry(entry) {
   const content = entry.message.content;
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
-    const textBlock = content.find(b => b.type === 'text');
+    const textBlock = content.find(b => b && b.type === 'text');
     return textBlock ? (textBlock.text || '') : '';
   }
   return '';
@@ -116,7 +116,7 @@ function findResolution(entries, i) {
     // Check for successful tool_result (user entry with non-error tool_result)
     if (entry.type === 'user' && Array.isArray(entry.message?.content)) {
       for (const block of entry.message.content) {
-        if (block.type === 'tool_result' && !block.is_error && block.type !== 'tool_error') {
+        if (block && block.type === 'tool_result' && !block.is_error && block.type !== 'tool_error') {
           const contentStr = typeof block.content === 'string'
             ? block.content
             : JSON.stringify(block.content || '');
@@ -180,7 +180,7 @@ function extractErrorPatterns(lines, maxPatterns = 10) {
     if (!Array.isArray(content)) continue;
 
     for (const block of content) {
-      if (block.type !== 'tool_result') continue;
+      if (!block || block.type !== 'tool_result') continue;
       if (!isErrorBlock(block)) continue;
 
       const symptom = extractSymptom(block);

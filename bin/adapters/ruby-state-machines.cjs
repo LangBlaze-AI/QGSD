@@ -18,6 +18,9 @@ function detect(filePath, content) {
 }
 
 function extract(filePath, options = {}) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('Invalid filePath: expected non-empty string, got ' + (filePath === null ? 'null' : typeof filePath));
+  }
   const absInput = path.resolve(filePath);
   if (!fs.existsSync(absInput)) throw new Error('File not found: ' + absInput);
 
@@ -55,7 +58,7 @@ function extract(filePath, options = {}) {
   //   transition [:draft, :pending] => :submitted
   //   transition :pending => :submitted, if: :can_submit?
   // end
-  const eventPattern = /event\s+:(\w+)\s+do([\s\S]*?)end/g;
+  const eventPattern = /event\s+:(\w+)\s+do([\s\S]*?)\bend\b/g;
   let em;
   while ((em = eventPattern.exec(content)) !== null) {
     const eventName = em[1];
@@ -97,6 +100,7 @@ function extract(filePath, options = {}) {
       if (singleTransMatch) {
         const fromState = singleTransMatch[1];
         const target = singleTransMatch[2];
+        if (['all', 'any', 'same'].includes(fromState)) continue;
         stateSet.add(fromState);
         stateSet.add(target);
         transitions.push({

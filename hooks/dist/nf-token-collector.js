@@ -43,7 +43,7 @@ function resolveSlot(input) {
   }
 
   // Parse from last_assistant_message preamble
-  if (input.last_assistant_message) {
+  if (typeof input.last_assistant_message === 'string') {
     const m = input.last_assistant_message.match(/^slot:\s*(\S+)/m);
     if (m) return m[1];
   }
@@ -56,7 +56,13 @@ function resolveSlot(input) {
       if (firstLine) {
         const entry = JSON.parse(firstLine);
         if (entry.type === 'user' && entry.message && entry.message.content) {
-          const um = entry.message.content.match(/^slot:\s*(\S+)/m);
+          const content = entry.message.content;
+          const text = typeof content === 'string'
+            ? content
+            : Array.isArray(content)
+              ? content.map(b => (b && typeof b.text === 'string' ? b.text : '')).join('\n')
+              : '';
+          const um = text.match(/^slot:\s*(\S+)/m);
           if (um) return um[1];
         }
       }

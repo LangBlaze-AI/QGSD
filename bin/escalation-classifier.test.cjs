@@ -3,8 +3,12 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const {
+  classifyEscalation,
   buildClassificationPrompt,
   parseClassificationResponse,
   detectNewlyBlocked,
@@ -184,5 +188,48 @@ describe('getLayerGitDiff', () => {
     // This test is best-effort; in practice diffs may be short
     const result = getLayerGitDiff('r_to_f', process.cwd(), 100);
     assert.ok(result.length <= 2020); // 2000 + truncation message
+  });
+});
+
+// ── classifyEscalation corrupt trend entries ────────────────────────────────
+
+describe('classifyEscalation corrupt trend entries', () => {
+  it('does not crash when a trend line parses to null (fail-open)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'esc-cls-'));
+    const formalDir = path.join(dir, '.planning', 'formal');
+    fs.mkdirSync(formalDir, { recursive: true });
+
+    const verdictsPath = path.join(formalDir, 'oscillation-verdicts.json');
+    fs.writeFileSync(verdictsPath, JSON.stringify({ layers: { r_to_f: { oscillation_count: 2 } } }));
+
+    const trendPath = path.join(formalDir, 'solve-trend.jsonl');
+    // A literal `null` JSONL line (corrupt/truncated write) parses to null
+    fs.writeFileSync(trendPath, 'null\n{"per_layer":{"r_to_f":3}}\n');
+
+    delete process.env.ANTHROPIC_API_KEY; // force fail-open, no network call
+
+    let result;
+    assert.doesNotThrow(() => {
+      result = classifyEscalation({ layer: 'r_to_f', root: dir, trendPath, verdictsPath });
+    });
+    assert.equal(result.layer, 'r_to_f');
+    assert.equal(result.classification, 'INSUFFICIENT_EVIDENCE');
+  });
+});
+
+// ── buildClassificationPrompt defensive input ───────────────────────────────
+
+describe('buildClassificationPrompt defensive input', () => {
+  it('does not throw on missing context', () => {
+    assert.doesNotThrow(() => buildClassificationPrompt(undefined));
+    const prompt = buildClassificationPrompt(undefined);
+    assert.equal(typeof prompt, 'string');
+    assert.ok(prompt.includes('GENUINE_REGRESSION'));
+  });
+
+  it('does not throw when deltas is a non-array', () => {
+    assert.doesNotThrow(() => buildClassificationPrompt({ layer: 'r_to_f', deltas: '1,2,3' }));
+    const prompt = buildClassificationPrompt({ layer: 'r_to_f', deltas: '1,2,3' });
+    assert.equal(typeof prompt, 'string');
   });
 });

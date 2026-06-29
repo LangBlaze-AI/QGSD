@@ -58,6 +58,17 @@ describe('getRequirementIds — fail-open', () => {
   });
 });
 
+// ── 2b. Fail-open for inherited Object.prototype key names ────────────────────
+describe('getRequirementIds — inherited prototype keys (fail-open)', () => {
+  it('returns [] for inherited Object.prototype key names instead of throwing', () => {
+    for (const key of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']) {
+      let result;
+      assert.doesNotThrow(() => { result = getRequirementIds(key); }, key + ' should not throw');
+      assert.deepStrictEqual(result, [], key + ' should fail open to []');
+    }
+  });
+});
+
 // ── 3. TLA+ runner check_ids ─────────────────────────────────────────────────
 describe('getRequirementIds — TLA+ runners', () => {
   it('tla:quorum-safety returns core quorum requirements', () => {

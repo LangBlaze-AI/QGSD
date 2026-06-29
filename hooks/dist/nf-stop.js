@@ -142,13 +142,13 @@ function extractCommandArgs(entry) {
 // only the command name, so flags live in <command-args>. Scoped to user command args
 // (never hook-injected text) so a prior block reason mentioning the flag cannot self-waive.
 function hasForceQuorumFlag(currentTurnLines, promptText) {
-  if (/\b--force-quorum\b/.test(promptText)) return true;
+  if (/(?<![\w-])--force-quorum\b/.test(promptText)) return true;
   for (const line of currentTurnLines) {
     try {
       const entry = JSON.parse(line);
       if (entry.type !== 'user') continue;
       const args = extractCommandArgs(entry);
-      if (args !== null && /\b--force-quorum\b/.test(args)) return true;
+      if (args !== null && /(?<![\w-])--force-quorum\b/.test(args)) return true;
     } catch { /* skip malformed lines */ }
   }
   return false;

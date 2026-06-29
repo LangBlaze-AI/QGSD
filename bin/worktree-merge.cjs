@@ -52,7 +52,7 @@ function ensureCleanState(cwd, targetBranch) {
  * @returns {{ branches: Array<{branch: string, status: string, error?: string}>, checkpoint: string }}
  */
 function mergeBranches(cwd, branches, options) {
-  if (!branches || branches.length === 0) {
+  if (!Array.isArray(branches) || branches.length === 0) {
     return { branches: [], checkpoint: null };
   }
 
@@ -75,7 +75,9 @@ function mergeBranches(cwd, branches, options) {
       const stderr = err.stderr ? err.stderr.toString() : '';
       const stdout = err.stdout ? err.stdout.toString() : '';
       const combined = stderr + stdout + (err.message || '');
-      if (combined.includes('CONFLICT')) {
+      // Detect real content conflicts via git's specific markers, NOT the bare
+      // substring 'CONFLICT' which also appears when the branch NAME contains it.
+      if (combined.includes('Automatic merge failed') || combined.includes('CONFLICT (')) {
         // Abort the conflicting merge (git outputs CONFLICT to stdout)
         try { runGit(cwd, ['merge', '--abort']); } catch (_) { /* best-effort */ }
         results.push({ branch, status: 'conflict', error: combined.slice(0, 500) });
@@ -120,7 +122,7 @@ function verifyMergedState(cwd, checkpoint) {
 function cleanupWorktreeBranches(cwd, branches) {
   const results = [];
 
-  for (const branch of (branches || [])) {
+  for (const branch of (Array.isArray(branches) ? branches : [])) {
     try {
       runGit(cwd, ['branch', '-d', branch]);
       results.push({ branch, status: 'deleted' });

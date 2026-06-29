@@ -30,6 +30,7 @@ const SCRATCH_DIR = path.join(ROOT, '.planning', 'formal', 'tla', 'scratch');
  *   - truths: string[] from must_haves.truths
  */
 function parsePlanFrontmatter(content) {
+  if (typeof content !== 'string') return { truths: [] };
   const lines = content.split('\n');
   if (!lines[0] || lines[0].trim() !== '---') return { truths: [] };
   const endIdx = lines.slice(1).findIndex(l => l.trim() === '---');
@@ -114,7 +115,7 @@ function collectPlanFiles(inputPath) {
  * @returns {'PROPERTY' | 'INVARIANT'}
  */
 function classifyTruth(truth) {
-  const lower = truth.toLowerCase();
+  const lower = String(truth == null ? '' : truth).toLowerCase();
   const livenessKeywords = [
     'eventually',
     'deadline',
@@ -136,10 +137,11 @@ function classifyTruth(truth) {
  * @returns {{ moduleName: string, spec: string, truthCount: number }}
  */
 function generatePhaseSpec({ phase, truths }) {
-  const allTruths = truths || [];
+  const allTruths = (Array.isArray(truths) ? truths : []).filter(t => typeof t === 'string');
 
   // TLA+ module name: sanitize phase string (e.g. v0.21-04 → Phasev0_21_04Spec)
-  const moduleName = 'Phase' + (phase || 'unknown').replace(/[^a-zA-Z0-9]/g, '_') + 'Spec';
+  const phaseStr = (typeof phase === 'string' && phase) ? phase : 'unknown';
+  const moduleName = 'Phase' + phaseStr.replace(/[^a-zA-Z0-9]/g, '_') + 'Spec';
   const timestamp = new Date().toISOString();
 
   let spec = `---- MODULE ${moduleName} ----

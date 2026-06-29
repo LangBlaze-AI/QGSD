@@ -40,13 +40,20 @@ function main() {
   const events = [];
   for (const line of lines) {
     try {
-      events.push(JSON.parse(line));
+      const parsed = JSON.parse(line);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        events.push(parsed);
+      }
     } catch (_) {}
   }
 
-  // Load vocabulary
-  const vocab = JSON.parse(fs.readFileSync(VOCAB_PATH, 'utf8'));
-  const vocabActions = new Set(Object.keys(vocab.vocabulary));
+  // Load vocabulary (fail-open: treat missing/malformed vocab as empty)
+  let vocab = {};
+  try { vocab = JSON.parse(fs.readFileSync(VOCAB_PATH, 'utf8')); } catch (_) {}
+  const vocabMap = (vocab && typeof vocab.vocabulary === 'object' && vocab.vocabulary !== null)
+    ? vocab.vocabulary
+    : {};
+  const vocabActions = new Set(Object.keys(vocabMap));
 
   // Sort by timestamp
   events.sort((a, b) => {

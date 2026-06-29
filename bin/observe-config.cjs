@@ -279,7 +279,17 @@ function loadObserveConfig(configPath, basePath) {
   }
 
   // Read and parse frontmatter
-  const content = fs.readFileSync(configFile, 'utf8');
+  let content;
+  try {
+    content = fs.readFileSync(configFile, 'utf8');
+  } catch (err) {
+    return {
+      sources: [],
+      configFile,
+      observeConfig: {},
+      error: `Failed to read config file: ${err.message}`
+    };
+  }
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
   if (!fmMatch) {
     return {
@@ -308,6 +318,10 @@ function loadObserveConfig(configPath, basePath) {
   // Validate and apply defaults
   const validationErrors = [];
   sources = sources.map((source, idx) => {
+    if (source === null || typeof source !== 'object' || Array.isArray(source)) {
+      validationErrors.push(`sources[${idx}]: must be a mapping with type and label`);
+      return { timeout: defaultTimeout, fail_open: failOpenDefault };
+    }
     const errors = [];
 
     // Required fields

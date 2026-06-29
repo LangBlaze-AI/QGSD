@@ -138,11 +138,11 @@ class CycleDetector {
    */
   constructor(opts = {}) {
     /** @type {Object<string, number[]>} */
-    this.history = {};
+    this.history = Object.create(null);
     /** @type {string[]} state hashes per iteration */
     this.stateHashes = [];
     /** @type {number} bounces before auto-blocking a layer */
-    this.bounceThreshold = opts.bounce_threshold || 2;
+    this.bounceThreshold = (opts && typeof opts === 'object' ? opts.bounce_threshold : undefined) ?? 2;
   }
 
   /**

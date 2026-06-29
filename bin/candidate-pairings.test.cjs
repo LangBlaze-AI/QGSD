@@ -106,4 +106,36 @@ describe('candidate-pairings', () => {
     assert.equal(result.metadata.source_candidates_hash, expected);
   });
 
+  it('should not crash on null or non-object candidatesData (candidates.json parsing to null)', () => {
+    assert.doesNotThrow(() => generatePairings(null, null));
+    const result = generatePairings(null, null);
+    assert.equal(result.pairings.length, 0);
+    assert.equal(result.metadata.total_pairings, 0);
+    assert.equal(result.metadata.pending, 0);
+  });
+
+  it('should treat a non-array candidates field as empty', () => {
+    const result = generatePairings({ candidates: { bogus: true } }, null);
+    assert.equal(result.pairings.length, 0);
+    assert.equal(result.metadata.total_pairings, 0);
+  });
+
+  it('should skip null/non-object candidate entries instead of crashing', () => {
+    const data = makeCandidatesData([null, makeCandidate('m1.als', 'REQ-01', 'yes', 0.85)]);
+    let result;
+    assert.doesNotThrow(() => { result = generatePairings(data, null); });
+    assert.equal(result.pairings.length, 1);
+    assert.equal(result.pairings[0].requirement, 'REQ-01');
+    assert.equal(result.pairings[0].status, 'pending');
+  });
+
+  it('should not crash when existing pairings has a corrupt shape', () => {
+    const data = makeCandidatesData([makeCandidate('m1.als', 'REQ-01', 'yes', 0.85)]);
+    assert.doesNotThrow(() => generatePairings(data, { pairings: { junk: true } }));
+    let result;
+    assert.doesNotThrow(() => { result = generatePairings(data, { pairings: [null] }); });
+    assert.equal(result.pairings.length, 1);
+    assert.equal(result.pairings[0].status, 'pending');
+  });
+
 });

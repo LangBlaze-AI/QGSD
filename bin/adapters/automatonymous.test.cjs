@@ -80,3 +80,58 @@ test('extract parses Automatonymous fixture', () => {
     fs.unlinkSync(tmpFile);
   }
 });
+
+test('extract throws a clean error for a non-string filePath', () => {
+  const re = /filePath must be a non-empty string/i;
+  assert.throws(() => extract(null), re);
+  assert.throws(() => extract(undefined), re);
+  assert.throws(() => extract(123), re);
+});
+
+test('extract throws a clean error for a directory path (not raw EISDIR)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'automatonymous-dir-'));
+  try {
+    assert.throws(() => extract(dir), (err) => {
+      return err instanceof Error
+        && err.code !== 'EISDIR'
+        && /not a file|File not found/i.test(err.message);
+    });
+  } finally {
+    fs.rmdirSync(dir);
+  }
+});
+
+test('extract does not cross-pair an action-only When() with a later TransitionTo', () => {
+  const src = `
+using MassTransit;
+
+public class CrossMachine : MassTransitStateMachine<S>
+{
+    public CrossMachine()
+    {
+        Initially(
+            When(StartEvent).TransitionTo(Open)
+        );
+        During(Open,
+            When(IgnoredEvent).Then(ctx => {}),
+            When(RealEvent).TransitionTo(Closed)
+        );
+    }
+}`;
+  const tmpFile = path.join(os.tmpdir(), 'automatonymous-cross-' + Date.now() + '.cs');
+  fs.writeFileSync(tmpFile, src, 'utf8');
+  try {
+    const ir = extract(tmpFile);
+    const open = ir.transitions.filter(t => t.fromState === 'Open');
+    assert.ok(
+      open.some(t => t.event === 'RealEvent' && t.target === 'Closed'),
+      'RealEvent should transition Open -> Closed'
+    );
+    assert.ok(
+      !open.some(t => t.event === 'IgnoredEvent' && t.target === 'Closed'),
+      'IgnoredEvent (no TransitionTo) must not be cross-paired to Closed'
+    );
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});

@@ -109,4 +109,30 @@ describe('extractFormalExpected', () => {
     const result = extractFormalExpected('spec:safety/invariant-consistency', { specDir: tmpDir });
     assert.strictEqual(result, null);
   });
+
+  it('returns null for prototype-chain key not present as own property in JSON (no proto leak)', () => {
+    const specDir = tmpDir;
+    const safetyDir = path.join(specDir, 'safety');
+    fs.mkdirSync(safetyDir, { recursive: true });
+    fs.writeFileSync(path.join(safetyDir, 'thresholds.json'), JSON.stringify({ timeout: 30 }));
+
+    assert.strictEqual(extractFormalExpected('spec:safety/thresholds.json:__proto__', { specDir }), null);
+    assert.strictEqual(extractFormalExpected('spec:safety/thresholds.json:constructor', { specDir }), null);
+  });
+
+  it('does not throw when options is explicitly null (fail-open)', () => {
+    assert.strictEqual(
+      extractFormalExpected('spec:safety/MCsafety.cfg:MaxDeliberation', null),
+      null
+    );
+  });
+
+  it('does not read files outside the spec directory (path traversal -> null)', () => {
+    const specDir = path.join(tmpDir, 'spec');
+    fs.mkdirSync(specDir, { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'secret.json'), JSON.stringify({ apiKey: 'LEAKED' }));
+
+    const result = extractFormalExpected('spec:../secret.json:apiKey', { specDir });
+    assert.strictEqual(result, null);
+  });
 });

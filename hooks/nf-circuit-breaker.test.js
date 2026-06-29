@@ -2080,3 +2080,30 @@ test('CB-RND3-01: chmod toggle with identical blob is NOT a content reversion (m
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });
+
+// CB-ADV-DASH: lines beginning with "--" make a deleted line render as
+// "---x" in the unified diff; the header-skip heuristic wrongly drops it,
+// undercounting deletions and missing a real 1->2->1 size oscillation.
+test('CB-ADV-DASH: size-alternating oscillation on "--"-prefixed lines is caught (diff header miscount)', () => {
+  const repoDir = createTempGitRepo();
+  try {
+    const write = (content, msg) => {
+      fs.writeFileSync(path.join(repoDir, 'migrate.sql'), content, 'utf8');
+      spawnSync('git', ['add', 'migrate.sql'], { cwd: repoDir, encoding: 'utf8' });
+      spawnSync('git', ['commit', '-m', msg], { cwd: repoDir, encoding: 'utf8' });
+    };
+    write('-- step a\n', 'c0: one comment');
+    write('-- step b1\n-- step b2\n', 'c1: two comments');
+    write('-- step c\n', 'c2: back to one comment');
+
+    const r = spawnSync('git', ['log', '--format=%H', '-3'], { cwd: repoDir, encoding: 'utf8' });
+    const hashes = r.stdout.trim().split('\n').filter(Boolean); // newest-first: c2,c1,c0
+
+    assert.strictEqual(
+      hasReversionInHashes(repoDir, hashes, ['migrate.sql']), true,
+      'a 1->2->1 size loop on "--"-prefixed lines is real oscillation; the diff parser must not skip "---x" content lines as headers'
+    );
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});

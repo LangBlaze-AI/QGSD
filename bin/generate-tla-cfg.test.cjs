@@ -484,3 +484,41 @@ test('written MCliveness.cfg content matches --dry stdout section', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+// ── Group 9: Missing-resource robustness ──────────────────────────────────────
+
+test('creates the output directory if .planning/formal/tla is missing (non-dry)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tla-cfg-test-'));
+  try {
+    const patchedCLI = makeSyntheticCLI(tmpDir, '  maxDeliberation:    7,\n');
+    // Remove the .planning tree that makeSyntheticCLI pre-created
+    fs.rmSync(path.join(tmpDir, '.planning'), { recursive: true, force: true });
+    const result = run(patchedCLI, []);
+    assert.equal(result.status, 0, 'should not crash when output dir is missing; stderr=' + result.stderr);
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, '.planning', 'formal', 'tla', 'MCsafety.cfg')),
+      'MCsafety.cfg should be created even when the output dir was missing'
+    );
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, '.planning', 'formal', 'tla', 'MCliveness.cfg')),
+      'MCliveness.cfg should be created even when the output dir was missing'
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('exits cleanly (no EISDIR stack) when machine path is a directory', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tla-cfg-test-'));
+  try {
+    const patchedCLI = makeSyntheticCLI(tmpDir, undefined);
+    // Make the machine "file" path a directory instead of a regular file
+    fs.mkdirSync(path.join(tmpDir, 'src', 'machines', 'nf-workflow.machine.ts'));
+    const result = run(patchedCLI);
+    assert.equal(result.status, 1);
+    assert.doesNotMatch(result.stderr, /EISDIR|illegal operation on a directory/);
+    assert.match(result.stderr, /XState machine not found|nf-workflow\.machine\.ts/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

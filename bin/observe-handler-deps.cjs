@@ -38,7 +38,7 @@ function detectEcosystems(basePath) {
  */
 function parseSemver(ver) {
   if (!ver) return [0, 0, 0];
-  const clean = ver.replace(/^v/, '');
+  const clean = String(ver).replace(/^v/, '');
   const parts = clean.split('.').map(Number);
   return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
 }
@@ -287,15 +287,17 @@ function checkPythonVersion(execFn) {
  * @returns {object} Standard observe schema result
  */
 function handleDeps(sourceConfig, options) {
-  const label = sourceConfig.label || 'Dependencies';
-  const basePath = options.basePath || process.cwd();
-  const execFile = options.execFn || execFileSync;
-  const skipAudit = sourceConfig.skip_audit || false;
+  const cfg = sourceConfig && typeof sourceConfig === 'object' ? sourceConfig : {};
+  const opts = options && typeof options === 'object' ? options : {};
+  const label = cfg.label || 'Dependencies';
+  const basePath = opts.basePath || process.cwd();
+  const execFile = opts.execFn || execFileSync;
+  const skipAudit = cfg.skip_audit || false;
 
   try {
     // Auto-detect or use configured ecosystems
-    const ecosystems = sourceConfig.ecosystems
-      ? (Array.isArray(sourceConfig.ecosystems) ? sourceConfig.ecosystems : [sourceConfig.ecosystems])
+    const ecosystems = cfg.ecosystems
+      ? (Array.isArray(cfg.ecosystems) ? cfg.ecosystems : [cfg.ecosystems])
       : detectEcosystems(basePath);
 
     if (ecosystems.length === 0) {

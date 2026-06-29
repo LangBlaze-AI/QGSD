@@ -695,6 +695,61 @@ describe('Prometheus snippets for tier 1', () => {
   });
 });
 
+// ── crossReference corrupt-ledger shape tests ────────────────────────────────
+
+describe('crossReference corrupt-ledger shape (AA-1)', () => {
+  it('does not crash when debt_entries is a non-array object', () => {
+    const debtDir = path.join(tmpDir, '.planning', 'formal');
+    fs.mkdirSync(debtDir, { recursive: true });
+    fs.writeFileSync(path.join(debtDir, 'debt.json'), JSON.stringify({
+      schema_version: '1',
+      debt_entries: { d1: { id: 'd1', formal_ref: 'spec:sample.tla:MaxRetries' } }
+    }));
+    const assumptions = [
+      { source: 'tla', file: 'sample.tla', name: 'MaxRetries', type: 'assume', value: 0 }
+    ];
+    let results;
+    assert.doesNotThrow(() => { results = crossReference(assumptions, { root: tmpDir }); });
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].coverage, 'uncovered');
+  });
+});
+
+describe('crossReference null debt entry (AA-2)', () => {
+  it('skips null members in debt_entries without crashing', () => {
+    const debtDir = path.join(tmpDir, '.planning', 'formal');
+    fs.mkdirSync(debtDir, { recursive: true });
+    fs.writeFileSync(path.join(debtDir, 'debt.json'), JSON.stringify({
+      schema_version: '1',
+      debt_entries: [null, { id: 'd1', title: 'noise', formal_ref: null }]
+    }));
+    const assumptions = [
+      { source: 'tla', file: 'sample.tla', name: 'MaxRetries', type: 'assume', value: 0 }
+    ];
+    let results;
+    assert.doesNotThrow(() => { results = crossReference(assumptions, { root: tmpDir }); });
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].coverage, 'uncovered');
+  });
+});
+
+describe('crossReference non-string formal_ref (AA-3)', () => {
+  it('does not crash when formal_ref is a number', () => {
+    const debtDir = path.join(tmpDir, '.planning', 'formal');
+    fs.mkdirSync(debtDir, { recursive: true });
+    fs.writeFileSync(path.join(debtDir, 'debt.json'), JSON.stringify({
+      schema_version: '1',
+      debt_entries: [{ id: 'd1', title: 'unrelated', formal_ref: 12345 }]
+    }));
+    const assumptions = [
+      { source: 'tla', file: 'sample.tla', name: 'MaxRetries', type: 'assume', value: 0 }
+    ];
+    let results;
+    assert.doesNotThrow(() => { results = crossReference(assumptions, { root: tmpDir }); });
+    assert.strictEqual(results[0].coverage, 'uncovered');
+  });
+});
+
 // ── formatMarkdownReport tier column tests ───────────────────────────────────
 
 describe('formatMarkdownReport tier column', () => {

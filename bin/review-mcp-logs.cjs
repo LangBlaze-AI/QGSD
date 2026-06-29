@@ -23,8 +23,10 @@ const getArg = (flag) => {
 };
 const hasFlag = (flag) => args.includes(flag);
 
-const MAX_FILES   = parseInt(getArg('--files') ?? '50', 10);
-const MAX_DAYS    = parseInt(getArg('--days')  ?? '7',  10);
+const _maxFilesRaw = parseInt(getArg('--files') ?? '50', 10);
+const MAX_FILES    = Number.isFinite(_maxFilesRaw) && _maxFilesRaw > 0 ? _maxFilesRaw : 50;
+const _maxDaysRaw  = parseInt(getArg('--days')  ?? '7',  10);
+const MAX_DAYS     = Number.isFinite(_maxDaysRaw) && _maxDaysRaw >= 0 ? _maxDaysRaw : 7;
 const JSON_OUTPUT = hasFlag('--json');
 const TOOL_FILTER = getArg('--tool');
 
@@ -43,9 +45,9 @@ const RE_TOOL_ERR = /mcp__([^_]+)__(\S+) tool error \((\d+)ms\): (.+)/;
 const RE_TIMESTAMP = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)/;
 
 // ─── Data structures ──────────────────────────────────────────────────────────
-const servers   = {};   // serverName -> { calls: [], failures: [], hangs: [] }
+const servers   = Object.create(null);   // serverName -> { calls: [], failures: [], hangs: [] }
 const timeline  = [];   // [{ts, server, tool, durationMs, status}]
-const stderrLog = {};   // serverName -> [messages]
+const stderrLog = Object.create(null);   // serverName -> [messages]
 
 function ensureServer(name) {
   if (!servers[name]) {
@@ -127,7 +129,7 @@ for (const file of files) {
 }
 
 // ─── Compute per-server stats ─────────────────────────────────────────────────
-const serverStats = {};
+const serverStats = Object.create(null);
 for (const [name, data] of Object.entries(servers)) {
   const ok = data.calls;
   const failed = data.failures;
@@ -159,7 +161,7 @@ const slowServers = Object.entries(serverStats)
   .sort(([, a], [, b]) => b.p95Ms - a.p95Ms);
 
 // Find recurring error messages — may hint at config fixes
-const errorFreq = {};
+const errorFreq = Object.create(null);
 for (const [server, data] of Object.entries(servers)) {
   for (const f of data.failures) {
     const key = f.reason.slice(0, 80);
