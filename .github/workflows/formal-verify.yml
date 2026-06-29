@@ -83,6 +83,11 @@ jobs:
       - name: Formal-discrimination benchmark (prove-bug / prove-fix)
         run: node bin/check-formal-discrimination.cjs
 
+      # Chain-enforcement: the full code→model→fix→model→code loop must be bound to
+      # ONE bug per case (code bug ≡ model bug; both fixes proven on real artifacts).
+      - name: Debug chain-enforcement (code↔model end-to-end)
+        run: node bin/check-debug-chain.cjs
+
       - name: Cache Alloy JAR
         id: cache-alloy
         uses: actions/cache@v4

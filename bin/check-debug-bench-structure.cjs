@@ -50,6 +50,22 @@ tests.forEach(function(f) {
   }
 });
 
+// ── 2b. Syntax-check every stub ───────────────────────────────────────────
+// A buggy stub must be a genuine LOGIC bug, not a SyntaxError. Without this,
+// a stub that fails to parse still makes its test exit 1 (require throws) and
+// would be mistaken for "bug present" — exactly how bench-buggy-sort drifted
+// into an uncatchable, model-incoherent state.
+
+stubs.forEach(function(f) {
+  checks++;
+  var fp     = path.join(STUBS_DIR, f);
+  var result = spawnSync(process.execPath, ['--check', fp], { encoding: 'utf8' });
+  if (result.status !== 0) {
+    fail('SYNTAX ERROR in stub ' + f + ': ' + (result.stderr || '').slice(0, 160) +
+         ' — a buggy stub must be a real logic bug, not a parse error');
+  }
+});
+
 // ── 3. Verify each test exits code 1 on its stub (bug is real) ────────────
 
 tests.forEach(function(f) {
