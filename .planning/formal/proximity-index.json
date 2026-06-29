@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-25T08:18:36.232Z",
+  "generated": "2026-06-29T18:51:48.996Z",
   "node_key_format": "type::id",
   "sources": {
     "scope.json:account-manager": {
@@ -88,7 +88,7 @@
       "hash": "76910c97"
     },
     "model-registry.json": {
-      "mtime": "2026-06-24T21:34:51.492Z",
+      "mtime": "2026-06-28T20:06:57.848Z",
       "hash": "bb2ffb2c"
     },
     "invariant-catalog.json": {
@@ -96,23 +96,23 @@
       "hash": "e27072db"
     },
     "traceability-matrix.json": {
-      "mtime": "2026-06-24T21:34:51.513Z",
+      "mtime": "2026-06-28T16:50:05.007Z",
       "hash": "2d71c182"
     },
     "unit-test-coverage.json": {
-      "mtime": "2026-06-24T21:34:51.514Z",
+      "mtime": "2026-06-28T20:06:57.851Z",
       "hash": "f5d6c130"
     },
     "instrumentation-map.json": {
-      "mtime": "2026-06-24T21:34:51.487Z",
-      "hash": "28ab6323"
+      "mtime": "2026-06-28T16:21:22.277Z",
+      "hash": "88c9e9de"
     },
     "event-vocabulary.json": {
       "mtime": "2026-05-19T19:43:48.799Z",
       "hash": "fa1b7cf9"
     },
     "observed-fsm.json": {
-      "mtime": "2026-06-25T08:15:14.208Z",
+      "mtime": "2026-06-28T14:55:41.820Z",
       "hash": "53b1c101"
     },
     "risk-heatmap.json": {
@@ -120,18 +120,18 @@
       "hash": "2df5c0d7"
     },
     "git-heatmap.json": {
-      "mtime": "2026-06-24T21:28:57.438Z",
-      "hash": "fa2c2429"
+      "mtime": "2026-06-28T19:56:18.869Z",
+      "hash": "1d8e7b2c"
     },
     "debt.json": {
       "mtime": "2026-05-19T19:43:48.793Z",
       "hash": "4f085cf2"
     },
     "source-annotations": {
-      "mtime": "2026-06-24T21:34:51.509Z"
+      "mtime": "2026-06-29T15:53:50.079Z"
     },
     "code-source-annotations": {
-      "mtime": "2026-06-24T21:12:53.154Z"
+      "mtime": "2026-06-29T15:53:49.262Z"
     }
   },
   "nodes": {
@@ -458,7 +458,7 @@
           "source": "scope.json"
         },
         {
-          "to": "code_line::hooks/nf-circuit-breaker.js:835",
+          "to": "code_line::hooks/nf-circuit-breaker.js:993",
           "rel": "contains",
           "source": "instrumentation-map"
         }
@@ -728,17 +728,17 @@
           "source": "scope.json"
         },
         {
-          "to": "code_line::hooks/nf-prompt.js:733",
+          "to": "code_line::hooks/nf-prompt.js:773",
           "rel": "contains",
           "source": "instrumentation-map"
         },
         {
-          "to": "code_line::hooks/nf-prompt.js:823",
+          "to": "code_line::hooks/nf-prompt.js:843",
           "rel": "contains",
           "source": "instrumentation-map"
         },
         {
-          "to": "code_line::hooks/nf-prompt.js:1059",
+          "to": "code_line::hooks/nf-prompt.js:1079",
           "rel": "contains",
           "source": "instrumentation-map"
         }
@@ -1577,27 +1577,37 @@
           "source": "scope.json"
         },
         {
-          "to": "code_line::hooks/nf-stop.js:718",
+          "to": "code_line::hooks/nf-stop.js:933",
           "rel": "contains",
           "source": "instrumentation-map"
         },
         {
-          "to": "code_line::hooks/nf-stop.js:734",
+          "to": "code_line::hooks/nf-stop.js:949",
           "rel": "contains",
           "source": "instrumentation-map"
         },
         {
-          "to": "code_line::hooks/nf-stop.js:760",
+          "to": "code_line::hooks/nf-stop.js:975",
           "rel": "contains",
           "source": "instrumentation-map"
         },
         {
-          "to": "code_line::hooks/nf-stop.js:813",
+          "to": "code_line::hooks/nf-stop.js:994",
           "rel": "contains",
           "source": "instrumentation-map"
         },
         {
-          "to": "code_line::hooks/nf-stop.js:852",
+          "to": "code_line::hooks/nf-stop.js:1051",
+          "rel": "contains",
+          "source": "instrumentation-map"
+        },
+        {
+          "to": "code_line::hooks/nf-stop.js:1070",
+          "rel": "contains",
+          "source": "instrumentation-map"
+        },
+        {
+          "to": "code_line::hooks/nf-stop.js:1109",
           "rel": "contains",
           "source": "instrumentation-map"
         }
@@ -20070,6 +20080,11 @@
         },
         {
           "to": "formal_model::.planning/formal/tla/QGSDQuorum_xstate.tla",
+          "rel": "modeled_by",
+          "source": "source-annotation"
+        },
+        {
+          "to": "formal_model::.planning/formal/tla/TestFsm_xstate.tla",
           "rel": "modeled_by",
           "source": "source-annotation"
         }
@@ -53946,9 +53961,9 @@
         }
       ]
     },
-    "code_line::hooks/nf-prompt.js:733": {
+    "code_line::hooks/nf-prompt.js:773": {
       "type": "code_line",
-      "id": "hooks/nf-prompt.js:733",
+      "id": "hooks/nf-prompt.js:773",
       "edges": [
         {
           "to": "formal_action::cache_hit",
@@ -53967,15 +53982,15 @@
       "id": "cache_hit",
       "edges": [
         {
-          "to": "code_line::hooks/nf-prompt.js:733",
+          "to": "code_line::hooks/nf-prompt.js:773",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         }
       ]
     },
-    "code_line::hooks/nf-prompt.js:823": {
+    "code_line::hooks/nf-prompt.js:843": {
       "type": "code_line",
-      "id": "hooks/nf-prompt.js:823",
+      "id": "hooks/nf-prompt.js:843",
       "edges": [
         {
           "to": "formal_action::quorum_fallback_t1_required",
@@ -53999,15 +54014,15 @@
           "source": "event-vocabulary"
         },
         {
-          "to": "code_line::hooks/nf-prompt.js:823",
+          "to": "code_line::hooks/nf-prompt.js:843",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         }
       ]
     },
-    "code_line::hooks/nf-prompt.js:1059": {
+    "code_line::hooks/nf-prompt.js:1079": {
       "type": "code_line",
-      "id": "hooks/nf-prompt.js:1059",
+      "id": "hooks/nf-prompt.js:1079",
       "edges": [
         {
           "to": "formal_action::quorum_start",
@@ -54031,15 +54046,15 @@
           "source": "event-vocabulary"
         },
         {
-          "to": "code_line::hooks/nf-prompt.js:1059",
+          "to": "code_line::hooks/nf-prompt.js:1079",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         }
       ]
     },
-    "code_line::hooks/nf-stop.js:718": {
+    "code_line::hooks/nf-stop.js:933": {
       "type": "code_line",
-      "id": "hooks/nf-stop.js:718",
+      "id": "hooks/nf-stop.js:933",
       "edges": [
         {
           "to": "formal_action::quorum_complete",
@@ -54063,25 +54078,25 @@
           "source": "event-vocabulary"
         },
         {
-          "to": "code_line::hooks/nf-stop.js:718",
+          "to": "code_line::hooks/nf-stop.js:933",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         },
         {
-          "to": "code_line::hooks/nf-stop.js:734",
+          "to": "code_line::hooks/nf-stop.js:949",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         },
         {
-          "to": "code_line::hooks/nf-stop.js:852",
+          "to": "code_line::hooks/nf-stop.js:1109",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         }
       ]
     },
-    "code_line::hooks/nf-stop.js:734": {
+    "code_line::hooks/nf-stop.js:949": {
       "type": "code_line",
-      "id": "hooks/nf-stop.js:734",
+      "id": "hooks/nf-stop.js:949",
       "edges": [
         {
           "to": "formal_action::quorum_complete",
@@ -54095,9 +54110,9 @@
         }
       ]
     },
-    "code_line::hooks/nf-stop.js:760": {
+    "code_line::hooks/nf-stop.js:975": {
       "type": "code_line",
-      "id": "hooks/nf-stop.js:760",
+      "id": "hooks/nf-stop.js:975",
       "edges": [
         {
           "to": "formal_action::fallback_01_block",
@@ -54116,15 +54131,63 @@
       "id": "fallback_01_block",
       "edges": [
         {
-          "to": "code_line::hooks/nf-stop.js:760",
+          "to": "code_line::hooks/nf-stop.js:975",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         }
       ]
     },
-    "code_line::hooks/nf-stop.js:813": {
+    "code_line::hooks/nf-stop.js:994": {
       "type": "code_line",
-      "id": "hooks/nf-stop.js:813",
+      "id": "hooks/nf-stop.js:994",
+      "edges": [
+        {
+          "to": "formal_action::floor_block",
+          "rel": "emits",
+          "source": "instrumentation-map"
+        },
+        {
+          "to": "code_file::hooks/nf-stop.js",
+          "rel": "in_file",
+          "source": "instrumentation-map"
+        }
+      ]
+    },
+    "formal_action::floor_block": {
+      "type": "formal_action",
+      "id": "floor_block",
+      "edges": [
+        {
+          "to": "code_line::hooks/nf-stop.js:994",
+          "rel": "emitted_by",
+          "source": "instrumentation-map"
+        },
+        {
+          "to": "code_line::hooks/nf-stop.js:1051",
+          "rel": "emitted_by",
+          "source": "instrumentation-map"
+        }
+      ]
+    },
+    "code_line::hooks/nf-stop.js:1051": {
+      "type": "code_line",
+      "id": "hooks/nf-stop.js:1051",
+      "edges": [
+        {
+          "to": "formal_action::floor_block",
+          "rel": "emits",
+          "source": "instrumentation-map"
+        },
+        {
+          "to": "code_file::hooks/nf-stop.js",
+          "rel": "in_file",
+          "source": "instrumentation-map"
+        }
+      ]
+    },
+    "code_line::hooks/nf-stop.js:1070": {
+      "type": "code_line",
+      "id": "hooks/nf-stop.js:1070",
       "edges": [
         {
           "to": "formal_action::quorum_block",
@@ -54148,15 +54211,15 @@
           "source": "event-vocabulary"
         },
         {
-          "to": "code_line::hooks/nf-stop.js:813",
+          "to": "code_line::hooks/nf-stop.js:1070",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         }
       ]
     },
-    "code_line::hooks/nf-stop.js:852": {
+    "code_line::hooks/nf-stop.js:1109": {
       "type": "code_line",
-      "id": "hooks/nf-stop.js:852",
+      "id": "hooks/nf-stop.js:1109",
       "edges": [
         {
           "to": "formal_action::quorum_complete",
@@ -54170,9 +54233,9 @@
         }
       ]
     },
-    "code_line::hooks/nf-circuit-breaker.js:835": {
+    "code_line::hooks/nf-circuit-breaker.js:993": {
       "type": "code_line",
-      "id": "hooks/nf-circuit-breaker.js:835",
+      "id": "hooks/nf-circuit-breaker.js:993",
       "edges": [
         {
           "to": "formal_action::circuit_break",
@@ -54196,7 +54259,7 @@
           "source": "event-vocabulary"
         },
         {
-          "to": "code_line::hooks/nf-circuit-breaker.js:835",
+          "to": "code_line::hooks/nf-circuit-breaker.js:993",
           "rel": "emitted_by",
           "source": "instrumentation-map"
         }
@@ -54891,6 +54954,17 @@
         {
           "to": "formal_model::.planning/formal/tla/NFWaveDAG.tla",
           "rel": "modeled_by",
+          "source": "source-annotation"
+        }
+      ]
+    },
+    "formal_model::.planning/formal/tla/TestFsm_xstate.tla": {
+      "type": "formal_model",
+      "id": ".planning/formal/tla/TestFsm_xstate.tla",
+      "edges": [
+        {
+          "to": "requirement::QUORUM-01",
+          "rel": "models",
           "source": "source-annotation"
         }
       ]

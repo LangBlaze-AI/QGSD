@@ -1,0 +1,26 @@
+[
+  {
+    "case": "sort",
+    "stub": "bin/bench-buggy-sort.cjs",
+    "test": "benchmarks/debug/tests/sort.test.cjs",
+    "model": ".planning/formal/spec/debug-bench-sort",
+    "fixed": "benchmarks/debug/chain/fixed/sort.cjs",
+    "fix": "comparator direction: < -> >"
+  },
+  {
+    "case": "filter",
+    "stub": "bin/bench-buggy-filter.cjs",
+    "test": "benchmarks/debug/tests/filter.test.cjs",
+    "model": ".planning/formal/spec/debug-bench-filter",
+    "fixed": "benchmarks/debug/chain/fixed/filter.cjs",
+    "fix": "threshold boundary: x > b -> x >= b"
+  },
+  {
+    "case": "counter",
+    "stub": "bin/bench-buggy-counter.cjs",
+    "test": "benchmarks/debug/tests/counter.test.cjs",
+    "model": ".planning/formal/spec/debug-bench-counter",
+    "fixed": "benchmarks/debug/chain/fixed/counter.cjs",
+    "fix": "upper boundary: x < c -> x <= c"
+  }
+]
