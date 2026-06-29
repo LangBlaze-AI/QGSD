@@ -6,12 +6,18 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 
+// What the solve actually GENERATES — and nothing else. Everything nf-solve produces
+// (manifests, evidence, model registry, generated-stubs/ incl. implemented *.stub.test.js,
+// requirements coverage) lives under these paths. `bin/` and `test/` were previously
+// swept wholesale, but the solve writes NOTHING there — so `git add -A -- bin/`/`test/`
+// only ever captured a developer's in-progress source edits and buried them inside a
+// `chore(solve)` commit (it did exactly that to this very file mid-PR). Generated code
+// goes to .planning/formal/generated-stubs/, which is already covered, so dropping bin/
+// and test/ loses no real artifact and stops the source pollution at the root.
 const PATHSPECS = [
   '.planning/formal/',
   '.planning/upstream-state.json',
   'docs/dev/requirements-coverage.md',
-  'bin/',
-  'test/',
 ];
 
 // Machine-local / generated snapshots that get regenerated per-developer (golden
