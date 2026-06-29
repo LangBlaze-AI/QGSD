@@ -1,20 +1,15 @@
 ---- MODULE bug ----
-EXTENDS Integers, TLC
-VARIABLES a, b, swapped
-
-Init == a \in {1, 2} /\ b \in {1, 2} /\ swapped = FALSE
-
-\* Buggy comparator: fires when a >= b (includes equal)
-Next == IF a >= b
-        THEN /\ swapped' = TRUE
-             /\ a' = b
-             /\ b' = a
-        ELSE /\ swapped' = FALSE
-             /\ UNCHANGED <<a, b>>
-
-Spec == Init /\ [][Next]_<<a, b, swapped>>
-
-\* BUG: this invariant is violated because a=b=1 causes a swap
-NoUnnecessarySwap == ~(a = b /\ swapped = TRUE)
-
+EXTENDS Integers
+VARIABLES x, y, done
+Init == x \in {1, 2} /\ y \in {1, 2} /\ done = FALSE
+\* Buggy comparator swaps when x < y -> DESCENDING (faithful to bench-buggy-sort.cjs:
+\* `if (a[i] < a[j]) swap`). Self-loop once done so there is no deadlock.
+Next == \/ /\ ~done
+           /\ done' = TRUE
+           /\ IF x < y THEN x' = y /\ y' = x ELSE x' = x /\ y' = y
+        \/ /\ done
+           /\ UNCHANGED <<x, y, done>>
+Spec == Init /\ [][Next]_<<x, y, done>>
+\* Same property the JS test asserts: the sorted result is ascending (x <= y).
+Ascending == done => (x <= y)
 ====
