@@ -1,10 +1,10 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-25T08:18:42.164Z",
+  "generated": "2026-06-29T18:52:17.815Z",
   "emission_points": [
     {
       "file": "hooks/nf-prompt.js",
-      "line_number": 773,
+      "line_number": 791,
       "action": "cache_hit",
       "state_variables": [
         "verdict"
@@ -14,7 +14,7 @@
     },
     {
       "file": "hooks/nf-prompt.js",
-      "line_number": 843,
+      "line_number": 861,
       "action": "quorum_fallback_t1_required",
       "state_variables": [],
       "vocabulary_match": true,
@@ -22,7 +22,7 @@
     },
     {
       "file": "hooks/nf-prompt.js",
-      "line_number": 1079,
+      "line_number": 1097,
       "action": "quorum_start",
       "state_variables": [],
       "vocabulary_match": true,
@@ -30,7 +30,7 @@
     },
     {
       "file": "hooks/nf-stop.js",
-      "line_number": 933,
+      "line_number": 954,
       "action": "quorum_complete",
       "state_variables": [
         "quorum_size"
@@ -40,7 +40,7 @@
     },
     {
       "file": "hooks/nf-stop.js",
-      "line_number": 949,
+      "line_number": 970,
       "action": "quorum_complete",
       "state_variables": [],
       "vocabulary_match": true,
@@ -48,7 +48,7 @@
     },
     {
       "file": "hooks/nf-stop.js",
-      "line_number": 975,
+      "line_number": 996,
       "action": "fallback_01_block",
       "state_variables": [
         "verdict"
@@ -58,7 +58,17 @@
     },
     {
       "file": "hooks/nf-stop.js",
-      "line_number": 994,
+      "line_number": 1018,
+      "action": "consensus_block",
+      "state_variables": [
+        "verdict"
+      ],
+      "vocabulary_match": false,
+      "xstate_event": null
+    },
+    {
+      "file": "hooks/nf-stop.js",
+      "line_number": 1038,
       "action": "floor_block",
       "state_variables": [
         "verdict"
@@ -68,7 +78,7 @@
     },
     {
       "file": "hooks/nf-stop.js",
-      "line_number": 1051,
+      "line_number": 1095,
       "action": "floor_block",
       "state_variables": [
         "verdict"
@@ -78,7 +88,7 @@
     },
     {
       "file": "hooks/nf-stop.js",
-      "line_number": 1070,
+      "line_number": 1114,
       "action": "quorum_block",
       "state_variables": [
         "verdict"
@@ -88,7 +98,7 @@
     },
     {
       "file": "hooks/nf-stop.js",
-      "line_number": 1109,
+      "line_number": 1153,
       "action": "quorum_complete",
       "state_variables": [],
       "vocabulary_match": true,
@@ -96,7 +106,7 @@
     },
     {
       "file": "hooks/nf-circuit-breaker.js",
-      "line_number": 993,
+      "line_number": 1062,
       "action": "circuit_break",
       "state_variables": [
         "breaker_state"
@@ -116,5 +126,5 @@
     "deliberation_round",
     "security_sweep"
   ],
-  "summary": "Found 11 emission points across 3 hooks and observe handlers. Coverage: 5/9 vocabulary actions mapped (55.6%). Unmapped: quorum_block_r3_2, mcp_call, deliberation_round, security_sweep."
+  "summary": "Found 12 emission points across 3 hooks and observe handlers. Coverage: 5/9 vocabulary actions mapped (55.6%). Unmapped: quorum_block_r3_2, mcp_call, deliberation_round, security_sweep."
 }

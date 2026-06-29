@@ -1,6 +1,6 @@
 {
   "schema_version": "2",
-  "generated": "2026-05-18T14:59:18.210Z",
+  "generated": "2026-06-29T18:52:00.135Z",
   "layers": {
     "L1": [
       {
@@ -1180,6 +1180,11 @@
         "path": ".planning/formal/tla/NFRiverPolicy.tla",
         "description": "River ML policy: 3-tier slot routing, Q-learning with Bellman updates, epsilon-greedy exploration, E2E learning loop",
         "grounding_status": "ungrounded"
+      },
+      {
+        "path": ".planning/formal/tla/TestFsm_xstate.tla",
+        "description": "",
+        "grounding_status": "ungrounded"
       }
     ]
   },
@@ -1203,16 +1208,16 @@
   "collapsed_layers": {
     "L2": {
       "reason": "Empty layer — zero entries permanently blocked Gate B (STRUCT-01)",
-      "collapsed_at": "2026-05-18T14:59:18.210Z"
+      "collapsed_at": "2026-06-29T18:52:00.135Z"
     }
   },
   "summary": {
-    "total_models": 235,
+    "total_models": 236,
     "L1_count": 2,
     "L2_count": 0,
-    "L3_count": 233,
+    "L3_count": 234,
     "maturity_distribution": {
-      "0": 197,
+      "0": 198,
       "1": 38
     },
     "spec_modules_with_invariants": 19

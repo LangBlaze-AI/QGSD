@@ -1,10 +1,10 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-25T08:18:03.311Z",
-  "total_proposed": 1838,
+  "generated": "2026-06-29T18:52:01.107Z",
+  "total_proposed": 1840,
   "implemented": 0,
   "partial": 0,
-  "outstanding": 1838,
+  "outstanding": 1840,
   "metrics": [
     {
       "metric_name": "nf_maxdeliberationrounds__tla",
@@ -3142,6 +3142,18 @@
       "metric_name": "nf_typeok__tla",
       "metric_type": "counter",
       "tier": 2,
+      "source_model": "/Users/jonathanborduas/code/QGSD/.planning/formal/tla/TestFsm_xstate.tla",
+      "assumption_name": "TypeOK",
+      "assumption_type": "invariant",
+      "coverage": "uncovered",
+      "formal_ref": "spec:/Users/jonathanborduas/code/QGSD/.planning/formal/tla/TestFsm_xstate.tla:TypeOK",
+      "instrumentation_snippet": "// Observe handler for TypeOK (tla/invariant)\n// Add to observe config sources:\n{\n  \"type\": \"internal\",\n  \"label\": \"nf_typeok__tla\",\n  \"check\": \"formal-invariant\",\n  \"config\": {\n    \"metric\": \"nf_typeok__tla\",\n    \"type\": \"counter\",\n    \"formal_ref\": \"spec:/Users/jonathanborduas/code/QGSD/.planning/formal/tla/TestFsm_xstate.tla:TypeOK\",\n    \"description\": \"Counts violations of TypeOK\"\n  }\n}",
+      "status": "proposed"
+    },
+    {
+      "metric_name": "nf_typeok__tla",
+      "metric_type": "counter",
+      "tier": 2,
       "source_model": "/Users/jonathanborduas/code/QGSD/.planning/formal/tla/MCAgentLoop.cfg",
       "assumption_name": "TypeOK",
       "assumption_type": "invariant",
@@ -5800,6 +5812,18 @@
       "coverage": "uncovered",
       "formal_ref": "spec:/Users/jonathanborduas/code/QGSD/.planning/formal/tla/MCTaskClassification.cfg:EventuallyRouted",
       "instrumentation_snippet": "// Observe handler for EventuallyRouted (tla/invariant)\n// Add to observe config sources:\n{\n  \"type\": \"internal\",\n  \"label\": \"nf_eventuallyrouted\",\n  \"check\": \"formal-invariant\",\n  \"config\": {\n    \"metric\": \"nf_eventuallyrouted\",\n    \"type\": \"counter\",\n    \"formal_ref\": \"spec:/Users/jonathanborduas/code/QGSD/.planning/formal/tla/MCTaskClassification.cfg:EventuallyRouted\",\n    \"description\": \"Counts violations of EventuallyRouted\"\n  }\n}",
+      "status": "proposed"
+    },
+    {
+      "metric_name": "nf_typeok__tla",
+      "metric_type": "counter",
+      "tier": 2,
+      "source_model": "/Users/jonathanborduas/code/QGSD/.planning/formal/tla/MCTestFsm.cfg",
+      "assumption_name": "TypeOK",
+      "assumption_type": "invariant",
+      "coverage": "uncovered",
+      "formal_ref": "spec:/Users/jonathanborduas/code/QGSD/.planning/formal/tla/MCTestFsm.cfg:TypeOK",
+      "instrumentation_snippet": "// Observe handler for TypeOK (tla/invariant)\n// Add to observe config sources:\n{\n  \"type\": \"internal\",\n  \"label\": \"nf_typeok__tla\",\n  \"check\": \"formal-invariant\",\n  \"config\": {\n    \"metric\": \"nf_typeok__tla\",\n    \"type\": \"counter\",\n    \"formal_ref\": \"spec:/Users/jonathanborduas/code/QGSD/.planning/formal/tla/MCTestFsm.cfg:TypeOK\",\n    \"description\": \"Counts violations of TypeOK\"\n  }\n}",
       "status": "proposed"
     },
     {

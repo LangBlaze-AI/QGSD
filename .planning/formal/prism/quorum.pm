@@ -2,7 +2,7 @@
 // GENERATED — do not edit by hand.
 // Source of truth: src/machines/nf-workflow.machine.ts
 // Regenerate:      node bin/generate-formal-specs.cjs
-// Generated:       2026-05-18
+// Generated:       2026-06-29
 
 // nForma Quorum Convergence — DTMC Model
 // Requirements: PRM-01
