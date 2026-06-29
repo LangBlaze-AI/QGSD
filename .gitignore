@@ -76,6 +76,8 @@ RAILROAD_ARCHITECTURE.md
 # TLA+ runtime artifacts (trace files, state dumps)
 .planning/formal/tla/*_TTrace_*.bin
 .planning/formal/tla/*_TTrace_*.tla
+.planning/formal/spec/**/*_TTrace_*.tla
+.planning/formal/spec/**/*_TTrace_*.bin
 # Guard mapping JSON is tracked (manually maintained, required by check-spec-sync.cjs)
 # .planning/formal/tla/guards/  — DO NOT ignore
 .planning/formal/tla/states/

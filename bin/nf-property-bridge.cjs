@@ -130,16 +130,28 @@ function loadFn(rel) {
   const abs = path.join(ROOT, rel);
   delete require.cache[require.resolve(abs)];
   const mod = require(abs);
+  // A fixture that loads but doesn't export `f` is an infrastructure error, not a
+  // reproduced bug — without this guard `fn(...args)` would throw and be recorded as
+  // a property failure (a false positive).
+  if (!mod || typeof mod.f !== 'function') {
+    throw new Error(`${rel} must export a function named "f"`);
+  }
   return mod.f;
 }
 
 function runCase(name, useFixed, opts) {
   const c = CASES[name];
   if (!c) return { status: 'unknown-case', case: name };
-  const fn = loadFn(useFixed ? c.fixed : c.stub);
+  const target = useFixed ? 'fixed' : 'buggy';
+  let fn;
+  try {
+    fn = loadFn(useFixed ? c.fixed : c.stub);
+  } catch (err) {
+    return { status: 'error', case: name, target, error: err.message, spec: c.spec };
+  }
   const ce = findCounterexample((args) => fn(...args), c.produceArgs, c.prop, opts);
-  if (ce) return { status: 'bug', case: name, target: useFixed ? 'fixed' : 'buggy', counterexample: ce.args, spec: c.spec };
-  return { status: 'holds', case: name, target: useFixed ? 'fixed' : 'buggy', spec: c.spec };
+  if (ce) return { status: 'bug', case: name, target, counterexample: ce.args, spec: c.spec };
+  return { status: 'holds', case: name, target, spec: c.spec };
 }
 
 function main() {
@@ -148,10 +160,17 @@ function main() {
   const useFixed = argv.includes('--fixed');
   const ci = argv.indexOf('--case');
   const name = ci >= 0 ? argv[ci + 1] : null;
+  // `--case` with no value (or a flag as the value) is a usage error, not "run all".
+  if (ci >= 0 && (!name || name.startsWith('--'))) {
+    console.error('missing value for --case');
+    process.exit(2);
+  }
   const names = name ? [name] : Object.keys(CASES);
 
   const results = names.map(n => runCase(n, useFixed, {}));
-  if (jsonMode) { console.log(JSON.stringify({ results })); process.exit(0); }
+  // unknown-case (typo) and error (broken fixture) are CLI/infra failures → non-zero exit.
+  const hasCliError = results.some(r => r.status === 'unknown-case' || r.status === 'error');
+  if (jsonMode) { console.log(JSON.stringify({ results })); process.exit(hasCliError ? 2 : 0); }
 
   console.log('━━━ Property-based bridge (' + (useFixed ? 'fixed code' : 'buggy code') + ') ━━━');
   for (const r of results) {
@@ -160,11 +179,13 @@ function main() {
       console.log(`      spec: ${r.spec}`);
     } else if (r.status === 'holds') {
       console.log(`  ✓ ${r.case.padEnd(8)} property holds (no counterexample) — ${r.spec}`);
+    } else if (r.status === 'error') {
+      console.log(`  ! ${r.case.padEnd(8)} ERROR — ${r.error}`);
     } else {
       console.log(`  ? ${r.case}: ${r.status}`);
     }
   }
-  process.exit(0);
+  process.exit(hasCliError ? 2 : 0);
 }
 
 if (require.main === module) main();
