@@ -77,6 +77,12 @@ jobs:
             https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar \
             -o .planning/formal/tla/tla2tools.jar
 
+      # Formal-discrimination benchmark: proves the debug prove-bug/prove-fix loop
+      # genuinely depends on the bug (bug spec → counterexample, fix spec → clean).
+      # Guards against the "theater" failure mode where a checker passes regardless.
+      - name: Formal-discrimination benchmark (prove-bug / prove-fix)
+        run: node bin/check-formal-discrimination.cjs
+
       - name: Cache Alloy JAR
         id: cache-alloy
         uses: actions/cache@v4
