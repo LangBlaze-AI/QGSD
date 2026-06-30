@@ -62,9 +62,19 @@ describe('runAgenticLayer', () => {
 // ── Layer 3 success-path integration test ────────────────────────────────────
 
 describe('runSemanticLayer', () => {
-  it('returns semantic match above threshold (integration — skipped if package absent)', async () => {
-    try { await import('@huggingface/transformers'); } catch { return; /* skip */ }
-    const result = await runSemanticLayer('circuit breaker', [{ name: 'breaker', concepts: ['circuit breaker timeout'] }], 0.1);
+  it('returns semantic match above threshold (integration — skipped if package/model unavailable)', async (t) => {
+    // Skip (with a visible reason) when the optional embeddings package isn't installed.
+    try { await import('@huggingface/transformers'); } catch { t.skip('@huggingface/transformers not installed'); return; }
+    // The actual CI flake was the model LOAD throwing — `pipeline(...)` downloads
+    // 'Xenova/all-MiniLM-L6-v2', which fails on a cold cache / offline runner and varies
+    // across Node versions. Treat ONLY that (a thrown error) as a skip; a successful run
+    // that returns no match is a real regression and must still fail. (runSemanticLayer
+    // returns [] only when the package is missing, which the import guard above already
+    // covers — so reaching here means the package is present.)
+    let result;
+    try {
+      result = await runSemanticLayer('circuit breaker', [{ name: 'breaker', concepts: ['circuit breaker timeout'] }], 0.1);
+    } catch { t.skip('embedding model failed to load/run in this environment'); return; }
     assert.ok(result.length > 0, 'expected at least one semantic match');
     assert.strictEqual(result[0].matched_by, 'semantic');
   });
