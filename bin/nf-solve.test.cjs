@@ -754,6 +754,51 @@ test('TC-INT: --project-root overrides CWD for diagnostic sweep', () => {
   assert.equal(typeof parsed.residual_vector.total, 'number');
 });
 
+// nf-solve must operate on the TARGET repo (--project-root / cwd), never its own
+// install. This is the isolation guarantee behind the decoupled benchmark and the
+// reason the autocommit-pollution only ever hit nForma when run inside its own repo.
+// Heavy (spawns the full binary) — opt-in via RUN_HEAVY_SOLVE_TESTS like TC-COMMIT-10.
+test('TC-ISOLATION-1: --project-root targets the external repo + challenge, leaves the install untouched', {
+  skip: process.env.RUN_HEAVY_SOLVE_TESTS ? false : 'heavy nf-solve spawn; set RUN_HEAVY_SOLVE_TESTS=1 to run',
+}, () => {
+  const os = require('os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-target-'));
+  try {
+    // Seed an EXTERNAL repo with a challenge: REQ-01 has no formal model → r_to_f gap.
+    fs.mkdirSync(path.join(tmp, '.planning', 'formal', 'tla'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, '.planning', 'formal', 'requirements.json'),
+      JSON.stringify({ schema_version: '1', requirements: [{ id: 'REQ-01', text: 'rejects an expired token', status: 'Complete' }] }));
+    fs.writeFileSync(path.join(tmp, '.planning', 'formal', 'model-registry.json'),
+      JSON.stringify({ models: [], search_dirs: [] }));
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({ name: 'external-target', version: '0.0.0' }));
+
+    // Snapshot the install's solve-state.json mtime (must be unchanged afterward).
+    const selfState = path.join(ROOT, '.planning', 'formal', 'solve-state.json');
+    const selfBefore = fs.existsSync(selfState) ? fs.statSync(selfState).mtimeMs : null;
+
+    // A real (non-report) solve targeting the external repo. cwd is /tmp to prove the
+    // target comes from --project-root, not the working directory.
+    const r = spawnSync(process.execPath, [
+      path.join(ROOT, 'bin', 'nf-solve.cjs'),
+      '--json', '--fast', '--no-timeout', '--skip-tests', '--skip-proximity', '--skip-heatmap',
+      '--no-coderlm', '--max-iterations=1', '--no-auto-commit', '--project-root=' + tmp,
+    ], { encoding: 'utf8', cwd: os.tmpdir(), timeout: 120000, maxBuffer: 50 * 1024 * 1024 });
+    assert.ok(r.status === 0 || r.status === 1, 'nf-solve should exit cleanly');
+
+    // (1) it OPERATED ON THE TARGET — the solve wrote state into the target repo.
+    assert.ok(fs.existsSync(path.join(tmp, '.planning', 'formal', 'solve-state.json')),
+      'the target repo must receive the solve-state (mutation lands on the target)');
+
+    // (2) the INSTALL is untouched — its solve-state.json mtime did not change.
+    if (selfBefore !== null) {
+      assert.equal(fs.statSync(selfState).mtimeMs, selfBefore,
+        'the nForma install must NOT be mutated when targeting an external repo');
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 // ── TC-COV: crossReferenceFormalCoverage Tests ────────────────────────────────
 
 test('TC-COV-1: crossReferenceFormalCoverage returns unavailable when null input', () => {
