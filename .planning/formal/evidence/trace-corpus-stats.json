@@ -1,11 +1,11 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-30T12:16:57.415Z",
+  "generated": "2026-06-30T12:46:46.975Z",
   "session_gap_ms": 300000,
-  "total_events": 98957,
+  "total_events": 98963,
   "date_range": {
     "earliest": "2026-02-24T23:35:59.711Z",
-    "latest": "2026-06-30T12:02:47.269Z"
+    "latest": "2026-06-30T12:46:43.696Z"
   },
   "sessions": [
     {
@@ -9021,6 +9021,42 @@
       "actions": {
         "security_sweep": 2
       }
+    },
+    {
+      "id": "session-815",
+      "start": "2026-06-30T12:17:39.767Z",
+      "end": "2026-06-30T12:19:25.637Z",
+      "event_count": 3,
+      "actions": {
+        "security_sweep": 3
+      }
+    },
+    {
+      "id": "session-816",
+      "start": "2026-06-30T12:34:01.656Z",
+      "end": "2026-06-30T12:34:01.656Z",
+      "event_count": 1,
+      "actions": {
+        "security_sweep": 1
+      }
+    },
+    {
+      "id": "session-817",
+      "start": "2026-06-30T12:41:29.321Z",
+      "end": "2026-06-30T12:41:29.321Z",
+      "event_count": 1,
+      "actions": {
+        "security_sweep": 1
+      }
+    },
+    {
+      "id": "session-818",
+      "start": "2026-06-30T12:46:43.696Z",
+      "end": "2026-06-30T12:46:43.696Z",
+      "event_count": 1,
+      "actions": {
+        "security_sweep": 1
+      }
     }
   ],
   "action_index": {
@@ -11326,7 +11362,7 @@
       ]
     },
     "security_sweep": {
-      "total": 4819,
+      "total": 4825,
       "sessions": [
         "session-357",
         "session-358",
@@ -11558,7 +11594,11 @@
         "session-811",
         "session-812",
         "session-813",
-        "session-814"
+        "session-814",
+        "session-815",
+        "session-816",
+        "session-817",
+        "session-818"
       ]
     }
   },
@@ -11568,5 +11608,5 @@
     "unknown": 0,
     "unknown_actions": []
   },
-  "summary": "98957 events across 814 sessions (2026-02-24T23:35:59.711Z to 2026-06-30T12:02:47.269Z). 7 known actions, 0 unknown. 0 distinct transitions."
+  "summary": "98963 events across 818 sessions (2026-02-24T23:35:59.711Z to 2026-06-30T12:46:43.696Z). 7 known actions, 0 unknown. 0 distinct transitions."
 }
