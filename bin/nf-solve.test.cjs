@@ -1494,6 +1494,18 @@ test('TC-IDEMPOTENT-1: the solve-state.json write is guarded by !reportOnly', ()
     'the solve-state.json write must be guarded by `if (!reportOnly)` so a report-only sweep stays idempotent');
 });
 
+test('TC-IDEMPOTENT-2: the auto-commit is guarded so report-only never commits', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'nf-solve.cjs'), 'utf8');
+  // A report-only sweep must be side-effect-free — it must NOT spawn the
+  // solve-commit-artifacts auto-commit (which would sweep the working tree onto the
+  // current branch just for inspecting residual). The guard must include !reportOnly.
+  const idx = src.indexOf("spawnTool('bin/solve-commit-artifacts.cjs'");
+  assert.ok(idx !== -1, 'expected the auto-commit invocation');
+  const preceding = src.slice(Math.max(0, idx - 300), idx);
+  assert.ok(/if\s*\([^)]*!reportOnly[^)]*\)/.test(preceding),
+    'the auto-commit must be guarded by !reportOnly so a report-only run never creates a commit');
+});
+
 // ── TC-MISSING: Missing-file residual tests (DIAG-02) ────────────────────────
 
 test('TC-MISSING-1: missing-file returns use residual -1 not 0 (source verification)', () => {
