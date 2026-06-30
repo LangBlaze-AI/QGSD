@@ -6877,7 +6877,12 @@ function main() {
   const exitCode = 0;
   const outputText = jsonMode ? (jsonText + '\n') : reportText;
 
-  if (!noAutoCommit) {
+  // `--report-only` is a no-mutation diagnostic sweep — it must never create a commit.
+  // Auto-committing here meant that simply RUNNING nf-solve to inspect residual (e.g.
+  // verifying a fix, or a benchmark measuring the gap) produced a `chore(solve)` commit
+  // that swept whatever was in the working tree onto the current branch. Only a real
+  // (non-report) solve, which is meant to make and record progress, auto-commits.
+  if (!noAutoCommit && !reportOnly) {
     try {
       const commitResult = spawnTool('bin/solve-commit-artifacts.cjs', ['--json']);
       if (commitResult.ok && commitResult.stdout) {
