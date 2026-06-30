@@ -1,10 +1,10 @@
 {
-  "last_run": "2026-06-30T12:02:49.279Z",
+  "last_run": "2026-06-30T12:46:45.488Z",
   "converged": true,
   "iteration_count": 3,
   "final_residual_total": 0,
   "reverse_discovery_total": 0,
-  "heatmap_total": 815,
+  "heatmap_total": 1028,
   "real_impact": {
     "bugs_fixed": 0,
     "tests_added": 0,
@@ -43,7 +43,7 @@
   "known_issues": [
     {
       "layer": "git_heatmap",
-      "residual": 815
+      "residual": 1028
     },
     {
       "layer": "git_history",

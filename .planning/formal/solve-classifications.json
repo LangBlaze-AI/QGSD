@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-06-30T12:02:49.293Z",
+  "updated_at": "2026-06-30T12:46:45.499Z",
   "classifications": {
     "dtoc": {},
     "ctor": {
@@ -47,6 +47,35 @@
   "session_history": [
     {
       "session_id": "2026-06-30T12:02:49.292Z",
+      "scanner_stats": {
+        "dtoc": {
+          "total": 0,
+          "fp": 0,
+          "genuine": 0,
+          "review": 0
+        },
+        "ctor": {
+          "total": 14,
+          "fp": 14,
+          "genuine": 0,
+          "review": 0
+        },
+        "ttor": {
+          "total": 20,
+          "fp": 10,
+          "genuine": 0,
+          "review": 10
+        },
+        "dtor": {
+          "total": 1,
+          "fp": 0,
+          "genuine": 1,
+          "review": 0
+        }
+      }
+    },
+    {
+      "session_id": "2026-06-30T12:46:45.498Z",
       "scanner_stats": {
         "dtoc": {
           "total": 0,

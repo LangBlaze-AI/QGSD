@@ -1,12 +1,12 @@
 {
-  "generated": "2026-06-30T12:02:49.318Z",
+  "generated": "2026-06-30T12:46:45.512Z",
   "window_size": 20,
   "min_points": 5,
   "entry_count": 20,
   "layers": {
     "r_to_f": {
       "trend": "OSCILLATING",
-      "z_score": 0.2883483941000721,
+      "z_score": 0.4052026520016734,
       "oscillation_count": 3,
       "credits_remaining": 1,
       "blocked": false,
@@ -15,7 +15,7 @@
     },
     "f_to_t": {
       "trend": "OSCILLATING",
-      "z_score": 0.20991342856239587,
+      "z_score": 0.3030216076314281,
       "oscillation_count": 3,
       "credits_remaining": 1,
       "blocked": false,
@@ -51,7 +51,7 @@
     },
     "r_to_d": {
       "trend": "OSCILLATING",
-      "z_score": 0.24489899998946185,
+      "z_score": 0.3408993085853566,
       "oscillation_count": 3,
       "credits_remaining": 1,
       "blocked": false,
@@ -60,7 +60,7 @@
     },
     "d_to_c": {
       "trend": "STABLE",
-      "z_score": 1.1545238570931773,
+      "z_score": 0.6060432152628562,
       "oscillation_count": 0,
       "credits_remaining": 1,
       "blocked": false,
@@ -114,7 +114,7 @@
     },
     "l3_to_tc": {
       "trend": "STABLE",
-      "z_score": -1.644321857072101,
+      "z_score": -1.1742087295717838,
       "oscillation_count": 0,
       "credits_remaining": 1,
       "blocked": false,
