@@ -1,6 +1,6 @@
 {
-  "aggregated_at": "2026-06-30T12:02:46.818Z",
-  "content_hash": "sha256:ae9aeb4ffb2f435503c6390e1fe3415ac5ce56df051e57c348b819aeec39221c",
+  "aggregated_at": "2026-06-30T12:18:04.304Z",
+  "content_hash": "sha256:008ff00cd6c9dc092bf82b9aeafb0558bb85a093cd398dc12e87d7e3c032df74",
   "frozen_at": null,
   "requirements": [
     {
@@ -543,7 +543,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -558,7 +558,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -573,7 +573,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -3054,7 +3054,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -4131,7 +4131,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -4146,7 +4146,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -4595,7 +4595,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -4610,7 +4610,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -4625,7 +4625,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -4640,7 +4640,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -5981,7 +5981,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -5996,7 +5996,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [
@@ -6011,7 +6011,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "source_file": "nf-baseline",
         "milestone": "v0.42"
       },
       "formal_models": [

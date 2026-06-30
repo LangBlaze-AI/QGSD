@@ -1,14 +1,14 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-30T11:33:11.626Z",
-  "total_failures": 5,
+  "generated": "2026-06-30T12:17:07.727Z",
+  "total_failures": 6,
   "categories": {
     "crash": [
       {
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-30T11:33:03.852Z",
+        "timestamp": "2026-06-30T12:17:02.288Z",
         "check_id": "tla:mcagentloop",
         "surface": "agent-loop",
         "property": "MCAgentLoop",
@@ -30,7 +30,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-30T11:33:05.247Z",
+        "timestamp": "2026-06-30T12:17:02.732Z",
         "check_id": "tla:mcbugmodellookup",
         "surface": "tla",
         "property": "MCBugModelLookup",
@@ -52,7 +52,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-30T11:33:06.216Z",
+        "timestamp": "2026-06-30T12:17:03.237Z",
         "check_id": "tla:mcconvergencetest",
         "surface": "convergence",
         "property": "MCConvergenceTest",
@@ -74,7 +74,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-30T11:33:07.139Z",
+        "timestamp": "2026-06-30T12:17:03.736Z",
         "check_id": "tla:mcdeliberationrevision",
         "surface": "deliberation-revision",
         "property": "MCDeliberationRevision",
@@ -96,7 +96,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-30T11:33:10.833Z",
+        "timestamp": "2026-06-30T12:17:05.175Z",
         "check_id": "tla:mcgatepromotion",
         "surface": "tla",
         "property": "MCGatePromotion",
@@ -113,6 +113,32 @@
         },
         "category": "crash",
         "classification_reason": "Error pattern in summary: error: state-space guard blocked MCGatePromotion (HIGH risk, ~null states)"
+      },
+      {
+        "tool": "run-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-06-30T12:17:06.345Z",
+        "check_id": "tla:mcp-environment",
+        "surface": "mcp-calls",
+        "property": "MCP environment — MCPEnvSafety, MCPEnvLiveness",
+        "runtime_ms": 0,
+        "summary": "error: state-space guard blocked MCMCPEnv (HIGH risk, ~null states)",
+        "triage_tags": [
+          "state-space-blocked"
+        ],
+        "requirement_ids": [
+          "MCPENV-01",
+          "MCPENV-02",
+          "MCPENV-03"
+        ],
+        "metadata": {
+          "config": "MCMCPEnv",
+          "estimated_states": null,
+          "risk": "HIGH"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: state-space guard blocked MCMCPEnv (HIGH risk, ~null states)"
       }
     ],
     "timeout": [],
@@ -121,7 +147,7 @@
     "degradation": []
   },
   "category_counts": {
-    "crash": 5,
+    "crash": 6,
     "timeout": 0,
     "logic_violation": 0,
     "drift": 0,
@@ -129,5 +155,5 @@
   },
   "degradation_fallback_note": "When no baseline exists, potential degradation entries are classified as logic_violation",
   "unclassified": [],
-  "summary": "5 failures classified: crash=5, timeout=0, logic_violation=0, drift=0, degradation=0. 0 unclassified."
+  "summary": "6 failures classified: crash=6, timeout=0, logic_violation=0, drift=0, degradation=0. 0 unclassified."
 }
