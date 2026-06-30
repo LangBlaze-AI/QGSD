@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-30T11:30:45.366Z",
+  "generated": "2026-06-30T11:32:57.626Z",
   "node_key_format": "type::id",
   "sources": {
     "scope.json:account-manager": {
@@ -88,8 +88,8 @@
       "hash": "76910c97"
     },
     "model-registry.json": {
-      "mtime": "2026-06-30T09:30:56.947Z",
-      "hash": "6031c5f6"
+      "mtime": "2026-06-30T11:31:41.352Z",
+      "hash": "323dc338"
     },
     "invariant-catalog.json": {
       "mtime": "2026-05-19T19:43:48.880Z",
@@ -104,8 +104,8 @@
       "hash": "f5d6c130"
     },
     "instrumentation-map.json": {
-      "mtime": "2026-06-30T09:30:56.900Z",
-      "hash": "e11deee8"
+      "mtime": "2026-06-30T11:31:02.833Z",
+      "hash": "4195421b"
     },
     "event-vocabulary.json": {
       "mtime": "2026-05-19T19:43:48.799Z",
@@ -128,7 +128,7 @@
       "hash": "4f085cf2"
     },
     "source-annotations": {
-      "mtime": "2026-06-30T09:30:56.954Z"
+      "mtime": "2026-06-30T11:31:05.061Z"
     },
     "code-source-annotations": {
       "mtime": "2026-06-30T07:48:45.698Z"
@@ -22035,11 +22035,6 @@
       "edges": [
         {
           "to": "requirement::QUORUM-01",
-          "rel": "models",
-          "source": "source-annotation"
-        },
-        {
-          "to": "requirement::QUORUM-170",
           "rel": "models",
           "source": "source-annotation"
         }
@@ -54961,11 +54956,6 @@
       "type": "requirement",
       "id": "QUORUM-170",
       "edges": [
-        {
-          "to": "formal_model::.planning/formal/tla/NFQuorum_xstate.tla",
-          "rel": "modeled_by",
-          "source": "source-annotation"
-        },
         {
           "to": "formal_model::.planning/formal/tla/NFStopHook.tla",
           "rel": "modeled_by",

@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-30T11:30:57.054Z",
+  "generated": "2026-06-30T11:34:31.889Z",
   "methodology": "FMEA (IEC 60812)",
   "scoring_scale": {
     "severity": "1-10: 1=no impact, 2=cosmetic, 4=degraded, 6=stalled/interrupted, 8=incorrect verdict, 10=crash/data loss",

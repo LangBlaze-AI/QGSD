@@ -1,11 +1,11 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-30T11:30:45.646Z",
+  "generated": "2026-06-30T11:32:57.941Z",
   "session_gap_ms": 300000,
-  "total_events": 98949,
+  "total_events": 98951,
   "date_range": {
     "earliest": "2026-02-24T23:35:59.711Z",
-    "latest": "2026-06-29T21:57:06.101Z"
+    "latest": "2026-06-30T11:32:16.793Z"
   },
   "sessions": [
     {
@@ -8994,6 +8994,15 @@
       "actions": {
         "security_sweep": 1
       }
+    },
+    {
+      "id": "session-812",
+      "start": "2026-06-30T11:31:15.344Z",
+      "end": "2026-06-30T11:32:16.793Z",
+      "event_count": 2,
+      "actions": {
+        "security_sweep": 2
+      }
     }
   ],
   "action_index": {
@@ -11299,7 +11308,7 @@
       ]
     },
     "security_sweep": {
-      "total": 4811,
+      "total": 4813,
       "sessions": [
         "session-357",
         "session-358",
@@ -11528,7 +11537,8 @@
         "session-808",
         "session-809",
         "session-810",
-        "session-811"
+        "session-811",
+        "session-812"
       ]
     }
   },
@@ -11538,5 +11548,5 @@
     "unknown": 0,
     "unknown_actions": []
   },
-  "summary": "98949 events across 811 sessions (2026-02-24T23:35:59.711Z to 2026-06-29T21:57:06.101Z). 7 known actions, 0 unknown. 0 distinct transitions."
+  "summary": "98951 events across 812 sessions (2026-02-24T23:35:59.711Z to 2026-06-30T11:32:16.793Z). 7 known actions, 0 unknown. 0 distinct transitions."
 }

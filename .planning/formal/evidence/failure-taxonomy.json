@@ -1,14 +1,14 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-30T11:30:58.014Z",
-  "total_failures": 4,
+  "generated": "2026-06-30T11:33:11.626Z",
+  "total_failures": 5,
   "categories": {
     "crash": [
       {
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-30T11:30:52.706Z",
+        "timestamp": "2026-06-30T11:33:03.852Z",
         "check_id": "tla:mcagentloop",
         "surface": "agent-loop",
         "property": "MCAgentLoop",
@@ -30,7 +30,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-30T11:30:53.577Z",
+        "timestamp": "2026-06-30T11:33:05.247Z",
         "check_id": "tla:mcbugmodellookup",
         "surface": "tla",
         "property": "MCBugModelLookup",
@@ -52,7 +52,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-30T11:30:54.208Z",
+        "timestamp": "2026-06-30T11:33:06.216Z",
         "check_id": "tla:mcconvergencetest",
         "surface": "convergence",
         "property": "MCConvergenceTest",
@@ -74,7 +74,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-30T11:30:54.951Z",
+        "timestamp": "2026-06-30T11:33:07.139Z",
         "check_id": "tla:mcdeliberationrevision",
         "surface": "deliberation-revision",
         "property": "MCDeliberationRevision",
@@ -91,6 +91,28 @@
         },
         "category": "crash",
         "classification_reason": "Error pattern in summary: error: state-space guard blocked MCDeliberationRevision (HIGH risk, ~null states"
+      },
+      {
+        "tool": "run-tlc",
+        "formalism": "tla",
+        "result": "error",
+        "timestamp": "2026-06-30T11:33:10.833Z",
+        "check_id": "tla:mcgatepromotion",
+        "surface": "tla",
+        "property": "MCGatePromotion",
+        "runtime_ms": 0,
+        "summary": "error: state-space guard blocked MCGatePromotion (HIGH risk, ~null states)",
+        "triage_tags": [
+          "state-space-blocked"
+        ],
+        "requirement_ids": [],
+        "metadata": {
+          "config": "MCGatePromotion",
+          "estimated_states": null,
+          "risk": "HIGH"
+        },
+        "category": "crash",
+        "classification_reason": "Error pattern in summary: error: state-space guard blocked MCGatePromotion (HIGH risk, ~null states)"
       }
     ],
     "timeout": [],
@@ -99,7 +121,7 @@
     "degradation": []
   },
   "category_counts": {
-    "crash": 4,
+    "crash": 5,
     "timeout": 0,
     "logic_violation": 0,
     "drift": 0,
@@ -107,5 +129,5 @@
   },
   "degradation_fallback_note": "When no baseline exists, potential degradation entries are classified as logic_violation",
   "unclassified": [],
-  "summary": "4 failures classified: crash=4, timeout=0, logic_violation=0, drift=0, degradation=0. 0 unclassified."
+  "summary": "5 failures classified: crash=5, timeout=0, logic_violation=0, drift=0, degradation=0. 0 unclassified."
 }
