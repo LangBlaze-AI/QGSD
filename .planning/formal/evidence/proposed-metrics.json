@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-29T18:52:01.107Z",
+  "generated": "2026-06-30T11:30:52.720Z",
   "total_proposed": 1840,
   "implemented": 0,
   "partial": 0,
@@ -2047,15 +2047,15 @@
       "status": "proposed"
     },
     {
-      "metric_name": "nf_floorsafety__tla",
+      "metric_name": "nf_deliberatingvotescollectedtodecidedfloormet",
       "metric_type": "counter",
       "tier": 2,
       "source_model": "/Users/jonathanborduas/code/QGSD/.planning/formal/tla/NFQuorum_xstate.tla",
-      "assumption_name": "FloorSafety",
+      "assumption_name": "DeliberatingVotesCollectedToDECIDEDFloormet",
       "assumption_type": "invariant",
       "coverage": "uncovered",
-      "formal_ref": "spec:/Users/jonathanborduas/code/QGSD/.planning/formal/tla/NFQuorum_xstate.tla:FloorSafety",
-      "instrumentation_snippet": "// Observe handler for FloorSafety (tla/invariant)\n// Add to observe config sources:\n{\n  \"type\": \"internal\",\n  \"label\": \"nf_floorsafety__tla\",\n  \"check\": \"formal-invariant\",\n  \"config\": {\n    \"metric\": \"nf_floorsafety__tla\",\n    \"type\": \"counter\",\n    \"formal_ref\": \"spec:/Users/jonathanborduas/code/QGSD/.planning/formal/tla/NFQuorum_xstate.tla:FloorSafety\",\n    \"description\": \"Counts violations of FloorSafety\"\n  }\n}",
+      "formal_ref": "spec:/Users/jonathanborduas/code/QGSD/.planning/formal/tla/NFQuorum_xstate.tla:DeliberatingVotesCollectedToDECIDEDFloormet",
+      "instrumentation_snippet": "// Observe handler for DeliberatingVotesCollectedToDECIDEDFloormet (tla/invariant)\n// Add to observe config sources:\n{\n  \"type\": \"internal\",\n  \"label\": \"nf_deliberatingvotescollectedtodecidedfloormet\",\n  \"check\": \"formal-invariant\",\n  \"config\": {\n    \"metric\": \"nf_deliberatingvotescollectedtodecidedfloormet\",\n    \"type\": \"counter\",\n    \"formal_ref\": \"spec:/Users/jonathanborduas/code/QGSD/.planning/formal/tla/NFQuorum_xstate.tla:DeliberatingVotesCollectedToDECIDEDFloormet\",\n    \"description\": \"Counts violations of DeliberatingVotesCollectedToDECIDEDFloormet\"\n  }\n}",
       "status": "proposed"
     },
     {
