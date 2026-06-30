@@ -3,28 +3,23 @@
   "requirement_text": "plan-milestone-gaps proposed gap closure phases are submitted to R3 quorum for approval before ROADMAP.md is updated (replaces AskUserQuestion confirmation gate)",
   "formal_property": {
     "name": "TypeOK",
-    "model_file": ".planning/formal/tla/QGSDQuorum.tla",
+    "model_file": ".planning/formal/tla/NFQuorum.tla",
     "definition": "TypeOK ==",
     "type": "invariant"
   },
   "source_files": [
     "bin/requirement-map.cjs",
-    "bin/generate-formal-specs.cjs",
-    "bin/xstate-to-tla.cjs"
+    "bin/adapters/emitter-tla.cjs",
+    "bin/generate-formal-specs.cjs"
   ],
   "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/requirement-map.cjs",
   "source_files_absolute": [
     "/Users/jonathanborduas/code/QGSD/bin/requirement-map.cjs",
-    "/Users/jonathanborduas/code/QGSD/bin/generate-formal-specs.cjs",
-    "/Users/jonathanborduas/code/QGSD/bin/xstate-to-tla.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/adapters/emitter-tla.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/generate-formal-specs.cjs"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/requirement-map.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

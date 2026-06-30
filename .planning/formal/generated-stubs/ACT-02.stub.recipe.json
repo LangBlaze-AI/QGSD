@@ -8,19 +8,40 @@
     "type": "invariant"
   },
   "source_files": [
-    "bin/nf-solve.cjs"
+    "bin/call-quorum-slot.cjs",
+    "bin/nForma.cjs",
+    "bin/validate-invariant.cjs",
+    "bin/stall-detector.cjs",
+    "bin/nForma.test.cjs",
+    "hooks/nf-destructive-git-guard.js",
+    "hooks/dist/nf-destructive-git-guard.js",
+    "hooks/dist/nf-scope-guard.js",
+    "hooks/dist/nf-context-monitor.js",
+    "hooks/dist/nf-session-start.js",
+    "hooks/nf-scope-guard.js",
+    "hooks/nf-session-start.test.js",
+    "hooks/nf-context-monitor.js",
+    "hooks/nf-session-start.js"
   ],
-  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/nf-solve.cjs",
+  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/call-quorum-slot.cjs",
   "source_files_absolute": [
-    "/Users/jonathanborduas/code/QGSD/bin/nf-solve.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/call-quorum-slot.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/nForma.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/validate-invariant.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/stall-detector.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/nForma.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-destructive-git-guard.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-destructive-git-guard.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-scope-guard.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-context-monitor.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-session-start.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-scope-guard.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-session-start.test.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-context-monitor.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-session-start.js"
   ],
-  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/nf-solve.cjs');",
+  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/call-quorum-slot.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

@@ -1,502 +1,12 @@
 {
-  "generated_at": "2026-05-18T14:59:48.725Z",
+  "generated_at": "2026-06-30T11:52:34.215Z",
   "requirements": {
-    "ACT-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ACT-01.stub.test.js",
-          "test_name": "ACT-01: gsd-tools activity-set writes current-activity.json atomically via writeFileSync"
-        }
-      ]
-    },
-    "ACT-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ACT-02.stub.test.js",
-          "test_name": "ACT-02: activity-set always injects `updated` timestamp"
-        }
-      ]
-    },
-    "ACT-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ACT-03.stub.test.js",
-          "test_name": "ACT-03: gsd-tools has activity-set command that writes current-activity.json"
-        }
-      ]
-    },
-    "ACT-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ACT-04.stub.test.js",
-          "test_name": "ACT-04: gsd-tools has activity-get command for reading current-activity.json"
-        }
-      ]
-    },
-    "ACT-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ACT-05.stub.test.js",
-          "test_name": "ACT-05: execute-phase workflow uses activity-set calls"
-        }
-      ]
-    },
-    "ACT-06": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ACT-06.stub.test.js",
-          "test_name": "ACT-06: QGSDActivityTracking.tla defines StageTransition action"
-        }
-      ]
-    },
-    "ACT-07": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ACT-07.stub.test.js",
-          "test_name": "ACT-07: QGSDActivityTracking.tla defines ClearActivity action"
-        }
-      ]
-    },
-    "AGENT-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/AGENT-01.stub.test.js",
-          "test_name": "AGENT-01: QGSDAgentProvisioning.tla defines AddAgent action"
-        }
-      ]
-    },
-    "AGENT-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/AGENT-02.stub.test.js",
-          "test_name": "AGENT-02: QGSDAgentProvisioning.tla defines RemoveAgent action"
-        }
-      ]
-    },
-    "AGENT-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/AGENT-03.stub.test.js",
-          "test_name": "AGENT-03: QGSDAgentProvisioning.tla defines VerifyAgent action"
-        }
-      ]
-    },
-    "ANNOT-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ANNOT-01.stub.test.js",
-          "test_name": "ANNOT-01: All TLA+ model files contain @requirement annotations on properties"
-        }
-      ]
-    },
-    "ANNOT-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ANNOT-02.stub.test.js",
-          "test_name": "ANNOT-02: All Alloy model files contain @requirement annotations on assertions"
-        }
-      ]
-    },
-    "ANNOT-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ANNOT-03.stub.test.js",
-          "test_name": "ANNOT-03: All PRISM .props files contain @requirement annotations on properties"
-        }
-      ]
-    },
-    "ANNOT-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ANNOT-04.stub.test.js",
-          "test_name": "ANNOT-04: parseTLA extracts @requirement annotations from TLA+ content"
-        }
-      ]
-    },
-    "ANNOT-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ANNOT-05.stub.test.js",
-          "test_name": "ANNOT-05: generate-traceability-matrix.cjs exists"
-        }
-      ]
-    },
-    "ARCH-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ARCH-01.stub.test.js",
-          "test_name": "ARCH-01: generate-formal-specs.cjs exists"
-        }
-      ]
-    },
-    "ARCH-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ARCH-02.stub.test.js",
-          "test_name": "ARCH-02: promote-model.cjs exists"
-        }
-      ]
-    },
-    "ARCH-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ARCH-03.stub.test.js",
-          "test_name": "ARCH-03: accept-debug-invariant.cjs exists"
-        }
-      ]
-    },
-    "ARCH-10": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ARCH-10.stub.test.js",
-          "test_name": "ARCH-10: check-bundled-sdks.cjs exists"
-        }
-      ]
-    },
-    "CALIB-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CALIB-01.stub.test.js",
-          "test_name": "CALIB-01: policy.yaml exists as the authoritative calibration source"
-        }
-      ]
-    },
-    "CALIB-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CALIB-02.stub.test.js",
-          "test_name": "CALIB-02: readPolicy parses policy.yaml with correct structure"
-        }
-      ]
-    },
-    "CALIB-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CALIB-03.stub.test.js",
-          "test_name": "CALIB-03: read-policy.cjs exports readPolicy function"
-        }
-      ]
-    },
-    "CALIB-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CALIB-04.stub.test.js",
-          "test_name": "CALIB-04: policy.yaml conservative_priors.tp_rate matches expected value"
-        }
-      ]
-    },
-    "CI-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CI-01.stub.test.js",
-          "test_name": "CI-01: package.json defines a test script"
-        }
-      ]
-    },
-    "CI-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CI-02.stub.test.js",
-          "test_name": "CI-02: CI workflow contains a lint step that blocks merge"
-        }
-      ]
-    },
-    "CI-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CI-03.stub.test.js",
-          "test_name": "CI-03: project has TypeScript configuration for type checking"
-        }
-      ]
-    },
-    "COMP-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/COMP-01.stub.test.js",
-          "test_name": "COMP-01: config-loader.js defines quorum_active in DEFAULT_CONFIG as an array"
-        }
-      ]
-    },
-    "COMP-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/COMP-02.stub.test.js",
-          "test_name": "COMP-02: nf-prompt.js derives activeSlots from config.quorum_active"
-        }
-      ]
-    },
-    "COMP-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/COMP-03.stub.test.js",
-          "test_name": "COMP-03 — check-provider-health.cjs reads quorum_active from nf.json config"
-        }
-      ]
-    },
-    "COMP-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/COMP-04.stub.test.js",
-          "test_name": "COMP-04 — install.js has buildActiveSlots() that reads mcpServers from ~/.claude.json"
-        }
-      ]
-    },
     "CONF-01": {
       "covered": true,
       "test_cases": [
         {
           "test_file": "hooks/config-loader.test.js",
           "test_name": "TC1: no project config → returns valid config (from global or DEFAULT_CONFIG)"
-        },
-        {
-          "test_file": ".planning/formal/generated-stubs/CONF-01.stub.test.js",
-          "test_name": "CONF-01 — ConfigLayer: structural verification"
-        }
-      ]
-    },
-    "CONF-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CONF-02.stub.test.js",
-          "test_name": "CONF-02 — ConfigLayer: config-loader.js implements two-layer merge with project precedence"
-        }
-      ]
-    },
-    "CONF-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CONF-03.stub.test.js",
-          "test_name": "CONF-03 — ConfigLayer: DEFAULT_CONFIG has quorum_commands as array of command names"
-        }
-      ]
-    },
-    "CONF-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CONF-04.stub.test.js",
-          "test_name": "CONF-04: nf-stop.js has fail-open try/catch wrapper with process.exit(0) in catch"
-        }
-      ]
-    },
-    "CONF-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CONF-05.stub.test.js",
-          "test_name": "CONF-05: config-loader.js readConfigFile returns null on malformed JSON with stderr warning"
-        }
-      ]
-    },
-    "CONF-06": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CONF-06.stub.test.js",
-          "test_name": "CONF-06: DEFAULT_CONFIG contains circuit_breaker.oscillation_depth = 3"
-        }
-      ]
-    },
-    "CONF-07": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CONF-07.stub.test.js",
-          "test_name": "CONF-07: DEFAULT_CONFIG contains circuit_breaker.commit_window = 6"
-        }
-      ]
-    },
-    "CONF-08": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CONF-08.stub.test.js",
-          "test_name": "CONF-08: validateConfig resets non-object circuit_breaker to defaults"
-        }
-      ]
-    },
-    "CONF-09": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CONF-09.stub.test.js",
-          "test_name": "CONF-09: config-loader exports DEFAULT_CONFIG with circuit_breaker sub-object"
-        }
-      ]
-    },
-    "CONF-10": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CONF-10.stub.test.js",
-          "test_name": "CONF-10: config-audit.cjs exists and is fail-open (exit 0)"
-        }
-      ]
-    },
-    "CRED-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CRED-01.stub.test.js",
-          "test_name": "CRED-01: requirement-map.cjs maps tla:account-manager to include CRED-01"
-        }
-      ]
-    },
-    "CRED-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/CRED-02.stub.test.js",
-          "test_name": "CRED-02: requirement-map.cjs maps tla:account-manager to include CRED-02"
-        }
-      ]
-    },
-    "DASH-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DASH-01.stub.test.js",
-          "test_name": "DASH-01: manage-agents-core.cjs exports buildDashboardLines in _pure namespace"
-        }
-      ]
-    },
-    "DASH-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DASH-02.stub.test.js",
-          "test_name": "DASH-02: manage-agents-core.cjs exports formatTimestamp in _pure namespace"
-        }
-      ]
-    },
-    "DASH-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DASH-03.stub.test.js",
-          "test_name": "DASH-03 — dashboard sources contain process.exit for clean exit"
-        }
-      ]
-    },
-    "DEBT-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DEBT-01.stub.test.js",
-          "test_name": "DEBT-01 — task-classifier source file exists and is loadable"
-        }
-      ]
-    },
-    "DECOMP-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DECOMP-01.stub.test.js",
-          "test_name": "DECOMP-01 — risk threshold constants match formal spec values"
-        }
-      ]
-    },
-    "DECOMP-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DECOMP-02.stub.test.js",
-          "test_name": "DECOMP-02 — source detects Nat as unbounded domain"
-        }
-      ]
-    },
-    "DECOMP-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DECOMP-03.stub.test.js",
-          "test_name": "DECOMP-03 — traceability matrix source contains coverage regression detection"
-        }
-      ]
-    },
-    "DECOMP-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DECOMP-04.stub.test.js",
-          "test_name": "DECOMP-04: generate-traceability-matrix.cjs contains state_space section logic"
-        }
-      ]
-    },
-    "DECOMP-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DECOMP-05.stub.test.js",
-          "test_name": "DECOMP-05: analyze-state-space.cjs contains cross-model pair detection"
-        }
-      ]
-    },
-    "DETECT-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DETECT-01.stub.test.js",
-          "test_name": "DETECT-01: hook is a PreToolUse hook that reads stdin JSON"
-        }
-      ]
-    },
-    "DETECT-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DETECT-02.stub.test.js",
-          "test_name": "DETECT-02: hook defines getCommitHashes to retrieve last N commit hashes"
-        }
-      ]
-    },
-    "DETECT-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DETECT-03.stub.test.js",
-          "test_name": "DETECT-03: hook defines detectOscillation function"
-        }
-      ]
-    },
-    "DETECT-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DETECT-04.stub.test.js",
-          "test_name": "DETECT-04: READ_ONLY_REGEX is defined and covers required commands"
         }
       ]
     },
@@ -508,228 +18,8 @@
           "test_name": "CB-TC1: No git repo in cwd exits 0 with no output"
         },
         {
-          "test_file": ".planning/formal/generated-stubs/DETECT-05.stub.test.js",
-          "test_name": "DETECT-05: getGitRoot returns null when not in a git repo"
-        },
-        {
           "test_file": "bin/run-oscillation-tlc.test.cjs",
           "test_name": "exits non-zero and prints clear error when JAVA_HOME points to nonexistent path"
-        }
-      ]
-    },
-    "DISP-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DISP-01.stub.test.js",
-          "test_name": "DISP-01: triggerHealthProbe function is defined"
-        }
-      ]
-    },
-    "DISP-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DISP-02.stub.test.js",
-          "test_name": "DISP-02: getAvailableSlots function is defined"
-        }
-      ]
-    },
-    "DISP-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DISP-03.stub.test.js",
-          "test_name": "DISP-03: sortBySuccessRate function is defined"
-        }
-      ]
-    },
-    "DISP-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DISP-04.stub.test.js",
-          "test_name": "DISP-04: quorum-slot-dispatch.cjs exports buildModeAPrompt"
-        }
-      ]
-    },
-    "DISP-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DISP-05.stub.test.js",
-          "test_name": "DISP-05: parseVerdict extracts APPROVE from Mode B output"
-        }
-      ]
-    },
-    "DISP-06": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DISP-06.stub.test.js",
-          "test_name": "DISP-06: matchRequirementsByKeywords is exported as a function"
-        }
-      ]
-    },
-    "DRIFT-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DRIFT-01.stub.test.js",
-          "test_name": "DRIFT-01 — CompleteDrift: pass when no schema file changed"
-        }
-      ]
-    },
-    "DRIFT-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/DRIFT-02.stub.test.js",
-          "test_name": "DRIFT-02 — CompleteDrift: run-formal-verify.cjs includes ci:trace-schema-drift step"
-        }
-      ]
-    },
-    "ENFC-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ENFC-01.stub.test.js",
-          "test_name": "ENFC-01 — BlockDecision: buildBlockReason returns deny-style block message"
-        }
-      ]
-    },
-    "ENFC-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ENFC-02.stub.test.js",
-          "test_name": "ENFC-02 — BuildBlockMessage: nf-circuit-breaker.js exports buildBlockReason"
-        }
-      ]
-    },
-    "ENFC-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ENFC-03.stub.test.js",
-          "test_name": "ENFC-03: buildBlockReason is exported from nf-circuit-breaker.js"
-        }
-      ]
-    },
-    "EVID-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/EVID-01.stub.test.js",
-          "test_name": "EVID-01: computeConfidenceTier is exported"
-        }
-      ]
-    },
-    "EVID-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/EVID-02.stub.test.js",
-          "test_name": "EVID-02: source defines buildObservationWindow function"
-        }
-      ]
-    },
-    "EVID-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/EVID-03.stub.test.js",
-          "test_name": "EVID-03: git-heatmap.cjs exports required functions"
-        }
-      ]
-    },
-    "EVID-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/EVID-04.stub.test.js",
-          "test_name": "EVID-04: COMMIT_TYPES contains exactly 7 categories"
-        }
-      ]
-    },
-    "FAIL-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/FAIL-01.stub.test.js",
-          "test_name": "FAIL-01: retryWithBackoff function exists with maxRetries=2 and delays=[1000,3000]"
-        }
-      ]
-    },
-    "FAIL-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/FAIL-02.stub.test.js",
-          "test_name": "FAIL-02: providers.json exists and is valid JSON with providers array"
-        }
-      ]
-    },
-    "GATE-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/GATE-01.stub.test.js",
-          "test_name": "GATE-01: --base-ref flag is parsed from argv"
-        }
-      ]
-    },
-    "GUARD-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/GUARD-01.stub.test.js",
-          "test_name": "GUARD-01: quick.md contains MUST_NOT_SKIP annotations (>= 5)"
-        }
-      ]
-    },
-    "HEAL-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/HEAL-01.stub.test.js",
-          "test_name": "HEAL-01: readEarlyEscalationThreshold returns default 0.10 when no config exists"
-        }
-      ]
-    },
-    "HEAL-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/HEAL-02.stub.test.js",
-          "test_name": "HEAL-02: verify-quorum-health exports suggestMaxDeliberation function"
-        }
-      ]
-    },
-    "HLTH-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/HLTH-01.stub.test.js",
-          "test_name": "HLTH-01: v0.15-01-health-fix matches phase naming regex (no W005)"
-        }
-      ]
-    },
-    "HLTH-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/HLTH-02.stub.test.js",
-          "test_name": "HLTH-02: W007 not emitted for versioned phase dir when ROADMAP lists matching phase"
-        }
-      ]
-    },
-    "HLTH-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/HLTH-03.stub.test.js",
-          "test_name": "HLTH-03: W002 not emitted for versioned phase ref in STATE.md when dir exists"
         }
       ]
     },
@@ -759,1364 +49,33 @@
         }
       ]
     },
-    "INST-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/INST-01.stub.test.js",
-          "test_name": "INST-01 — NoConflict: installer references /nf:mcp-setup nudge for missing quorum agents"
-        }
-      ]
-    },
-    "INST-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/INST-02.stub.test.js",
-          "test_name": "INST-02 — AllEquivalence: package.json has a pinned version"
-        }
-      ]
-    },
-    "INST-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/INST-03.stub.test.js",
-          "test_name": "INST-03 — InstallIdempotent: installer writes to settings.json"
-        }
-      ]
-    },
-    "INST-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/INST-04.stub.test.js",
-          "test_name": "INST-04 — RollbackSoundCheck: installer adds UserPromptSubmit hook entries"
-        }
-      ]
-    },
-    "INST-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/INST-05.stub.test.js",
-          "test_name": "INST-05: warnMissingMcpServers function exists in install.js"
-        }
-      ]
-    },
-    "INST-06": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/INST-06.stub.test.js",
-          "test_name": "INST-06: hook registration checks for existing entry before pushing (UserPromptSubmit)"
-        }
-      ]
-    },
-    "INST-07": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/INST-07.stub.test.js",
-          "test_name": "INST-07: existing nf.json is read, not overwritten, on reinstall"
-        }
-      ]
-    },
-    "INST-08": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/INST-08.stub.test.js",
-          "test_name": "INST-08: installer creates PreToolUse array if absent"
-        }
-      ]
-    },
-    "INST-09": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/INST-09.stub.test.js",
-          "test_name": "INST-09: nf.json includes circuit_breaker block on first install"
-        }
-      ]
-    },
-    "INST-10": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/INST-10.stub.test.js",
-          "test_name": "INST-10: install.js preserves user-modified circuit_breaker values on reinstall"
-        }
-      ]
-    },
-    "INST-11": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/INST-11.stub.test.js",
-          "test_name": "INST-11: bin scripts resolve ROOT from process.cwd(), not __dirname"
-        }
-      ]
-    },
-    "KEY-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/KEY-01.stub.test.js",
-          "test_name": "KEY-01: manage-agents-core exports applyKeyUpdate for setting API keys"
-        }
-      ]
-    },
-    "KEY-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/KEY-02.stub.test.js",
-          "test_name": "KEY-02: secrets.cjs uses keytar for secure key storage"
-        }
-      ]
-    },
-    "KEY-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/KEY-03.stub.test.js",
-          "test_name": "KEY-03: secrets.cjs exports syncToClaudeJson function (writes keytar secrets to ~/.claude.json env blocks)"
-        }
-      ]
-    },
-    "KEY-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/KEY-04.stub.test.js",
-          "test_name": "KEY-04: manage-agents-core.cjs exports applyKeyUpdate (key change application function)"
-        }
-      ]
-    },
-    "LIVE-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/LIVE-01.stub.test.js",
-          "test_name": "LIVE-01: check-liveness-fairness.cjs emits result=inconclusive when fairness missing"
-        }
-      ]
-    },
-    "LIVE-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/LIVE-02.stub.test.js",
-          "test_name": "LIVE-02: run-formal-verify.cjs STATIC_STEPS includes ci:liveness-fairness-lint step"
-        }
-      ]
-    },
-    "LOOP-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/LOOP-01.stub.test.js",
-          "test_name": "LOOP-01: run-prism.cjs references export-prism-constants.cjs as pre-step"
-        }
-      ]
-    },
-    "LOOP-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/LOOP-02.stub.test.js",
-          "test_name": "LOOP-02: nf-spec-regen.js hook file exists"
-        }
-      ]
-    },
-    "LOOP-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/LOOP-03.stub.test.js",
-          "test_name": "LOOP-03: sensitivity-sweep-feedback.cjs exists"
-        }
-      ]
-    },
-    "LOOP-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/LOOP-04.stub.test.js",
-          "test_name": "LOOP-04: propose-debug-invariants.cjs exists"
-        }
-      ]
-    },
-    "MCP-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MCP-01.stub.test.js",
-          "test_name": "MCP-01: install.js exists"
-        }
-      ]
-    },
-    "MCP-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MCP-02.stub.test.js",
-          "test_name": "MCP-02: install.js uses case-insensitive keyword matching via .toLowerCase()"
-        }
-      ]
-    },
-    "MCP-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MCP-03.stub.test.js",
-          "test_name": "MCP-03: install.js writes detected names as required_models to nf.json"
-        }
-      ]
-    },
-    "MCP-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MCP-04.stub.test.js",
-          "test_name": "MCP-04: install.js contains hardcoded default prefixes for codex, gemini, opencode"
-        }
-      ]
-    },
-    "MCP-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MCP-05.stub.test.js",
-          "test_name": "MCP-05: install.js preserves existing nf.json user config on reinstall"
-        }
-      ]
-    },
-    "MCP-06": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MCP-06.stub.test.js",
-          "test_name": "MCP-06: nf-stop.js matches tool_use names by prefix using startsWith"
-        }
-      ]
-    },
-    "MCPENV-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MCPENV-01.stub.test.js",
-          "test_name": "MCPENV-01: mcp-calls spec directory exists with documentation"
-        }
-      ]
-    },
-    "MCPENV-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MCPENV-03.stub.test.js",
-          "test_name": "MCPENV-03: EventualDecision liveness property defined in QGSDMCPEnv.tla"
-        }
-      ]
-    },
-    "MCPENV-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MCPENV-04.stub.test.js",
-          "test_name": "MCPENV-04: readMCPAvailabilityRates exported from run-prism.cjs"
-        }
-      ]
-    },
-    "META-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/META-01.stub.test.js",
-          "test_name": "META-01: QuorumFirst fact defined in architecture-registry.als"
-        }
-      ]
-    },
-    "META-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/META-02.stub.test.js",
-          "test_name": "META-02: OnlyFailedEscalated fact defined in architecture-registry.als"
-        }
-      ]
-    },
-    "META-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/META-03.stub.test.js",
-          "test_name": "META-03: ResolvedAreAssumptions fact defined in architecture-registry.als"
-        }
-      ]
-    },
-    "MULTI-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MULTI-01.stub.test.js",
-          "test_name": "MULTI-01 — providers.json contains multiple claude-N slots"
-        }
-      ]
-    },
-    "MULTI-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MULTI-02.stub.test.js",
-          "test_name": "MULTI-02 — providers.json contains copilot-N slots"
-        }
-      ]
-    },
-    "MULTI-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/MULTI-03.stub.test.js",
-          "test_name": "MULTI-03 — install.js references mcpServers config for slot management"
-        }
-      ]
-    },
-    "OBS-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/OBS-01.stub.test.js",
-          "test_name": "OBS-01 — call-quorum-slot.cjs defines recordTelemetry function"
-        }
-      ]
-    },
-    "OBS-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/OBS-02.stub.test.js",
-          "test_name": "OBS-02 — update-scoreboard.cjs defines computeDeliveryStats function"
-        }
-      ]
-    },
-    "OBS-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/OBS-03.stub.test.js",
-          "test_name": "OBS-03 — update-scoreboard.cjs defines computeFlakiness function"
-        }
-      ]
-    },
-    "OBS-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/OBS-04.stub.test.js",
-          "test_name": "OBS-04: scoreboard recognizes UNAVAIL as a valid result code"
-        }
-      ]
-    },
-    "OBS-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/OBS-05.stub.test.js",
-          "test_name": "OBS-05: CLI tools use process.exit or process.exitCode for exit codes"
-        }
-      ]
-    },
-    "OBS-06": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/OBS-06.stub.test.js",
-          "test_name": "OBS-06: handleInternal is exported"
-        }
-      ]
-    },
-    "OBS-07": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/OBS-07.stub.test.js",
-          "test_name": "OBS-07: exports all required functions"
-        }
-      ]
-    },
-    "OBS-08": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/OBS-08.stub.test.js",
-          "test_name": "OBS-08: classifyTier is exported"
-        }
-      ]
-    },
-    "ORES-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ORES-01.stub.test.js",
-          "test_name": "ORES-01: nf-prompt.js checks circuit breaker state and enters resolution mode"
-        }
-      ]
-    },
-    "ORES-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ORES-02.stub.test.js",
-          "test_name": "ORES-02: resolution mode references oscillating file set identification"
-        }
-      ]
-    },
-    "ORES-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ORES-03.stub.test.js",
-          "test_name": "ORES-03: ResolvedAtWriteOnce — resolvedAt is set only when not already resolved"
-        }
-      ]
-    },
-    "ORES-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ORES-04.stub.test.js",
-          "test_name": "ORES-04: HaikuUnavailableNoCorruption — unavailable verdict does not mutate state"
-        }
-      ]
-    },
-    "ORES-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/ORES-05.stub.test.js",
-          "test_name": "ORES-05: ConvergenceEventuallyResolves — circuit breaker has resolution path"
-        }
-      ]
-    },
-    "PLAN-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PLAN-01.stub.test.js",
-          "test_name": "PLAN-01: TypeOK — generate-proposed-changes.cjs exists and is executable"
-        }
-      ]
-    },
-    "PLAN-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PLAN-02.stub.test.js",
-          "test_name": "PLAN-02: ProtocolTerminates — run-phase-tlc.cjs exists and is executable"
-        }
-      ]
-    },
-    "PLAN-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PLAN-03.stub.test.js",
-          "test_name": "PLAN-03 — quorum-formal-context.cjs exports generateFormalSpecSummary"
-        }
-      ]
-    },
-    "PLCY-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PLCY-01.stub.test.js",
-          "test_name": "PLCY-01 — manage-agents-core.cjs exports buildTimeoutChoices via _pure"
-        }
-      ]
-    },
-    "PLCY-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PLCY-02.stub.test.js",
-          "test_name": "PLCY-02 — manage-agents-core.cjs exports validateUpdatePolicy via _pure"
-        }
-      ]
-    },
-    "PLCY-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PLCY-03.stub.test.js",
-          "test_name": "PLCY-03 — manage-agents-core.cjs exports runAutoUpdateCheck via _pure"
-        }
-      ]
-    },
-    "PORT-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PORT-01.stub.test.js",
-          "test_name": "PORT-01: buildRedactedEnv replaces sensitive key values with __redacted__"
-        }
-      ]
-    },
-    "PORT-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PORT-02.stub.test.js",
-          "test_name": "PORT-02: validateImportSchema exists as a function"
-        }
-      ]
-    },
-    "PORT-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PORT-03.stub.test.js",
-          "test_name": "PORT-03: buildBackupPath exists as a function"
-        }
-      ]
-    },
-    "PROV-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PROV-01.stub.test.js",
-          "test_name": "PROV-01: manage-agents-core exports findPresetForUrl for provider change"
-        }
-      ]
-    },
-    "PROV-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PROV-02.stub.test.js",
-          "test_name": "PROV-02: PROVIDER_PRESETS array is defined with three curated providers"
-        }
-      ]
-    },
-    "PROV-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PROV-03.stub.test.js",
-          "test_name": "PROV-03: writeClaudeJson function is exported for persisting provider changes"
-        }
-      ]
-    },
-    "PRST-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PRST-01.stub.test.js",
-          "test_name": "PRST-01: PROVIDER_PRESETS entries have name, value, and label fields"
-        }
-      ]
-    },
-    "PRST-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/PRST-02.stub.test.js",
-          "test_name": "PRST-02: buildCloneEntry is exported as a pure function"
-        }
-      ]
-    },
-    "QUORUM-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/QUORUM-01.stub.test.js",
-          "test_name": "QUORUM-01: TypeOK invariant is defined in QGSDQuorum.tla"
-        }
-      ]
-    },
-    "QUORUM-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/QUORUM-02.stub.test.js",
-          "test_name": "QUORUM-02: ThresholdPasses assertion is defined in quorum-votes.als"
-        }
-      ]
-    },
-    "QUORUM-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/QUORUM-03.stub.test.js",
-          "test_name": "QUORUM-03: QuorumCeilingMet invariant is defined in QGSDQuorum.tla"
-        }
-      ]
-    },
-    "RECV-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/RECV-01.stub.test.js",
-          "test_name": "RECV-01 — EventualConsensus: --reset-breaker flag is parsed"
-        }
-      ]
-    },
-    "REDACT-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/REDACT-01.stub.test.js",
-          "test_name": "REDACT-01 — CompleteRedaction: parseRedactionPolicy and validateTraceEvent are exported"
-        }
-      ]
-    },
-    "REDACT-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/REDACT-02.stub.test.js",
-          "test_name": "REDACT-02 — CompleteRedaction: run-formal-verify.cjs includes trace-redaction CI step"
-        }
-      ]
-    },
-    "REDACT-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/REDACT-03.stub.test.js",
-          "test_name": "REDACT-03 — CompleteRedaction: violations produce result=fail"
-        }
-      ]
-    },
-    "REL-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/REL-01.stub.test.js",
-          "test_name": "REL-01: hooks use fail-open pattern (process.exit(0) in catch)"
-        }
-      ]
-    },
-    "REL-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/REL-02.stub.test.js",
-          "test_name": "REL-02: call-quorum-slot.cjs supports --timeout argument"
-        }
-      ]
-    },
-    "REN-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/REN-03.stub.test.js",
-          "test_name": "REN-03: core/bin/gsd-tools.cjs has no get-shit-done/ path strings"
-        }
-      ]
-    },
-    "SAFE-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SAFE-01.stub.test.js",
-          "test_name": "SAFE-01: gsd-tools.cjs has content-length safety gate for STATE.md repair"
-        }
-      ]
-    },
-    "SCBD-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SCBD-01.stub.test.js",
-          "test_name": "SCBD-01: update-scoreboard.cjs accepts --slot argument"
-        }
-      ]
-    },
-    "SCBD-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SCBD-02.stub.test.js",
-          "test_name": "SCBD-02: update-scoreboard.cjs exists and is loadable"
-        }
-      ]
-    },
-    "SCBD-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SCBD-03.stub.test.js",
-          "test_name": "SCBD-03: scoreboard creates new slot entry for new composite key"
-        }
-      ]
-    },
-    "SCHEMA-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SCHEMA-01.stub.test.js",
-          "test_name": "SCHEMA-01: model-registry.json exists and is valid JSON"
-        }
-      ]
-    },
-    "SCHEMA-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SCHEMA-03.stub.test.js",
-          "test_name": "SCHEMA-03: requirement-map.cjs exports CHECK_ID_TO_REQUIREMENTS"
-        }
-      ]
-    },
-    "SCHEMA-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SCHEMA-04.stub.test.js",
-          "test_name": "SCHEMA-04: requirements.json exists and has requirements array"
-        }
-      ]
-    },
-    "SEC-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SEC-01.stub.test.js",
-          "test_name": "SEC-01: security-sweep.cjs exports SECRET_PATTERNS array"
-        }
-      ]
-    },
-    "SEC-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SEC-02.stub.test.js",
-          "test_name": "SEC-02: run-formal-verify.cjs exists and is a CI scanning entrypoint"
-        }
-      ]
-    },
-    "SEC-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SEC-03.stub.test.js",
-          "test_name": "SEC-03: nf-stop.js validates stdin JSON input with try/catch boundary"
-        }
-      ]
-    },
-    "SEC-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SEC-04.stub.test.js",
-          "test_name": "SEC-04: package.json exists with dependencies that can be audited"
-        }
-      ]
-    },
-    "SENS-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SENS-01.stub.test.js",
-          "test_name": "SENS-01: run-sensitivity-sweep.cjs exists"
-        }
-      ]
-    },
-    "SENS-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SENS-02.stub.test.js",
-          "test_name": "SENS-02 — InjectContext: run-sensitivity-sweep.cjs exists and is executable"
-        }
-      ]
-    },
-    "SENS-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SENS-03.stub.test.js",
-          "test_name": "SENS-03 — GenerateReport: sensitivity-report.cjs exists"
-        }
-      ]
-    },
-    "SIG-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SIG-01.stub.test.js",
-          "test_name": "SIG-01 — structural: detect-coverage-gaps.cjs exports detectCoverageGaps function"
-        }
-      ]
-    },
-    "SIG-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SIG-02.stub.test.js",
-          "test_name": "SIG-02 — structural: generate-petri-net.cjs exports _pure with roadmap functions"
-        }
-      ]
-    },
-    "SIG-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SIG-03.stub.test.js",
-          "test_name": "SIG-03 — structural: prism-priority.cjs exports readPrismResults function"
-        }
-      ]
-    },
-    "SIG-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SIG-04.stub.test.js",
-          "test_name": "SIG-04: exports poissonBinomialCDF function"
-        }
-      ]
-    },
-    "SLOT-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SLOT-01.stub.test.js",
-          "test_name": "SLOT-01: providers.json exists and is valid JSON"
-        }
-      ]
-    },
-    "SLOT-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SLOT-02.stub.test.js",
-          "test_name": "SLOT-02: requirement-map maps tla:recruiting-safety to SLOT-02"
-        }
-      ]
-    },
-    "SLOT-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SLOT-04.stub.test.js",
-          "test_name": "SLOT-04: requirement-map maps tla:recruiting-safety to SLOT-04"
-        }
-      ]
-    },
-    "SOLVE-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SOLVE-01.stub.test.js",
-          "test_name": "SOLVE-01: nf-solve.cjs exists and is loadable"
-        }
-      ]
-    },
-    "SOLVE-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SOLVE-02.stub.test.js",
-          "test_name": "SOLVE-02: parseAlloyDefaults parses Alloy Defaults sig constraint block"
-        }
-      ]
-    },
-    "SOLVE-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SOLVE-03.stub.test.js",
-          "test_name": "SOLVE-03: discoverDocFiles is exported from nf-solve.cjs"
-        }
-      ]
-    },
-    "SOLVE-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SOLVE-04.stub.test.js",
-          "test_name": "SOLVE-04: solver-doc-layers.als defines Requirement sig"
-        }
-      ]
-    },
-    "SOLVE-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SOLVE-05.stub.test.js",
-          "test_name": "SOLVE-05: run-formal-verify.cjs parses --project-root argument"
-        }
-      ]
-    },
-    "SOLVE-06": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SOLVE-06.stub.test.js",
-          "test_name": "SOLVE-06: assembleReverseCandidates is exported from nf-solve.cjs"
-        }
-      ]
-    },
-    "SOLVE-09": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SOLVE-09.stub.test.js",
-          "test_name": "SOLVE-09: nf-solve.cjs parses --fast flag for fast-mode iteration"
-        }
-      ]
-    },
-    "SOLVE-10": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SOLVE-10.stub.test.js",
-          "test_name": "SOLVE-10: nf-solve.cjs exports crossReferenceFormalCoverage function"
-        }
-      ]
-    },
-    "SOLVE-11": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SOLVE-11.stub.test.js",
-          "test_name": "SOLVE-11: VALID_RESULTS includes both "
-        }
-      ]
-    },
-    "SPEC-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SPEC-01.stub.test.js",
-          "test_name": "SPEC-01: NFStopHook.tla exists and defines SafetyInvariant1"
-        }
-      ]
-    },
-    "SPEC-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SPEC-03.stub.test.js",
-          "test_name": "SPEC-03: quorum-composition.als exists and defines AllRulesHold assertion"
-        }
-      ]
-    },
-    "SPEC-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/SPEC-04.stub.test.js",
-          "test_name": "SPEC-04: QGSDSpecGeneration.tla exists and defines StartPhaseSpec"
-        }
-      ]
-    },
-    "STATE-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STATE-01.stub.test.js",
-          "test_name": "STATE-01: writeState creates state file with active, file_set, activated_at, commit_window_snapshot"
-        }
-      ]
-    },
-    "STATE-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STATE-02.stub.test.js",
-          "test_name": "STATE-02: circuit breaker state object contains all TypeOK fields"
-        }
-      ]
-    },
-    "STATE-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STATE-03.stub.test.js",
-          "test_name": "STATE-03: hook reads state file before git log detection"
-        }
-      ]
-    },
-    "STATE-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STATE-04.stub.test.js",
-          "test_name": "STATE-04: writeState creates directory silently with mkdirSync recursive"
-        }
-      ]
-    },
-    "STD-10": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STD-10.stub.test.js",
-          "test_name": "STD-10: install.js uses unscoped gemini-mcp-server package name"
-        }
-      ]
-    },
-    "STOP-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STOP-01.stub.test.js",
-          "test_name": "STOP-01: stop hook reads transcript JSONL"
-        }
-      ]
-    },
-    "STOP-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STOP-02.stub.test.js",
-          "test_name": "STOP-02: stop hook checks stop_hook_active flag"
-        }
-      ]
-    },
-    "STOP-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STOP-03.stub.test.js",
-          "test_name": "STOP-03: nf-stop.js checks hook_event_name for SubagentStop and exits early"
-        }
-      ]
-    },
-    "STOP-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STOP-04.stub.test.js",
-          "test_name": "STOP-04: nf-stop.js defines getCurrentTurnLines for current-turn scoping"
-        }
-      ]
-    },
-    "STOP-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STOP-05.stub.test.js",
-          "test_name": "STOP-05: nf-stop.js uses transcript JSONL as authoritative quorum source with no fast-path pre-check"
-        }
-      ]
-    },
-    "STOP-06": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STOP-06.stub.test.js",
-          "test_name": "STOP-06: nf-stop.js only enforces quorum when planning command is in current turn"
-        }
-      ]
-    },
-    "STOP-07": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STOP-07.stub.test.js",
-          "test_name": "STOP-07: nf-stop.js blocks with decision:block and descriptive reason when quorum missing"
-        }
-      ]
-    },
-    "STOP-08": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STOP-08.stub.test.js",
-          "test_name": "STOP-08: nf-stop.js block reason contains QUORUM REQUIRED prefix"
-        }
-      ]
-    },
-    "STOP-09": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/STOP-09.stub.test.js",
-          "test_name": "STOP-09: nf-stop.js has pass-through path for quorum evidence found"
-        }
-      ]
-    },
-    "TRACE-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/TRACE-01.stub.test.js",
-          "test_name": "TRACE-01: generate-traceability-matrix.cjs produces JSON with requirements and properties sections"
-        }
-      ]
-    },
-    "TRACE-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/TRACE-02.stub.test.js",
-          "test_name": "TRACE-02: source code builds coverage_summary with required fields"
-        }
-      ]
-    },
-    "TRACE-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/TRACE-03.stub.test.js",
-          "test_name": "TRACE-03: run-formal-verify.cjs includes generate-traceability-matrix.cjs as a step"
-        }
-      ]
-    },
-    "TRACE-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/TRACE-04.stub.test.js",
-          "test_name": "TRACE-04: source defines validateBidirectionalLinks function"
-        }
-      ]
-    },
-    "TRACE-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/TRACE-05.stub.test.js",
-          "test_name": "TRACE-05: check-coverage-guard.cjs exists"
-        }
-      ]
-    },
-    "TRIAGE-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/TRIAGE-01.stub.test.js",
-          "test_name": "TRIAGE-01: generateSuspects filters fail and tagged results"
-        }
-      ]
-    },
-    "TRIAGE-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/TRIAGE-02.stub.test.js",
-          "test_name": "TRIAGE-02: run-formal-verify.cjs contains a triage-bundle step referencing generate-triage-bundle.cjs"
-        }
-      ]
-    },
-    "UNIF-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UNIF-01.stub.test.js",
-          "test_name": "UNIF-01: writeCheckResult appends normalized JSON with required fields to NDJSON"
-        }
-      ]
-    },
-    "UNIF-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UNIF-02.stub.test.js",
-          "test_name": "UNIF-02: run-formal-verify.cjs truncates check-results.ndjson at start of runOnce"
-        }
-      ]
-    },
-    "UNIF-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UNIF-03.stub.test.js",
-          "test_name": "UNIF-03: generate-triage-bundle.cjs reads from check-results.ndjson file"
-        }
-      ]
-    },
-    "UNIF-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UNIF-04.stub.test.js",
-          "test_name": "UNIF-04: exits non-zero when result=fail entry exists"
-        }
-      ]
-    },
-    "UPS-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UPS-01.stub.test.js",
-          "test_name": "UPS-01: nf-prompt.js contains allowlist regex for GSD command detection"
-        }
-      ]
-    },
-    "UPS-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UPS-02.stub.test.js",
-          "test_name": "UPS-02: DEFAULT_CONFIG.quorum_commands contains the planning command allowlist"
-        }
-      ]
-    },
-    "UPS-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UPS-03.stub.test.js",
-          "test_name": "UPS-03: nf-prompt.js injects quorum via hookSpecificOutput.additionalContext"
-        }
-      ]
-    },
-    "UPS-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UPS-04.stub.test.js",
-          "test_name": "UPS-04: injected instructions name exact MCP tool call pattern (mcp__*)"
-        }
-      ]
-    },
-    "UPS-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UPS-05.stub.test.js",
-          "test_name": "UPS-05: nf-prompt.js has anchored allowlist pattern that gates quorum injection"
-        }
-      ]
-    },
-    "UX-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UX-01.stub.test.js",
-          "test_name": "UX-01: syncBaselineRequirements returns structured feedback result"
-        }
-      ]
-    },
-    "UX-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UX-02.stub.test.js",
-          "test_name": "UX-02: nForma.cjs destructive delete action is guarded by confirmation prompt"
-        }
-      ]
-    },
-    "UX-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/UX-03.stub.test.js",
-          "test_name": "UX-03: gate-a-grounding.cjs error messages include context and fallback guidance"
-        }
-      ]
-    },
-    "VERIFY-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/VERIFY-01.stub.test.js",
-          "test_name": "VERIFY-01: parseNDJSON returns parsed objects from valid NDJSON content"
-        }
-      ]
-    },
-    "VERIFY-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/VERIFY-02.stub.test.js",
-          "test_name": "VERIFY-02: verify-formal-results.cjs exports generateFVSection function"
-        }
-      ]
-    },
-    "VERIFY-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/VERIFY-03.stub.test.js",
-          "test_name": "VERIFY-03 — Bool: structural verification"
-        }
-      ]
-    },
-    "VIS-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/VIS-01.stub.test.js",
-          "test_name": "VIS-01: health check reads quorum-failures.json for failure counts"
-        }
-      ]
-    },
-    "WIZ-01": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/WIZ-01.stub.test.js",
-          "test_name": "WIZ-01: nForma.cjs references /nf:mcp-setup command"
-        }
-      ]
-    },
-    "WIZ-02": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/WIZ-02.stub.test.js",
-          "test_name": "WIZ-02: nForma.cjs detects empty providers and shows onboarding guidance"
-        }
-      ]
-    },
-    "WIZ-03": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/WIZ-03.stub.test.js",
-          "test_name": "WIZ-03 — mcp-setup.md contains re-run menu flow for existing agents"
-        }
-      ]
-    },
-    "WIZ-04": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/WIZ-04.stub.test.js",
-          "test_name": "WIZ-04 — buildAgentChoiceLabel includes model, provider, and key status"
-        }
-      ]
-    },
-    "WIZ-05": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/WIZ-05.stub.test.js",
-          "test_name": "WIZ-05 — mcp-setup.md requires user confirmation before applying changes"
-        }
-      ]
-    },
-    "WIZ-08": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/WIZ-08.stub.test.js",
-          "test_name": "WIZ-08 — mcp-setup.md re-run menu includes "
-        }
-      ]
-    },
-    "WIZ-09": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/WIZ-09.stub.test.js",
-          "test_name": "WIZ-09 — composition screen shows all slots from ~/.claude.json"
-        }
-      ]
-    },
-    "WIZ-10": {
-      "covered": true,
-      "test_cases": [
-        {
-          "test_file": ".planning/formal/generated-stubs/WIZ-10.stub.test.js",
-          "test_name": "WIZ-10: mcp-setup.md exists and is readable"
-        }
-      ]
+    "ACT-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ACT-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ACT-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ACT-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ACT-05": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ACT-06": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ACT-07": {
+      "covered": false,
+      "test_cases": []
     },
     "ADAPT-01": {
       "covered": false,
@@ -2126,7 +85,51 @@
       "covered": false,
       "test_cases": []
     },
-    "AGENT-04": {
+    "AGENT-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "AGENT-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "AGENT-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ANNOT-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ANNOT-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ANNOT-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ANNOT-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ANNOT-05": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ARCH-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ARCH-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ARCH-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ARCH-10": {
       "covered": false,
       "test_cases": []
     },
@@ -2170,6 +173,22 @@
       "covered": false,
       "test_cases": []
     },
+    "CALIB-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CALIB-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CALIB-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CALIB-04": {
+      "covered": false,
+      "test_cases": []
+    },
     "CEX-01": {
       "covered": false,
       "test_cases": []
@@ -2182,6 +201,26 @@
       "covered": false,
       "test_cases": []
     },
+    "CI-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CI-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CI-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CL-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CL-02": {
+      "covered": false,
+      "test_cases": []
+    },
     "CLASS-01": {
       "covered": false,
       "test_cases": []
@@ -2191,6 +230,54 @@
       "test_cases": []
     },
     "CLINK-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "COMP-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "COMP-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "COMP-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "COMP-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CONF-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CONF-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CONF-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CONF-05": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CONF-06": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CONF-07": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CONF-08": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CONF-09": {
       "covered": false,
       "test_cases": []
     },
@@ -2218,6 +305,30 @@
       "covered": false,
       "test_cases": []
     },
+    "CRED-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "CRED-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DASH-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DASH-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DASH-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DEBT-01": {
+      "covered": false,
+      "test_cases": []
+    },
     "DEBT-02": {
       "covered": false,
       "test_cases": []
@@ -2238,43 +349,23 @@
       "covered": false,
       "test_cases": []
     },
-    "DEBT-07": {
+    "DECOMP-01": {
       "covered": false,
       "test_cases": []
     },
-    "DEBT-08": {
+    "DECOMP-02": {
       "covered": false,
       "test_cases": []
     },
-    "DEBT-09": {
+    "DECOMP-03": {
       "covered": false,
       "test_cases": []
     },
-    "DEBT-10": {
+    "DECOMP-04": {
       "covered": false,
       "test_cases": []
     },
-    "DEBT-11": {
-      "covered": false,
-      "test_cases": []
-    },
-    "DEBT-12": {
-      "covered": false,
-      "test_cases": []
-    },
-    "DEBT-13": {
-      "covered": false,
-      "test_cases": []
-    },
-    "DEBT-14": {
-      "covered": false,
-      "test_cases": []
-    },
-    "DEBT-15": {
-      "covered": false,
-      "test_cases": []
-    },
-    "DEBT-16": {
+    "DECOMP-05": {
       "covered": false,
       "test_cases": []
     },
@@ -2290,6 +381,22 @@
       "covered": false,
       "test_cases": []
     },
+    "DETECT-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DETECT-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DETECT-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DETECT-04": {
+      "covered": false,
+      "test_cases": []
+    },
     "DIAG-01": {
       "covered": false,
       "test_cases": []
@@ -2298,15 +405,63 @@
       "covered": false,
       "test_cases": []
     },
-    "DISP-07": {
+    "DIAG-03": {
       "covered": false,
       "test_cases": []
     },
-    "DISP-08": {
+    "DISP-01": {
       "covered": false,
       "test_cases": []
     },
-    "DIST-01": {
+    "DISP-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DISP-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DISP-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DISP-05": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DRIFT-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "DRIFT-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ENFC-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ENFC-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ENFC-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "EVID-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "EVID-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "EVID-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "EVID-04": {
       "covered": false,
       "test_cases": []
     },
@@ -2315,6 +470,14 @@
       "test_cases": []
     },
     "EXEC-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "FAIL-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "FAIL-02": {
       "covered": false,
       "test_cases": []
     },
@@ -2370,7 +533,7 @@
       "covered": false,
       "test_cases": []
     },
-    "FV-04": {
+    "GATE-01": {
       "covered": false,
       "test_cases": []
     },
@@ -2410,11 +573,79 @@
       "covered": false,
       "test_cases": []
     },
+    "HEAL-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "HEAL-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "HLTH-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "HLTH-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "HLTH-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "IMPR-01": {
+      "covered": false,
+      "test_cases": []
+    },
     "IMPR-02": {
       "covered": false,
       "test_cases": []
     },
     "IMPR-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "IMPR-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "INST-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "INST-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "INST-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "INST-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "INST-05": {
+      "covered": false,
+      "test_cases": []
+    },
+    "INST-06": {
+      "covered": false,
+      "test_cases": []
+    },
+    "INST-07": {
+      "covered": false,
+      "test_cases": []
+    },
+    "INST-08": {
+      "covered": false,
+      "test_cases": []
+    },
+    "INST-09": {
+      "covered": false,
+      "test_cases": []
+    },
+    "INST-10": {
       "covered": false,
       "test_cases": []
     },
@@ -2454,6 +685,46 @@
       "covered": false,
       "test_cases": []
     },
+    "KEY-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "KEY-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "KEY-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "KEY-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "LIVE-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "LIVE-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "LOOP-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "LOOP-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "LOOP-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "LOOP-04": {
+      "covered": false,
+      "test_cases": []
+    },
     "LRNG-01": {
       "covered": false,
       "test_cases": []
@@ -2474,7 +745,43 @@
       "covered": false,
       "test_cases": []
     },
+    "MCP-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "MCP-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "MCP-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "MCP-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "MCP-05": {
+      "covered": false,
+      "test_cases": []
+    },
+    "MCP-06": {
+      "covered": false,
+      "test_cases": []
+    },
+    "MCPENV-01": {
+      "covered": false,
+      "test_cases": []
+    },
     "MCPENV-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "MCPENV-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "MCPENV-04": {
       "covered": false,
       "test_cases": []
     },
@@ -2494,6 +801,30 @@
       "covered": false,
       "test_cases": []
     },
+    "META-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "META-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "META-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "MULTI-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "MULTI-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "MULTI-03": {
+      "covered": false,
+      "test_cases": []
+    },
     "NAME-01": {
       "covered": false,
       "test_cases": []
@@ -2510,6 +841,38 @@
       "covered": false,
       "test_cases": []
     },
+    "OBS-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "OBS-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "OBS-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "OBS-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "OBS-05": {
+      "covered": false,
+      "test_cases": []
+    },
+    "OBS-06": {
+      "covered": false,
+      "test_cases": []
+    },
+    "OBS-07": {
+      "covered": false,
+      "test_cases": []
+    },
+    "OBS-08": {
+      "covered": false,
+      "test_cases": []
+    },
     "ORCH-01": {
       "covered": false,
       "test_cases": []
@@ -2519,6 +882,26 @@
       "test_cases": []
     },
     "ORCH-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ORES-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ORES-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ORES-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ORES-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "ORES-05": {
       "covered": false,
       "test_cases": []
     },
@@ -2586,6 +969,42 @@
       "covered": false,
       "test_cases": []
     },
+    "PLAN-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PLAN-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PLAN-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PLCY-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PLCY-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PLCY-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PORT-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PORT-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PORT-03": {
+      "covered": false,
+      "test_cases": []
+    },
     "PRED-01": {
       "covered": false,
       "test_cases": []
@@ -2618,6 +1037,26 @@
       "covered": false,
       "test_cases": []
     },
+    "PROV-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PROV-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PROV-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PRST-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PRST-02": {
+      "covered": false,
+      "test_cases": []
+    },
     "QPREC-01": {
       "covered": false,
       "test_cases": []
@@ -2627,6 +1066,18 @@
       "test_cases": []
     },
     "QPREC-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "QUORUM-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "QUORUM-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "QUORUM-03": {
       "covered": false,
       "test_cases": []
     },
@@ -2670,6 +1121,22 @@
       "covered": false,
       "test_cases": []
     },
+    "RECV-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "REDACT-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "REDACT-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "REDACT-03": {
+      "covered": false,
+      "test_cases": []
+    },
     "REG-01": {
       "covered": false,
       "test_cases": []
@@ -2682,7 +1149,43 @@
       "covered": false,
       "test_cases": []
     },
+    "REL-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "REL-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "REN-01": {
+      "covered": false,
+      "test_cases": []
+    },
     "REN-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "REN-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "REN-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "RLS-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "RLS-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "RLS-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "RLS-04": {
       "covered": false,
       "test_cases": []
     },
@@ -2714,18 +1217,6 @@
       "covered": false,
       "test_cases": []
     },
-    "ROUTE-05": {
-      "covered": false,
-      "test_cases": []
-    },
-    "ROUTE-06": {
-      "covered": false,
-      "test_cases": []
-    },
-    "ROUTE-07": {
-      "covered": false,
-      "test_cases": []
-    },
     "RSN-01": {
       "covered": false,
       "test_cases": []
@@ -2746,11 +1237,39 @@
       "covered": false,
       "test_cases": []
     },
+    "SAFE-01": {
+      "covered": false,
+      "test_cases": []
+    },
     "SAFE-02": {
       "covered": false,
       "test_cases": []
     },
+    "SCBD-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SCBD-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SCBD-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SCHEMA-01": {
+      "covered": false,
+      "test_cases": []
+    },
     "SCHEMA-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SCHEMA-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SCHEMA-04": {
       "covered": false,
       "test_cases": []
     },
@@ -2763,6 +1282,22 @@
       "test_cases": []
     },
     "SCOPE-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SEC-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SEC-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SEC-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SEC-04": {
       "covered": false,
       "test_cases": []
     },
@@ -2783,6 +1318,18 @@
       "test_cases": []
     },
     "SEM-05": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SENS-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SENS-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SENS-03": {
       "covered": false,
       "test_cases": []
     },
@@ -2810,6 +1357,22 @@
       "covered": false,
       "test_cases": []
     },
+    "SIG-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SIG-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SIG-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SIG-04": {
+      "covered": false,
+      "test_cases": []
+    },
     "SIM-01": {
       "covered": false,
       "test_cases": []
@@ -2822,19 +1385,35 @@
       "covered": false,
       "test_cases": []
     },
+    "SLOT-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SLOT-02": {
+      "covered": false,
+      "test_cases": []
+    },
     "SLOT-03": {
       "covered": false,
       "test_cases": []
     },
-    "SOLVE-07": {
+    "SLOT-04": {
       "covered": false,
       "test_cases": []
     },
-    "SOLVE-08": {
+    "SPEC-01": {
       "covered": false,
       "test_cases": []
     },
     "SPEC-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SPEC-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SPEC-04": {
       "covered": false,
       "test_cases": []
     },
@@ -2850,7 +1429,63 @@
       "covered": false,
       "test_cases": []
     },
+    "STATE-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STATE-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STATE-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STATE-04": {
+      "covered": false,
+      "test_cases": []
+    },
     "STD-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STD-10": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STOP-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STOP-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STOP-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STOP-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STOP-05": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STOP-06": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STOP-07": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STOP-08": {
+      "covered": false,
+      "test_cases": []
+    },
+    "STOP-09": {
       "covered": false,
       "test_cases": []
     },
@@ -2914,6 +1549,26 @@
       "covered": false,
       "test_cases": []
     },
+    "TRACE-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "TRACE-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "TRACE-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "TRACE-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "TRACE-05": {
+      "covered": false,
+      "test_cases": []
+    },
     "TRACK-01": {
       "covered": false,
       "test_cases": []
@@ -2930,23 +1585,11 @@
       "covered": false,
       "test_cases": []
     },
-    "TRUNC-01": {
+    "TRIAGE-01": {
       "covered": false,
       "test_cases": []
     },
-    "TRUNC-02": {
-      "covered": false,
-      "test_cases": []
-    },
-    "TRUNC-03": {
-      "covered": false,
-      "test_cases": []
-    },
-    "TRUNC-04": {
-      "covered": false,
-      "test_cases": []
-    },
-    "TRUNC-05": {
+    "TRIAGE-02": {
       "covered": false,
       "test_cases": []
     },
@@ -2955,6 +1598,22 @@
       "test_cases": []
     },
     "TUI-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UNIF-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UNIF-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UNIF-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UNIF-04": {
       "covered": false,
       "test_cases": []
     },
@@ -2967,6 +1626,38 @@
       "test_cases": []
     },
     "UPPAAL-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UPS-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UPS-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UPS-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UPS-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UPS-05": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UX-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UX-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "UX-03": {
       "covered": false,
       "test_cases": []
     },
@@ -2986,7 +1677,51 @@
       "covered": false,
       "test_cases": []
     },
+    "VERIFY-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "VERIFY-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "VIS-01": {
+      "covered": false,
+      "test_cases": []
+    },
     "VIS-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "WIZ-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "WIZ-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "WIZ-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "WIZ-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "WIZ-05": {
+      "covered": false,
+      "test_cases": []
+    },
+    "WIZ-08": {
+      "covered": false,
+      "test_cases": []
+    },
+    "WIZ-09": {
+      "covered": false,
+      "test_cases": []
+    },
+    "WIZ-10": {
       "covered": false,
       "test_cases": []
     },
@@ -2998,23 +1733,19 @@
       "covered": false,
       "test_cases": []
     },
-    "BENCH-07": {
+    "COCH-01": {
       "covered": false,
       "test_cases": []
     },
-    "BENCH-08": {
+    "COCH-02": {
       "covered": false,
       "test_cases": []
     },
-    "BENCH-09": {
+    "COCH-03": {
       "covered": false,
       "test_cases": []
     },
-    "BENCH-DETECT-04": {
-      "covered": false,
-      "test_cases": []
-    },
-    "BF-03": {
+    "COCH-04": {
       "covered": false,
       "test_cases": []
     },
@@ -3050,6 +1781,26 @@
       "covered": false,
       "test_cases": []
     },
+    "HOT-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "HOT-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "HOT-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "HOT-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "HOT-05": {
+      "covered": false,
+      "test_cases": []
+    },
     "MRF-01": {
       "covered": false,
       "test_cases": []
@@ -3062,15 +1813,55 @@
       "covered": false,
       "test_cases": []
     },
+    "PACK-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PACK-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PACK-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "PACK-04": {
+      "covered": false,
+      "test_cases": []
+    },
     "SIM-04": {
       "covered": false,
       "test_cases": []
     },
-    "TOOL-01": {
+    "SKEL-01": {
       "covered": false,
       "test_cases": []
     },
-    "TOOL-02": {
+    "SKEL-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SKEL-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SKEL-04": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SYNC-01": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SYNC-02": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SYNC-03": {
+      "covered": false,
+      "test_cases": []
+    },
+    "SYNC-04": {
       "covered": false,
       "test_cases": []
     }

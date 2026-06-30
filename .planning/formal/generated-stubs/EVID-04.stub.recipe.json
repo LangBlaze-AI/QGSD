@@ -1,8 +1,8 @@
 {
   "requirement_id": "EVID-04",
-  "requirement_text": "bin/git-history-evidence.cjs classifies every commit into one of seven categories (feat/fix/refactor/docs/test/build/chore), cross-references changed files against TLA+ specifications via model-registry.json, identifies drift candidates where code evolved after its formal spec, and produces .planning/formal/evidence/git-history-evidence.json consumed by the nf-solve sweep pipeline as an informational residual",
+  "requirement_text": "State candidate extractor mines traces to suggest state variables and transitions that hand-written models may have missed",
   "formal_property": {
-    "name": "CommitCategory",
+    "name": "Bool",
     "model_file": ".planning/formal/alloy/git-history-evidence.als",
     "definition": "",
     "type": "assertion"
@@ -15,12 +15,7 @@
     "/Users/jonathanborduas/code/QGSD/bin/state-candidates.cjs"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/state-candidates.cjs');",
-  "test_strategy": "behavioral",
-  "template": "import-and-call",
-  "template_boilerplate": "const mod = require(SOURCE);\nconst result = mod.FUNCTION(INPUT);\nassert.strictEqual(result, EXPECTED);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "test_strategy": "structural",
+  "template": "source-grep",
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

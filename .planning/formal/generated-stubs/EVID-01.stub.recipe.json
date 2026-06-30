@@ -1,6 +1,6 @@
 {
   "requirement_id": "EVID-01",
-  "requirement_text": "`never_observed` path entries in `validate-traces.cjs` evidence output carry `confidence: low|medium|high` based on trace volume and window duration",
+  "requirement_text": "Instrumentation map (`instrumentation-map.json`) catalogs every hook/handler emission point and maps to state variables with coverage percentages",
   "formal_property": {
     "name": "Confidence",
     "model_file": ".planning/formal/alloy/evidence-triage.als",
@@ -19,10 +19,5 @@
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/run-formal-verify.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

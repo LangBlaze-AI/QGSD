@@ -4,25 +4,22 @@
   "formal_property": {
     "name": "AllRulesHold",
     "model_file": ".planning/formal/alloy/quorum-composition.als",
-    "definition": "assert AllRulesHold {\n  all c : Config | {\n    (#c.availableSlots > 0) implies (#c.selectedSlots > 0)\n    (c.riskLevel = High) implies (#c.selectedSlots > 0)\n    (c.soloMode = True) implies (#c.selectedSlots = 1)\n  }\n}",
+    "definition": "assert AllRulesHold {\n  all c : Config | {\n    (#c.availableSlots > 0) implies (#c.selectedSlots > 0)\n    (c.riskLevel = High and #c.availableSlots > 0) implies (#c.selectedSlots > 0)\n    (c.soloMode = True) implies (#c.selectedSlots = 1)\n  }\n}",
     "type": "assertion"
   },
   "source_files": [
     "bin/requirement-map.cjs",
-    "bin/run-quorum-composition-alloy.cjs"
+    "bin/run-quorum-composition-alloy.cjs",
+    "bin/alloy-exec.cjs"
   ],
   "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/requirement-map.cjs",
   "source_files_absolute": [
     "/Users/jonathanborduas/code/QGSD/bin/requirement-map.cjs",
-    "/Users/jonathanborduas/code/QGSD/bin/run-quorum-composition-alloy.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/run-quorum-composition-alloy.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/alloy-exec.cjs"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/requirement-map.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

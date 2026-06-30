@@ -1,6 +1,6 @@
 {
   "requirement_id": "VIS-01",
-  "requirement_text": "`/nf:health` surfaces W008 warning when a quorum slot has ≥3 failures recorded in `quorum-failures.json`",
+  "requirement_text": "All TUI screenshots regenerated via VHS tape automation after README structural changes",
   "formal_property": {
     "name": "Bool",
     "model_file": ".planning/formal/alloy/health-validation.als",
@@ -9,20 +9,15 @@
   },
   "source_files": [
     "bin/nForma.cjs",
-    "bin/plan-phase-fv-gate.test.cjs"
+    "bin/validate-invariant.cjs"
   ],
   "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/nForma.cjs",
   "source_files_absolute": [
     "/Users/jonathanborduas/code/QGSD/bin/nForma.cjs",
-    "/Users/jonathanborduas/code/QGSD/bin/plan-phase-fv-gate.test.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/validate-invariant.cjs"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/nForma.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

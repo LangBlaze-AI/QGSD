@@ -1,9 +1,9 @@
 {
   "requirement_id": "EVID-02",
-  "requirement_text": "`observation_window` metadata (window_start, window_end, n_traces, n_events, window_days) written to `check-results.ndjson` for evidence-driven checks",
+  "requirement_text": "Trace corpus management indexes conformance events by session, action type, and state transition with queryable metadata",
   "formal_property": {
-    "name": "Confidence",
-    "model_file": ".planning/formal/alloy/evidence-triage.als",
+    "name": "TraceEvent",
+    "model_file": ".planning/formal/alloy/evidence-layer.als",
     "definition": "",
     "type": "assertion"
   },
@@ -19,12 +19,7 @@
     "/Users/jonathanborduas/code/QGSD/bin/validate-traces.cjs"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/trace-corpus-stats.cjs');",
-  "test_strategy": "behavioral",
-  "template": "import-and-call",
-  "template_boilerplate": "const mod = require(SOURCE);\nconst result = mod.FUNCTION(INPUT);\nassert.strictEqual(result, EXPECTED);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "test_strategy": "structural",
+  "template": "source-grep",
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

@@ -1,6 +1,6 @@
 {
   "requirement_id": "CALIB-04",
-  "requirement_text": "`policy.conservative_priors.tp_rate` and `policy.conservative_priors.unavail` from `.planning/formal/policy.yaml` wire directly to `run-prism.cjs` fallback constants (v0.19-10 fix)",
+  "requirement_text": "`policy.conservative_priors.tp_rate` and `policy.conservative_priors.unavail` from `.formal/policy.yaml` wire directly to `run-prism.cjs` fallback constants (v0.19-10 fix)",
   "formal_property": {
     "name": "Bool",
     "model_file": ".planning/formal/alloy/provider-failure.als",
@@ -17,10 +17,5 @@
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/read-policy.cjs');",
   "test_strategy": "constant",
   "template": "config-validate",
-  "template_boilerplate": "const { DEFAULT_CONFIG } = require(CONFIG_PATH);\nassert.strictEqual(resolveConfigPath(PATH, DEFAULT_CONFIG), EXPECTED);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const { DEFAULT_CONFIG } = require(CONFIG_PATH);\nassert.strictEqual(resolveConfigPath(PATH, DEFAULT_CONFIG), EXPECTED);"
 }

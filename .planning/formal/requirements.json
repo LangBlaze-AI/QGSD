@@ -1,9 +1,7 @@
 {
-  "aggregated_at": "2026-06-19T20:44:15.753Z",
-  "content_hash": "ab77dca3a849d72d",
-  "schema_version": "1",
-  "source": ".planning/REQUIREMENTS.md",
-  "last_sync": "2026-03-31T09:45:23.686Z",
+  "aggregated_at": "2026-06-30T12:02:46.818Z",
+  "content_hash": "sha256:ae9aeb4ffb2f435503c6390e1fe3415ac5ce56df051e57c348b819aeec39221c",
+  "frozen_at": null,
   "requirements": [
     {
       "id": "ACT-01",
@@ -187,19 +185,6 @@
       "category_raw": "Agent Roster"
     },
     {
-      "id": "AGENT-04",
-      "text": "nForma skills use AGENT_SKILLS_DIR env var for skills discovery, not hardcoded Claude Code paths — enabling agent-agnostic skill discovery across all coding agents",
-      "category": "MCP & Agents",
-      "tier": "user",
-      "phase": "unknown",
-      "status": "Complete",
-      "provenance": {
-        "source_file": "scripts/pr-merge-autopilot.sh",
-        "milestone": "unknown"
-      },
-      "category_raw": "Agent Roster"
-    },
-    {
       "id": "ANNOT-01",
       "text": "All 11 TLA+ model files contain `@requirement` structured comments on each property/invariant, mapping it to specific requirement IDs",
       "category": "Formal Verification",
@@ -324,62 +309,6 @@
         ".planning/formal/alloy/codebase-arch-constraints.als"
       ],
       "category_raw": "Architecture"
-    },
-    {
-      "id": "BENCH-07",
-      "text": "Provide a generic benchmark runner CLI (bin/nf-benchmark.cjs) that loads fixtures from benchmarks/<skill>/fixtures.json, evaluates pass conditions, and enforces skill-specific baseline floors in CI gates.",
-      "category": "Benchmark Infrastructure",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "To scale quality assurance across multiple skills (quick, solve, future skills), extract shared benchmark utilities into a reusable module and build a generic runner that works for any skill without duplication. This enables consistent, CI-enforced quality gates and supports future skill onboarding.",
-      "source_file": ".planning/quick/402-build-generic-benchmark-runner-for-nform/402-PLAN.md",
-      "milestone": "quick-402"
-    },
-    {
-      "id": "BENCH-08",
-      "text": "The system detects seeded algorithmic bugs via TLC counterexample discovery and verifies fixes through TLC verification pass conditions, integrated with the nf:debug benchmark track.",
-      "category": "Benchmark Infrastructure",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Automated defect detection validates that the benchmark runner can identify intentional bugs in algorithm stubs using formal verification. The debug track exercises the TLC pass condition infrastructure (counterexample detection and fix verification) to ensure algorithmic debugging via formal modeling works end-to-end.",
-      "source_file": ".planning/quick/403-add-nf-debug-benchmark-track-with-generi/403-PLAN.md",
-      "milestone": "quick-403"
-    },
-    {
-      "id": "BENCH-09",
-      "text": "The nf:debug pipeline measures autonomy via a graded benchmark suite scoring 0-100 based on the fraction of seeded bugs (7 stubs across 3 difficulty tiers) that the AI quorum fixes end-to-end.",
-      "category": "Benchmark Infrastructure",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Quantifying the nf:debug pipeline's autonomous debugging capability requires reproducible test fixtures with known failures and a scoring mechanism that tracks fix success rates across difficulty levels. This benchmark provides a concrete autonomy metric for evaluating pipeline improvements and enforcing quality gates in CI.",
-      "source_file": ".planning/quick/404-build-nf-debug-autonomy-benchmark-with-g/404-PLAN.md",
-      "milestone": "quick-404"
-    },
-    {
-      "id": "BENCH-DETECT-04",
-      "text": "nf-solve detects cross-layer mutations, formal model changes, and documentation claim violations in fast mode with active layer sweeps for l1_to_l3, l3_to_tc, formal_lint, and ghost-command scanning for /nf: slash-command references in doc files.",
-      "category": "Benchmark Detection",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Quick task 401 addressed systematic gaps in nf-solve's mutation detection capability across three benchmark categories that previously scored 0%: cross-layer-alignment, multi-layer formal_lint, and documentation challenges. By removing fast-mode guards from lightweight layer sweeps and adding /nf: slash-command existence verification to sweepDtoC, the benchmark detection pass rate improved from 20.4% to 35%+, enabling continuous validation of nf-solve's mutation detection quality in CI.",
-      "provenance": {
-        "source_file": ".planning/quick/401-fix-nf-solve-benchmark-detection-gaps-20/401-PLAN.md",
-        "milestone": "quick-401"
-      }
-    },
-    {
-      "id": "BF-03",
-      "text": "Benchmark requirement with broken provenance",
-      "category": "Benchmark",
-      "tier": "user",
-      "phase": "unknown",
-      "status": "Complete",
-      "provenance": {
-        "source_file": "nonexistent/path/to/requirements.md",
-        "milestone": "unknown"
-      },
-      "formal_models": [],
-      "category_raw": "Benchmark"
     },
     {
       "id": "BLD-01",
@@ -614,8 +543,8 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/ci-pipeline-gates.als"
@@ -629,8 +558,8 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/ci-pipeline-gates.als"
@@ -644,12 +573,38 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/ci-pipeline-gates.als"
       ]
+    },
+    {
+      "id": "CL-01",
+      "text": "CHANGELOG.md has a `[0.2.0]` entry covering all v0.2 changes: circuit breaker (Phases 6–8), GUARD 5 gap closure (Phase 5), QGSD rebranding, quorum scoring, quorum commands, debug flow, checkpoint:verify (quick tasks 1–12)",
+      "category": "Installer & CLI",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.2-REQUIREMENTS.md",
+        "milestone": "unknown"
+      },
+      "category_raw": "Changelog"
+    },
+    {
+      "id": "CL-02",
+      "text": "CHANGELOG.md `[Unreleased]` section is cleared after the `[0.2.0]` entry is finalized — clean slate for v0.3+",
+      "category": "Installer & CLI",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.2-REQUIREMENTS.md",
+        "milestone": "unknown"
+      },
+      "category_raw": "Changelog"
     },
     {
       "id": "CLASS-01",
@@ -685,6 +640,54 @@
       "provenance": {
         "source_file": ".planning/milestones/v0.37-REQUIREMENTS.md",
         "milestone": "unknown"
+      }
+    },
+    {
+      "id": "COCH-01",
+      "text": "User can mine file co-occurrence from git history, counting how often file pairs appear in the same commit",
+      "category": "Co-Change Prediction",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "COCH-02",
+      "text": "User can compute temporal coupling scores with configurable thresholds (min_shared_commits, min_coupling_degree) to identify implicitly related files",
+      "category": "Co-Change Prediction",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "COCH-03",
+      "text": "User can filter out mass-refactoring commits by inverse file-count weighting, so commits touching 50+ files contribute less coupling signal than focused changes",
+      "category": "Co-Change Prediction",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "COCH-04",
+      "text": "User can have co-change pairs injected into the debug context bundle, so `/nf:debug` surfaces implicit coupling when investigating bugs in related files",
+      "category": "Co-Change Prediction",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       }
     },
     {
@@ -876,16 +879,6 @@
         ".planning/formal/alloy/config-two-layer.als"
       ],
       "category_raw": "Config Extensions"
-    },
-    {
-      "id": "CONF-10",
-      "text": "Projects can set `default_milestone` in `.planning/config.json` to specify the default milestone for quick tasks and phase operations, eliminating the need for STATE.md or ROADMAP.md to be present.",
-      "category": "Configuration",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Quick task 380 (issue #64) implemented support for a `default_milestone` config field that enables milestone workflows in early-stage projects without requiring existing milestone tracking files. The feature accepts multiple formats (v0.9, 0.9, v0.9 Name, v0.9: Name) and prioritizes config.default_milestone over STATE.md/ROADMAP.md when present.",
-      "source_file": ".planning/quick/380-issue-64-make-auto-the-default-for-miles/380-PLAN.md",
-      "milestone": "quick-380"
     },
     {
       "id": "CONST-01",
@@ -1093,7 +1086,7 @@
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       }
     },
@@ -1105,7 +1098,7 @@
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       }
     },
@@ -1117,7 +1110,7 @@
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       }
     },
@@ -1129,7 +1122,7 @@
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       }
     },
@@ -1203,135 +1196,6 @@
       "provenance": {
         "source_file": ".planning/milestones/v0.27-REQUIREMENTS.md",
         "milestone": "unknown"
-      }
-    },
-    {
-      "id": "DEBT-07",
-      "text": "Formalize constraint extraction for debug invariants in propose-debug-invariants.cjs",
-      "category": "Technical Debt",
-      "tier": "engineering",
-      "phase": "unknown",
-      "status": "Open",
-      "provenance": {
-        "source_file": ".planning/quick/384-standardize-process-resolve-technical-de/384-AUDIT.md",
-        "milestone": "v0.41"
-      },
-      "category_raw": "Code Markers"
-    },
-    {
-      "id": "DEBT-08",
-      "text": "Add future instrumentation source for per-file trace data in formalization-candidates.cjs",
-      "category": "Technical Debt",
-      "tier": "engineering",
-      "phase": "unknown",
-      "status": "Open",
-      "provenance": {
-        "source_file": ".planning/quick/384-standardize-process-resolve-technical-de/384-AUDIT.md",
-        "milestone": "v0.41"
-      },
-      "category_raw": "Code Markers"
-    },
-    {
-      "id": "DEBT-09",
-      "text": "Standardize JSON read/write serialization patterns across bin/ scripts (aggregate-requirements.cjs, check-provider-health.cjs, call-quorum-slot.cjs, telemetry-collector.cjs, verify-formal-results.cjs)",
-      "category": "Technical Debt",
-      "tier": "engineering",
-      "phase": "unknown",
-      "status": "Open",
-      "provenance": {
-        "source_file": ".planning/quick/384-standardize-process-resolve-technical-de/384-AUDIT.md",
-        "milestone": "v0.41"
-      },
-      "category_raw": "Logic Patterns"
-    },
-    {
-      "id": "DEBT-10",
-      "text": "Standardize path resolution: consolidate _nfBin helper usage across bin/ module imports (solve-inline-dispatch.cjs, observe-pipeline.cjs, and others)",
-      "category": "Technical Debt",
-      "tier": "engineering",
-      "phase": "unknown",
-      "status": "Open",
-      "provenance": {
-        "source_file": ".planning/quick/384-standardize-process-resolve-technical-de/384-AUDIT.md",
-        "milestone": "v0.41"
-      },
-      "category_raw": "Logic Patterns"
-    },
-    {
-      "id": "DEBT-11",
-      "text": "Reduce empty catch block proliferation: replace silent catch (_) {} with explicit logging or error propagation in check-provider-health.cjs, call-quorum-slot.cjs, nForma.cjs",
-      "category": "Technical Debt",
-      "tier": "engineering",
-      "phase": "unknown",
-      "status": "Open",
-      "provenance": {
-        "source_file": ".planning/quick/384-standardize-process-resolve-technical-de/384-AUDIT.md",
-        "milestone": "v0.41"
-      },
-      "category_raw": "Logic Patterns"
-    },
-    {
-      "id": "DEBT-12",
-      "text": "Create formal model for shell-safe prompt delivery (stdin piping, no escaping required)",
-      "category": "Technical Debt",
-      "tier": "engineering",
-      "phase": "unknown",
-      "status": "Open",
-      "provenance": {
-        "source_file": ".planning/quick/384-standardize-process-resolve-technical-de/384-AUDIT.md",
-        "milestone": "v0.41"
-      },
-      "category_raw": "Formal Verification Gap"
-    },
-    {
-      "id": "DEBT-13",
-      "text": "Create formal model for quorum slot model deduplication (diversity guarantee)",
-      "category": "Technical Debt",
-      "tier": "engineering",
-      "phase": "unknown",
-      "status": "Open",
-      "provenance": {
-        "source_file": ".planning/quick/384-standardize-process-resolve-technical-de/384-AUDIT.md",
-        "milestone": "v0.41"
-      },
-      "category_raw": "Formal Verification Gap"
-    },
-    {
-      "id": "DEBT-14",
-      "text": "Create formal model for net_residual computation (FP subtraction from raw sweep residuals)",
-      "category": "Technical Debt",
-      "tier": "engineering",
-      "phase": "unknown",
-      "status": "Open",
-      "provenance": {
-        "source_file": ".planning/quick/384-standardize-process-resolve-technical-de/384-AUDIT.md",
-        "milestone": "v0.41"
-      },
-      "category_raw": "Formal Verification Gap"
-    },
-    {
-      "id": "DEBT-15",
-      "text": "Create formal model for solve convergence layer-transition sweeps (L1->L2, L2->L3, L3->TC)",
-      "category": "Technical Debt",
-      "tier": "engineering",
-      "phase": "unknown",
-      "status": "Open",
-      "provenance": {
-        "source_file": ".planning/quick/384-standardize-process-resolve-technical-de/384-AUDIT.md",
-        "milestone": "v0.41"
-      },
-      "category_raw": "Formal Verification Gap"
-    },
-    {
-      "id": "DEBT-16",
-      "text": "Implement standardized process for auditing technical debt markers, documenting findings in requirements.json as trackable DEBT-* items, and maintaining traceability in REQUIREMENTS.md",
-      "category": "Technical Debt",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Quick task 384 established a repeatable audit methodology (code comment markers, traceability gaps, logic inconsistencies, unmapped TODOs) to prevent technical debt accumulation by making each identified item a first-class trackable requirement rather than informal comments or stale documentation. This process ensures engineering tasks arising from debt discovery are formally captured and monitored.",
-      "provenance": {
-        "source_file": ".planning/quick/384-standardize-process-resolve-technical-de/384-PLAN.md",
-        "milestone": "quick-384"
       }
     },
     {
@@ -1418,19 +1282,19 @@
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       }
     },
     {
       "id": "DEPR-02",
-      "text": "solve-remediate b_to_f layer dispatches through /nf:debug (not deprecated /nf:model-driven-fix)",
+      "text": "solve-remediate b_to_f layer updated to dispatch through debug instead of model-driven-fix",
       "category": "Skill Deprecation",
       "tier": "user",
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       }
     },
@@ -1442,7 +1306,7 @@
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       }
     },
@@ -1553,6 +1417,19 @@
       "category_raw": "Diagnostics"
     },
     {
+      "id": "DIAG-03",
+      "text": "Pivot decision surfaced in `.formal/diff-report.md` with complete attribution (DELIVERED; VERIFICATION.md missing)",
+      "category": "Observability & Diagnostics",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Pending",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.21-REQUIREMENTS.md",
+        "milestone": "unknown"
+      },
+      "category_raw": "Diagnostics"
+    },
+    {
       "id": "DISP-01",
       "text": "qgsd-prompt.js runs a fast health probe (<3s) per provider before building the dispatch list -- dead providers' slots excluded from DISPATCH_LIST",
       "category": "Quorum & Dispatch",
@@ -1631,55 +1508,6 @@
         ".planning/formal/tla/QGSDDispatchPipeline.tla"
       ],
       "category_raw": "Dispatch Reliability"
-    },
-    {
-      "id": "DISP-06",
-      "text": "Quorum dispatcher tiered ordering: available_slots are pre-sorted with CLI/CCR slots (subprocess and ccr types) before HTTP API slots (http type), ensuring HTTP API slots are backup-only and only dispatched when CLI/CCR slots are exhausted or unavailable.",
-      "category": "Quorum & Dispatch",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "HTTP API slots (api-1 through api-6) lack local file access and are pay-per-use, making them suitable only as fallback when flat-rate CLI-based slots cannot satisfy the quorum requirement. Tiered ordering in the preflight available_slots array achieves this without modifying dispatch logic.",
-      "provenance": {
-        "source_file": ".planning/quick/374-make-api-slots-backup-only-dispatch-to-a/374-PLAN.md",
-        "milestone": "quick-374"
-      }
-    },
-    {
-      "id": "DISP-07",
-      "text": "Quorum dispatcher Mode C delegates structured coding tasks to external agent CLI slots (codex, gemini, opencode, copilot) via coding-task-router.cjs, with status-to-verdict mapping (SUCCESS->APPROVE, PARTIAL->FLAG, FAILED->REJECT, UNKNOWN->FLAG) for integration into the quorum voting path",
-      "category": "Quorum & Dispatch",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Quick task 380 implemented coding task delegation as the foundational layer for Issue #60. Previously quorum slots only handled review/voting (Mode A for questions, Mode B for execution review). Mode C enables external agents to receive and execute actual coding work with structured result collection.",
-      "provenance": {
-        "source_file": ".planning/quick/380-delegate-quorum-slot-coding-to-external-/380-PLAN.md",
-        "milestone": "quick-380"
-      }
-    },
-    {
-      "id": "DISP-08",
-      "text": "/nf:quick --delegate {slot-name} flag enables full task delegation to named external agent CLI slots via Mode C dispatch, bypassing local planning and execution while preserving scope contract tracking and result recording in STATE.md.",
-      "category": "Quorum & Dispatch",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Quick task 381 adds the --delegate flag to the /nf:quick workflow, providing a user-facing interface to Mode C dispatch (established in DISP-07). The flag validates the target slot against providers.json, ensures it is a subprocess provider with file access, and routes the task through coding-task-router.cjs for execution by the external agent.",
-      "provenance": {
-        "source_file": ".planning/quick/381-add-delegate-flag-to-nf-quick-for-full-t/381-PLAN.md",
-        "milestone": "quick-381"
-      }
-    },
-    {
-      "id": "DIST-01",
-      "text": "The npm `@next` dist-tag SHALL never point to a version older than `@latest`. After every stable publish to `@latest`, the `@next` dist-tag MUST be aligned to the same or a newer version.",
-      "category": "Release & Distribution",
-      "tier": "user",
-      "phase": "unknown",
-      "status": "Complete",
-      "provenance": {
-        "source_file": "manual",
-        "milestone": "v0.41"
-      },
-      "background": "Implemented in 0.41.14. Automated in release.yml (CI), publish.sh (manual publish), and documented in CLAUDE.md. Prevents stale prerelease tags from confusing consumers who install via @next."
     },
     {
       "id": "DRIFT-01",
@@ -2032,17 +1860,6 @@
       }
     },
     {
-      "id": "FV-04",
-      "text": "The invariant gate treats CI/CD pipelines, build artifacts, and Infrastructure-as-Code (IaC) as first-class system components — properties of CI/CD and IaC (e.g., \"tests pass\", \"dist/ reflects source\", \"infra matches declared state\") are classified as invariants, not as acceptance criteria or one-time tasks",
-      "category": "Formal Verification",
-      "status": "Complete",
-      "background": "The system is an ensemble of source code, CI/CD, and IaC. The build_ci_gate regex rule was removed from validate-invariant.cjs.",
-      "provenance": {
-        "source_file": "manual",
-        "milestone": "quick-337"
-      }
-    },
-    {
       "id": "GATE-01",
       "text": "Loop 2 (simulateSolutionLoop with onTweakFix) fires as pre-commit gate in quick.md --full executor",
       "category": "Pre-Commit Simulation Gate",
@@ -2050,7 +1867,7 @@
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       }
     },
@@ -2062,7 +1879,7 @@
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       },
       "formal_models": [
@@ -2077,7 +1894,7 @@
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       }
     },
@@ -2089,7 +1906,7 @@
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       }
     },
@@ -2101,7 +1918,7 @@
       "phase": "unknown",
       "status": "Pending",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       },
       "formal_models": []
@@ -2140,18 +1957,6 @@
       "provenance": {
         "source_file": ".planning/milestones/v0.37-REQUIREMENTS.md",
         "milestone": "unknown"
-      }
-    },
-    {
-      "id": "GUARD-01",
-      "text": "When --full flag is set, quick workflow enforces formal modeling steps with MUST_NOT_SKIP annotations, anti-urgency guardrails, baseline tooling checks, and post-execution audit gates (does not apply to default quick mode without --full)",
-      "category": "Formal Modeling Guardrails",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Agents skip 8/10 formal modeling steps in /nf:quick --full due to urgency bias and context fatigue. GUARD-01 adds enforcement mechanisms making skips detectable and logged. Scoped to --full mode only; default quick mode per SOLVE-02 is unaffected.",
-      "provenance": {
-        "source_file": ".planning/quick/375-issue-47-agents-skip-formal-modeling/375-PLAN.md",
-        "milestone": "quick-375"
       }
     },
     {
@@ -2256,6 +2061,66 @@
       "category_raw": "Health Checker"
     },
     {
+      "id": "HOT-01",
+      "text": "User can compute per-file churn scores from git log with streaming parsing that handles repos with 10K+ commits without exceeding maxBuffer",
+      "category": "Hotspot Detection",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "HOT-02",
+      "text": "User can compute per-file cyclomatic complexity by counting decision points in the tree-sitter AST, producing a language-agnostic complexity score",
+      "category": "Hotspot Detection",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "HOT-03",
+      "text": "User can compute a hotspot risk score as the normalized intersection of churn and complexity, identifying files that are both frequently changed and structurally complex",
+      "category": "Hotspot Detection",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "HOT-04",
+      "text": "User can exclude high-noise paths (generated files, vendored dirs, mass-refactor commits) and normalize by file size to reduce false positive hotspot signals",
+      "category": "Hotspot Detection",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "HOT-05",
+      "text": "User can have high-risk hotspot files automatically escalate quorum fan-out in `nf-prompt.js`, so agents receive more review capacity on risky code changes",
+      "category": "Hotspot Detection",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
       "id": "HTARGET-01",
       "text": "When a hypothesis transitions from UNMEASURABLE to CONFIRMED/VIOLATED, the layer it belongs to gets +1 priority weight in the next solve remediation wave ordering",
       "category": "Hypothesis Targeting",
@@ -2280,8 +2145,21 @@
       }
     },
     {
+      "id": "IMPR-01",
+      "text": "R3.6 quorum enforcement reviewed and improvement areas identified",
+      "category": "Quorum & Dispatch",
+      "tier": "user",
+      "phase": "v0.19-06",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.19-REQUIREMENTS.md",
+        "milestone": "v0.19"
+      },
+      "category_raw": "R3.6 Improvement Iteration"
+    },
+    {
       "id": "IMPR-02",
-      "text": "Quorum slot dispatch uses parallel sibling Task calls (not sequential MCP calls) per R3.2 requirement",
+      "text": "Quorum slot dispatch updated to parallel sibling Task calls (R3.2 requirement)",
       "category": "Quorum & Dispatch",
       "tier": "user",
       "phase": "v0.19-06",
@@ -2294,7 +2172,20 @@
     },
     {
       "id": "IMPR-03",
-      "text": "Slot worker protocol handles missing and malformed responses gracefully (no unhandled exceptions, fail-open)",
+      "text": "Slot worker protocol hardened against missing/malformed responses",
+      "category": "Quorum & Dispatch",
+      "tier": "user",
+      "phase": "v0.19-06",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.19-REQUIREMENTS.md",
+        "milestone": "v0.19"
+      },
+      "category_raw": "R3.6 Improvement Iteration"
+    },
+    {
+      "id": "IMPR-04",
+      "text": "Improvement validated with quorum test runs",
       "category": "Quorum & Dispatch",
       "tier": "user",
       "phase": "v0.19-06",
@@ -2462,19 +2353,6 @@
         ".planning/formal/tla/QGSDInstallerIdempotency.tla"
       ],
       "category_raw": "Installer Extensions"
-    },
-    {
-      "id": "INST-11",
-      "text": "install.js shall read CLI detection rules from a read-only providers.json manifest, display found/not-found status per CLI, and prompt for user consent before registering any provider",
-      "category": "manifest",
-      "tier": "user",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Previously, install.js hardcoded 10 CLIs and auto-registered them without user consent, including 6 unwanted CCR presets. This requirement ensures the installer uses a declarative manifest and respects user choice.",
-      "provenance": {
-        "source_file": ".planning/quick/407-issue-149/407-PLAN.md",
-        "milestone": "quick-407"
-      }
     },
     {
       "id": "INTENT-01",
@@ -2908,7 +2786,7 @@
     },
     {
       "id": "MCPENV-02",
-      "text": "MCMCPEnv is present in SURFACE_MAP and VALID_CONFIGS; invariants.md includes EventualDecision fairness declarations; formal-verify.yml includes MCMCPEnv CI step",
+      "text": "`MCMCPEnv` added to `SURFACE_MAP` and `VALID_CONFIGS`; `invariants.md` created with EventualDecision fairness declarations; CI step added to `formal-verify.yml`",
       "category": "MCP & Agents",
       "tier": "user",
       "phase": "v0.19-08",
@@ -3122,7 +3000,7 @@
     },
     {
       "id": "NAME-01",
-      "text": "All gate JSON files use Wiring:Evidence / Wiring:Purpose / Wiring:Coverage naming (not legacy Gate A/B/C)",
+      "text": "Gate A/B/C renamed to Wiring:Evidence / Wiring:Purpose / Wiring:Coverage in all gate JSON files (gate-a-grounding.json, gate-b-abstraction.json, gate-c-validation.json)",
       "category": "Gate Naming",
       "tier": "user",
       "phase": "v0.34-01",
@@ -3176,8 +3054,8 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/prism/observability-delivery.props"
@@ -3439,6 +3317,54 @@
       "provenance": {
         "source_file": ".planning/milestones/v0.33-REQUIREMENTS.md",
         "milestone": "v0.33"
+      }
+    },
+    {
+      "id": "PACK-01",
+      "text": "User can deliver file contents to LLMs in XML-style tagged format (`<file path=\"...\">...</file>`) that preserves structure while reducing token overhead vs raw source inclusion",
+      "category": "Context Packing",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "PACK-02",
+      "text": "User can escape XML-special characters in packed content via an `escapeXml()` helper that handles `<`, `>`, `&`, `\"`, `'` — preventing malformed XML output",
+      "category": "Context Packing",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "PACK-03",
+      "text": "User can invoke `context-packer.cjs` as a single entry point that orchestrates all Repowise intelligence modules (skeleton, hotspot, co-change) and produces a unified packed context output",
+      "category": "Context Packing",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "PACK-04",
+      "text": "User can compress skeleton detail level based on a token budget, so that the system adapts output to fit within context window constraints rather than producing uniformly detailed output",
+      "category": "Context Packing",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       }
     },
     {
@@ -4205,8 +4131,8 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/reliability-patterns.als"
@@ -4220,12 +4146,25 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/reliability-patterns.als"
       ]
+    },
+    {
+      "id": "REN-01",
+      "text": "`git mv get-shit-done/ qgsd-core/` — directory renamed, git history preserved",
+      "category": "Installer & CLI",
+      "tier": "user",
+      "phase": "v0.9-05",
+      "status": "Pending",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.11-REQUIREMENTS.md",
+        "milestone": "v0.10"
+      },
+      "category_raw": "Portability"
     },
     {
       "id": "REN-02",
@@ -4254,6 +4193,71 @@
       "formal_models": [
         ".planning/formal/alloy/codebase-arch-constraints.als"
       ]
+    },
+    {
+      "id": "REN-04",
+      "text": "`~/.claude/qgsd/` installed runtime is functionally identical before and after rename (verified by spot-check)",
+      "category": "Installer & CLI",
+      "tier": "user",
+      "phase": "v0.9-05",
+      "status": "Pending",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.11-REQUIREMENTS.md",
+        "milestone": "v0.10"
+      },
+      "category_raw": "Portability"
+    },
+    {
+      "id": "RLS-01",
+      "text": "`package.json` version field bumped from `0.1.0` to `0.2.0`",
+      "category": "Installer & CLI",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.2-REQUIREMENTS.md",
+        "milestone": "unknown"
+      },
+      "category_raw": "Release"
+    },
+    {
+      "id": "RLS-02",
+      "text": "v0.2 milestone archived in `MILESTONES.md` — includes What Shipped, Phases (6–10), Requirements Satisfied (all 20 v0.2 requirements), Key Decisions Carried Forward",
+      "category": "Installer & CLI",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.2-REQUIREMENTS.md",
+        "milestone": "unknown"
+      },
+      "category_raw": "Release"
+    },
+    {
+      "id": "RLS-03",
+      "text": "Git tag `v0.2.0` created at release commit and pushed to remote",
+      "category": "Installer & CLI",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.2-REQUIREMENTS.md",
+        "milestone": "unknown"
+      },
+      "category_raw": "Release"
+    },
+    {
+      "id": "RLS-04",
+      "text": "`qgsd@0.2.0` published to npm registry — `npx qgsd@0.2.0` installs successfully",
+      "category": "Installer & CLI",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Pending",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.2-REQUIREMENTS.md",
+        "milestone": "unknown"
+      },
+      "category_raw": "Release"
     },
     {
       "id": "ROOT-01",
@@ -4299,7 +4303,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       }
     },
@@ -4311,7 +4315,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       },
       "formal_models": [
@@ -4326,7 +4330,7 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       },
       "formal_models": [
@@ -4341,46 +4345,12 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": ".planning/REQUIREMENTS.md",
+        "source_file": ".planning/milestones/v0.41-REQUIREMENTS.md",
         "milestone": "v0.41"
       },
       "formal_models": [
         ".planning/formal/tla/TaskClassification.tla"
       ]
-    },
-    {
-      "id": "ROUTE-05",
-      "text": "selectSlot delegates to pluggable 3-tier policy interface enabling learned slot routing via PresetPolicy (Tier 0) and RiverPolicy (Tier 1) contextual bandit with confidence gates.",
-      "category": "Token Optimization & Model Routing",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Quick task 382 implements a policy layer beneath selectSlot that enables the system to learn which agent slot performs best for each task type, starting with static preset selection and progressing to evidence-based routing through the River contextual bandit algorithm.",
-      "provenance": {
-        "source_file": ".planning/quick/382-implement-tier-0-policy-interface-and-ti/382-PLAN.md",
-        "milestone": "quick-382"
-      }
-    },
-    {
-      "id": "ROUTE-06",
-      "text": "RiverPolicy implements Q-learning with Bellman updates, epsilon-greedy exploration, and learning rate decay to optimize slot selection based on historical task outcomes.",
-      "category": "Token Optimization & Model Routing",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Quick task 384 replaces the simple mean-reward bandit in RiverPolicy with a proper Q-learning algorithm that tracks state-action values (Q-table) per task type and slot, enabling evidence-based slot selections that improve over time. The closed-loop reward recording wired into quorum-slot-dispatch.cjs ensures task outcomes automatically feed back into Q-value updates.",
-      "provenance": {
-        "source_file": ".planning/quick/384-issue-73/384-PLAN.md",
-        "milestone": "quick-384"
-      }
-    },
-    {
-      "id": "ROUTE-07",
-      "text": "E2E learning loop test validates full River ML pipeline (rewards recorded → Q-table updated → learned preference → shadow recommendation) and nf-statusline displays shadow recommendations with confidence",
-      "category": "Token Optimization & Model Routing",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Quick task 386 delivered end-to-end testing infrastructure proving River ML's complete learning cycle works correctly, plus visibility into shadow-mode recommendations in the developer's statusline so they can monitor what River would recommend if promoted from shadow mode.",
-      "source_file": ".planning/quick/386-add-e2e-test-for-river-ml-learning-loop-/386-PLAN.md",
-      "milestone": "quick-386"
     },
     {
       "id": "RSN-01",
@@ -4538,7 +4508,7 @@
     },
     {
       "id": "SCHEMA-02",
-      "text": "check-result.schema.json includes a requirement_ids (string[]) field accepted by validation",
+      "text": "`check-result.schema.json` gains a `requirement_ids` array (string[]) field; validation updated to accept the new field",
       "category": "Formal Verification",
       "tier": "user",
       "phase": "v0.25-01",
@@ -4625,8 +4595,8 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/security-scanning.als"
@@ -4640,8 +4610,8 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/security-scanning.als"
@@ -4655,8 +4625,8 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/security-scanning.als"
@@ -4670,8 +4640,8 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/security-scanning.als"
@@ -4967,6 +4937,54 @@
       }
     },
     {
+      "id": "SKEL-01",
+      "text": "User can parse source files into ASTs via `web-tree-sitter` WASM with lazy initialization (Parser.init() on first use, not at CLI startup)",
+      "category": "Skeleton Views",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "SKEL-02",
+      "text": "User can extract a structural skeleton from parsed AST showing function/class/method names with line ranges (start-end), producing ~5-10% of original token count",
+      "category": "Skeleton Views",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "SKEL-03",
+      "text": "User can parse JavaScript, TypeScript, and Python files out of the box via bundled grammar packages; additional languages available via optional grammar installation",
+      "category": "Skeleton Views",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
+      "id": "SKEL-04",
+      "text": "User can see hotspot risk scores and coupling degree embedded in skeleton output, so skeleton entries for high-risk or highly-coupled code are annotated with behavioral intelligence",
+      "category": "Skeleton Views",
+      "tier": "user",
+      "phase": "unknown",
+      "status": "Complete",
+      "provenance": {
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
+      }
+    },
+    {
       "id": "SLOT-01",
       "text": "User sees all quorum agents referred to by slot name (`claude-1`, `copilot-1`, `gemini-cli-1`, etc.) in all QGSD output and commands",
       "category": "MCP & Agents",
@@ -5001,7 +5019,7 @@
     },
     {
       "id": "SLOT-03",
-      "text": "No legacy slot names exist in source files (hooks, orchestrator, commands, scoreboard tooling)",
+      "text": "All QGSD source files (hooks, orchestrator, commands, scoreboard tooling) updated to use new slot names — no old names remain",
       "category": "MCP & Agents",
       "tier": "user",
       "phase": "unknown",
@@ -5029,116 +5047,6 @@
       "category_raw": "Slot-based Naming"
     },
     {
-      "id": "SOLVE-01",
-      "text": "bin/formal-graph-search.cjs provides BFS graph traversal over the proximity index (reachFiltered, semanticSearch) used by formal-scope-scan.cjs and candidate-discovery.cjs for graph-first requirement and model lookups",
-      "category": "Solver-Discovered",
-      "status": "Proposed",
-      "provenance": {
-        "source_file": "bin/formal-graph-search.cjs",
-        "milestone": "solver-tui"
-      }
-    },
-    {
-      "id": "SOLVE-02",
-      "text": "Quick mode (/nf:quick) shall provide the same atomic commit and state tracking guarantees as full phase execution while skipping optional steps (research, plan checker, verifier), tracking work in .planning/quick/",
-      "category": "Solver-Discovered",
-      "status": "Proposed",
-      "provenance": {
-        "source_file": "README.md",
-        "milestone": "solver-tui"
-      }
-    },
-    {
-      "id": "SOLVE-03",
-      "text": "The fsm-to-tla transpiler shall accept state machine definitions from supported frameworks and produce valid TLA+ specifications, supporting at least 28 framework patterns across 13 languages",
-      "category": "Solver-Discovered",
-      "status": "Proposed",
-      "provenance": {
-        "source_file": "README.md",
-        "milestone": "solver-tui"
-      }
-    },
-    {
-      "id": "SOLVE-04",
-      "text": "/nf:close-formal-gaps shall auto-generate formal specifications (TLA+, Alloy, or PRISM) from project requirements to close formal model coverage gaps",
-      "category": "Solver-Discovered",
-      "status": "Proposed",
-      "provenance": {
-        "source_file": "README.md",
-        "milestone": "solver-tui"
-      }
-    },
-    {
-      "id": "SOLVE-05",
-      "text": "Quorum dispatch shall perform pre-dispatch authentication checks on all agent slots, detecting unauthenticated agents before sending work to avoid timeout-based failure discovery",
-      "category": "Solver-Discovered",
-      "status": "Proposed",
-      "provenance": {
-        "source_file": "README.md",
-        "milestone": "solver-tui"
-      }
-    },
-    {
-      "id": "SOLVE-06",
-      "text": "Plan-phase verification shall check generated plans against phase requirements and loop until plans pass validation before allowing execution to proceed",
-      "category": "Solver-Discovered",
-      "status": "Proposed",
-      "provenance": {
-        "source_file": "README.md",
-        "milestone": "solver-tui"
-      }
-    },
-    {
-      "id": "SOLVE-07",
-      "text": "Execute-phase verification shall check that the codebase delivers what the phase goal promised after task execution completes, using goal-backward analysis",
-      "category": "Solver-Discovered",
-      "status": "Proposed",
-      "provenance": {
-        "source_file": "README.md",
-        "milestone": "solver-tui"
-      }
-    },
-    {
-      "id": "SOLVE-08",
-      "text": "/nf:solve-report shall generate a before/after summary including full formal verification results showing what changed during the solve cycle",
-      "category": "Solver-Discovered",
-      "status": "Proposed",
-      "provenance": {
-        "source_file": "README.md",
-        "milestone": "solver-tui"
-      }
-    },
-    {
-      "id": "SOLVE-09",
-      "text": "The circuit breaker shall detect ping-pong commit oscillation by collapsing consecutive commits on the same file set into run-groups and triggering when 3+ alternating groups are detected, blocking write commands until Haiku classification confirms genuine oscillation, quorum diagnosis identifies the structural coupling, and user approval is granted",
-      "category": "Solver-Discovered",
-      "status": "Proposed",
-      "provenance": {
-        "source_file": "README.md",
-        "milestone": "solver-tui"
-      }
-    },
-    {
-      "id": "SOLVE-10",
-      "text": "Quorum dispatch MUST enforce per-provider concurrency limits via file-based semaphores to prevent rate-limit cascades when multiple slots share an API provider",
-      "category": "Solver-Discovered",
-      "status": "Proposed",
-      "provenance": {
-        "source_file": "bin/provider-concurrency.cjs",
-        "milestone": "solver-tui"
-      }
-    },
-    {
-      "id": "SOLVE-11",
-      "text": "Run nf:solve against a versioned fixture set and report per-fixture and aggregate pass rates via the `npm run benchmark:solve` command.",
-      "category": "Solver-Discovered",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Quick task 397 delivered bin/nf-benchmark-solve.cjs as a repeatable, version-controlled benchmark harness for validating nf:solve's autonomous issue resolution capacity. The fixture set (.planning/formal/solve-benchmark-fixtures.json) defines synthetic test cases covering diverse solver modes.",
-      "source_file": ".planning/quick/397-build-a-command-to-run-nf-solve-against-/397-PLAN.md",
-      "milestone": "quick-397"
-    },
-    {
       "id": "SPEC-01",
       "text": "Stop hook formalized in `QGSDStopHook.tla` + `MCStopHook.cfg`, TLC verifies safety + liveness",
       "category": "Formal Verification",
@@ -5156,7 +5064,7 @@
     },
     {
       "id": "SPEC-02",
-      "text": "QGSDOscillation.tla is consistent with nf-circuit-breaker.js (no specification drift)",
+      "text": "`QGSDOscillation.tla` audited against `qgsd-circuit-breaker.js` — no drift detected",
       "category": "Formal Verification",
       "tier": "user",
       "phase": "v0.21-04",
@@ -5301,7 +5209,7 @@
     },
     {
       "id": "STD-02",
-      "text": "All MCP server repos use Gen2 per-tool architecture (*.tool.ts + registry.ts); no Gen1 files (definitions.ts, handlers.ts) exist",
+      "text": "All 4 Gen1 MCP server repos (claude, codex, copilot, openhands) ported to Gen2 per-tool architecture (`*.tool.ts` + `registry.ts`) with Gen1 files (`definitions.ts`, `handlers.ts`) removed — all repos on main branch",
       "category": "Testing & Quality",
       "tier": "user",
       "phase": "unknown",
@@ -5714,28 +5622,6 @@
       }
     },
     {
-      "id": "TOOL-01",
-      "text": "The /nf:coderlm skill exposes four query subcommands (callers, implementation, tests, peek) that provide interactive access to the coderlm symbol server for code navigation and analysis.",
-      "category": "Tool Features",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "The coderlm symbol server indexes source code symbols and call graphs, but accessing its query capabilities previously required direct curl requests or raw Node invocations. The query subcommands expose this API through a first-class skill interface, enabling developers to interactively look up callers of a symbol, find where symbols are defined, discover associated tests, and preview source code—making code navigation and understanding accessible from within nForma.",
-      "provenance": {
-        "source_file": ".planning/quick/399-add-a-nf-coderlm-query-skill-that-lets-u/399-PLAN.md",
-        "milestone": "quick-399"
-      }
-    },
-    {
-      "id": "TOOL-02",
-      "text": "The /nf:harden skill runs an adversarial hardening loop—iteratively generating edge-case tests, fixing failures, and converging after 2 consecutive zero-change iterations or exhausting the iteration cap (max 10).",
-      "category": "Tool Features",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Edge-case bugs often escape standard verification steps. The adversarial hardening loop catches gaps missed by typical test coverage by spawning an adversarial test writer that probes boundary conditions, type coercion, and error propagation, then automatically fixes failures. The --area flag scopes testing to specific subsystems; --full mode expands the categories of edge cases probed. Integration with nf:quick --full (max 5 iterations) gives fast tasks a hardening step that strengthens the implementation before final requirement elevation.",
-      "source_file": ".planning/quick/400-add-nf-harden-adversarial-skill/400-PLAN.md",
-      "milestone": "quick-400"
-    },
-    {
       "id": "TRACE-01",
       "text": "`bin/generate-traceability-matrix.cjs` reads model-registry, requirements.json, and check-results.ndjson to produce `.formal/traceability-matrix.json` with property-level links between requirements and formal properties",
       "category": "Formal Verification",
@@ -5885,66 +5771,6 @@
         "milestone": "v0.20"
       },
       "category_raw": "Triage Bundle"
-    },
-    {
-      "id": "TRUNC-01",
-      "text": "Quorum slot subprocess output buffers (stdout/stderr) SHALL have explicit size caps, and when a cap is hit the truncation event MUST be recorded in the YAML result block with a machine-readable marker (truncated: true, original_size_bytes: N).",
-      "category": "Quorum & Dispatch",
-      "priority": "must",
-      "background": "bin/call-quorum-slot.cjs caps stdout at 10MB and stderr at 4KB; bin/quorum-slot-dispatch.cjs caps at 50KB. The 50KB cap appends [OUTPUT TRUNCATED] but the 10MB cap is silent. Neither records structured truncation metadata.",
-      "provenance": {
-        "source_file": "bin/quorum-slot-dispatch.cjs",
-        "source_line": "1296-1320"
-      },
-      "status": "Complete"
-    },
-    {
-      "id": "TRUNC-02",
-      "text": "The verdict extraction pipeline (parseVerdict, parseReasoning, parseCitations) MUST operate on the FULL subprocess output buffer, not on a pre-truncated subset. If the buffer was truncated before verdict extraction, the verdict MUST be tagged as potentially incomplete (verdict_integrity: 'truncated').",
-      "category": "Quorum & Dispatch",
-      "priority": "must",
-      "background": "Currently parseVerdict runs on the full 50KB buffer (L3), but the raw field in emitResultBlock is independently truncated to 5KB (L6). If L1 (10MB) fires before L3, verdict extraction operates on truncated data. The verdict defaults to FLAG when no verdict: line is found, but a FLAG-from-truncation is indistinguishable from a genuine FLAG.",
-      "provenance": {
-        "source_file": "bin/quorum-slot-dispatch.cjs",
-        "source_line": "800-816, 1033, 1344-1346"
-      },
-      "status": "Complete"
-    },
-    {
-      "id": "TRUNC-03",
-      "text": "The consensus gate (nf-stop.js) MUST distinguish between a genuine verdict (APPROVE/REJECT/FLAG from complete output) and a default verdict (FLAG from missing verdict: line due to truncation or malformed output). Truncation-derived verdicts MUST NOT count toward quorum consensus without explicit acknowledgment.",
-      "category": "Hooks & Enforcement",
-      "priority": "must",
-      "background": "nf-stop.js validates verdicts via regex /verdict:\\s*UNAVAIL/i but does not check whether the verdict was extracted from complete output. A slot whose verbose response was truncated at 50KB, losing the verdict: line, silently becomes FLAG — which may break or distort consensus.",
-      "provenance": {
-        "source_file": "hooks/nf-stop.js",
-        "source_line": "494-496"
-      },
-      "status": "Complete"
-    },
-    {
-      "id": "TRUNC-04",
-      "text": "Quorum telemetry (quorum-rounds JSONL) MUST record per-slot truncation metadata: whether truncation occurred, which layer triggered it (L1/L2/L3), original output size, and whether the verdict was extracted from complete or truncated data.",
-      "category": "Observability & Diagnostics",
-      "priority": "must",
-      "background": "recordTelemetry() in call-quorum-slot.cjs records slot, round, verdict, latency, provider, error_type — but has no fields for truncation state. The truncated boolean in quorum-slot-dispatch.cjs exists locally but never propagates to telemetry.",
-      "provenance": {
-        "source_file": "bin/call-quorum-slot.cjs",
-        "source_line": "57-80"
-      },
-      "status": "Complete"
-    },
-    {
-      "id": "TRUNC-05",
-      "text": "The emitResultBlock raw field truncation (5KB cap) MUST append a machine-readable truncation suffix and MUST NOT destroy structured verdict/reasoning/citations lines if they appear within the raw output.",
-      "category": "Quorum & Dispatch",
-      "priority": "should",
-      "background": "emitResultBlock truncates rawOutput to 5000 chars for the YAML raw: field (line 1033) without any marker. Since verdict/reasoning are extracted separately before this truncation, this primarily affects debugging — but if raw is used downstream for re-parsing or audit, the silent truncation creates integrity gaps.",
-      "provenance": {
-        "source_file": "bin/quorum-slot-dispatch.cjs",
-        "source_line": "1032-1037"
-      },
-      "status": "Complete"
     },
     {
       "id": "TUI-01",
@@ -6155,8 +5981,8 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/ux-feedback-safety.als"
@@ -6170,8 +5996,8 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/ux-feedback-safety.als"
@@ -6185,8 +6011,8 @@
       "phase": "unknown",
       "status": "Complete",
       "provenance": {
-        "source_file": "nf-baseline",
-        "milestone": "v0.33"
+        "source_file": ".planning/milestones/v0.42-REQUIREMENTS.md",
+        "milestone": "v0.42"
       },
       "formal_models": [
         ".planning/formal/alloy/ux-feedback-safety.als"
@@ -6273,16 +6099,6 @@
       "category_raw": "Verification Gate"
     },
     {
-      "id": "VERIFY-03",
-      "text": "Generated formal model test stubs use ROOT-relative path resolution via `path.resolve(__dirname, '..', '..', '..')` and contain semantic assertions (`assert.match()` checks) verifying configuration and tool references, eliminating hardcoded absolute paths for CI portability.",
-      "category": "Testing & Quality",
-      "phase": "unknown",
-      "status": "Complete",
-      "background": "Solver-generated test stubs initially contained hardcoded absolute paths (e.g., `/Users/jonathanborduas/code/QGSD/bin/...`) that blocked CI portability and broke on different systems. This requirement ensures all 16 formal model test stubs use portable ROOT-relative path resolution and include semantic verification checks consistent with their associated requirements.",
-      "source_file": ".planning/quick/387-issue-84/387-PLAN.md",
-      "milestone": "quick-387"
-    },
-    {
       "id": "VIS-01",
       "text": "All TUI screenshots regenerated via VHS tape automation after README structural changes",
       "category": "Visual Assets",
@@ -6299,7 +6115,7 @@
     },
     {
       "id": "VIS-02",
-      "text": "VHS tape uses zsh shell, explicit PATH export, and CLAUDECODE unset for CI reliability",
+      "text": "VHS tape hardened for CI reliability (zsh shell, explicit PATH export, CLAUDECODE unset)",
       "category": "Visual Assets",
       "tier": "user",
       "phase": "v0.32-04",
@@ -6460,54 +6276,8 @@
         "source_file": ".planning/milestones/v0.35-REQUIREMENTS.md",
         "milestone": "unknown"
       }
-    },
-    {
-      "category": "Observability & Diagnostics",
-      "category_raw": "Scoreboard Classification Taxonomy",
-      "tier": "user",
-      "phase": "unknown",
-      "status": "Complete",
-      "provenance": {
-        "source_file": ".planning/formal/alloy/taxonomy-safety.als",
-        "milestone": "unknown"
-      },
-      "formal_models": [
-        ".planning/formal/alloy/taxonomy-safety.als"
-      ],
-      "id": "SCBD-05",
-      "text": "Issue/task classification is deterministic — the same task description yields exactly one classification (`category`, `subcategory`, `is_new`); task content cannot inject or alter the category taxonomy (classifyWithHaiku in update-scoreboard.cjs)."
-    },
-    {
-      "category": "Observability & Diagnostics",
-      "category_raw": "Scoreboard Classification Taxonomy",
-      "tier": "user",
-      "phase": "unknown",
-      "status": "Complete",
-      "provenance": {
-        "source_file": ".planning/formal/alloy/taxonomy-safety.als",
-        "milestone": "unknown"
-      },
-      "formal_models": [
-        ".planning/formal/alloy/taxonomy-safety.als"
-      ],
-      "id": "SCBD-06",
-      "text": "When classification returns `is_new=false`, the returned category already exists in the known-categories snapshot it was classified against (taxonomy closure)."
-    },
-    {
-      "category": "Observability & Diagnostics",
-      "category_raw": "Scoreboard Classification Taxonomy",
-      "tier": "user",
-      "phase": "unknown",
-      "status": "Complete",
-      "provenance": {
-        "source_file": ".planning/formal/alloy/taxonomy-safety.als",
-        "milestone": "unknown"
-      },
-      "formal_models": [
-        ".planning/formal/alloy/taxonomy-safety.als"
-      ],
-      "id": "SCBD-07",
-      "text": "When classification returns `is_new=true`, the returned category is genuinely absent from the known-categories snapshot it was classified against (new-category consistency)."
     }
-  ]
+  ],
+  "schema_version": "1",
+  "source": ".planning/REQUIREMENTS.md"
 }

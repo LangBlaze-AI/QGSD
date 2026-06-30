@@ -8,21 +8,28 @@
     "type": "assertion"
   },
   "source_files": [
+    "bin/nForma.cjs",
+    "bin/solve-tui.cjs",
     "bin/manage-agents-core.cjs",
-    "bin/nf-solve.cjs"
+    "bin/formal-proximity.cjs",
+    "bin/repowise/cochange.test.cjs",
+    "bin/bench-formal-spec.cjs",
+    "bin/nf-solve.cjs",
+    "hooks/nf-node-eval-guard.test.js"
   ],
-  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/manage-agents-core.cjs",
+  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/nForma.cjs",
   "source_files_absolute": [
+    "/Users/jonathanborduas/code/QGSD/bin/nForma.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/solve-tui.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/manage-agents-core.cjs",
-    "/Users/jonathanborduas/code/QGSD/bin/nf-solve.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/formal-proximity.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/repowise/cochange.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/bench-formal-spec.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/nf-solve.cjs",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-node-eval-guard.test.js"
   ],
-  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/manage-agents-core.cjs');",
+  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/nForma.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

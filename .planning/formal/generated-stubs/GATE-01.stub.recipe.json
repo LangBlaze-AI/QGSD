@@ -1,6 +1,6 @@
 {
   "requirement_id": "GATE-01",
-  "requirement_text": "gate-a-grounding.cjs accepts a --base-ref <sha> flag that scopes grounding analysis to actions from files changed since the given commit, enforcing the 80% target independently on the scoped subset while reporting the global score as informational",
+  "requirement_text": "Loop 2 (simulateSolutionLoop with onTweakFix) fires as pre-commit gate in quick.md --full executor",
   "formal_property": {
     "name": "Bool",
     "model_file": ".planning/formal/alloy/gate-a-scoping.als",
@@ -8,19 +8,16 @@
     "type": "assertion"
   },
   "source_files": [
-    "bin/gate-a-grounding.cjs"
+    "bin/compute-per-model-gates.cjs",
+    "bin/formalization-candidates.cjs"
   ],
-  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/gate-a-grounding.cjs",
+  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/compute-per-model-gates.cjs",
   "source_files_absolute": [
-    "/Users/jonathanborduas/code/QGSD/bin/gate-a-grounding.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/compute-per-model-gates.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/formalization-candidates.cjs"
   ],
-  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/gate-a-grounding.cjs');",
+  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/compute-per-model-gates.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-30T11:33:52.420Z",
+  "generated": "2026-06-30T11:35:08.143Z",
   "total_unmapped_events": 0,
   "candidates": [],
   "missing_transitions": [
@@ -79,7 +79,7 @@
     {
       "from_action": "security_sweep",
       "to_action": "security_sweep",
-      "count": 4223,
+      "count": 4225,
       "note": "XState mapping missing: from=null, to=null"
     },
     {

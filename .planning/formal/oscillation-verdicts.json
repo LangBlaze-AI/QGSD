@@ -1,22 +1,22 @@
 {
-  "generated": "2026-03-10T14:15:30.638Z",
+  "generated": "2026-06-30T12:02:49.318Z",
   "window_size": 20,
   "min_points": 5,
   "entry_count": 20,
   "layers": {
     "r_to_f": {
-      "trend": "STABLE",
-      "z_score": 0,
-      "oscillation_count": 0,
+      "trend": "OSCILLATING",
+      "z_score": 0.2883483941000721,
+      "oscillation_count": 3,
       "credits_remaining": 1,
       "blocked": false,
       "last_direction": "flat",
       "grace_period": false
     },
     "f_to_t": {
-      "trend": "STABLE",
-      "z_score": 0,
-      "oscillation_count": 0,
+      "trend": "OSCILLATING",
+      "z_score": 0.20991342856239587,
+      "oscillation_count": 3,
       "credits_remaining": 1,
       "blocked": false,
       "last_direction": "flat",
@@ -32,27 +32,27 @@
       "grace_period": false
     },
     "t_to_c": {
-      "trend": "STABLE",
+      "trend": "INSUFFICIENT_DATA",
       "z_score": 0,
       "oscillation_count": 0,
       "credits_remaining": 1,
       "blocked": false,
-      "last_direction": "flat",
-      "grace_period": true
+      "last_direction": null,
+      "grace_period": false
     },
     "f_to_c": {
-      "trend": "STABLE",
-      "z_score": -0.6255432421712244,
+      "trend": "INSUFFICIENT_DATA",
+      "z_score": 0,
       "oscillation_count": 0,
       "credits_remaining": 1,
       "blocked": false,
-      "last_direction": "flat",
-      "grace_period": true
+      "last_direction": null,
+      "grace_period": false
     },
     "r_to_d": {
-      "trend": "STABLE",
-      "z_score": 0,
-      "oscillation_count": 0,
+      "trend": "OSCILLATING",
+      "z_score": 0.24489899998946185,
+      "oscillation_count": 3,
       "credits_remaining": 1,
       "blocked": false,
       "last_direction": "flat",
@@ -60,7 +60,7 @@
     },
     "d_to_c": {
       "trend": "STABLE",
-      "z_score": -0.03244428422615251,
+      "z_score": 1.1545238570931773,
       "oscillation_count": 0,
       "credits_remaining": 1,
       "blocked": false,
@@ -78,7 +78,7 @@
     },
     "c_to_r": {
       "trend": "STABLE",
-      "z_score": 0.5839971160707451,
+      "z_score": 0,
       "oscillation_count": 0,
       "credits_remaining": 1,
       "blocked": false,
@@ -87,7 +87,7 @@
     },
     "t_to_r": {
       "trend": "STABLE",
-      "z_score": 0.5839971160707451,
+      "z_score": 0,
       "oscillation_count": 0,
       "credits_remaining": 1,
       "blocked": false,
@@ -103,16 +103,7 @@
       "last_direction": "flat",
       "grace_period": false
     },
-    "l1_to_l2": {
-      "trend": "STABLE",
-      "z_score": 0,
-      "oscillation_count": 0,
-      "credits_remaining": 1,
-      "blocked": false,
-      "last_direction": "flat",
-      "grace_period": false
-    },
-    "l2_to_l3": {
+    "l1_to_l3": {
       "trend": "STABLE",
       "z_score": 0,
       "oscillation_count": 0,
@@ -122,30 +113,30 @@
       "grace_period": false
     },
     "l3_to_tc": {
-      "trend": "OSCILLATING",
-      "z_score": -0.10425720702853739,
-      "oscillation_count": 3,
-      "credits_remaining": 1,
-      "blocked": false,
-      "last_direction": "down",
-      "grace_period": false
-    },
-    "per_model_gates": {
-      "trend": "DECREASING",
-      "z_score": -1.9808869335422103,
+      "trend": "STABLE",
+      "z_score": -1.644321857072101,
       "oscillation_count": 0,
       "credits_remaining": 1,
       "blocked": false,
       "last_direction": "flat",
       "grace_period": false
     },
-    "git_heatmap": {
-      "trend": "INCREASING",
-      "z_score": 3.3742055595198606,
-      "oscillation_count": 3,
+    "per_model_gates": {
+      "trend": "INSUFFICIENT_DATA",
+      "z_score": 0,
+      "oscillation_count": 0,
       "credits_remaining": 1,
       "blocked": false,
-      "last_direction": "flat",
+      "last_direction": null,
+      "grace_period": false
+    },
+    "git_heatmap": {
+      "trend": "INSUFFICIENT_DATA",
+      "z_score": 0,
+      "oscillation_count": 0,
+      "credits_remaining": 1,
+      "blocked": false,
+      "last_direction": null,
       "grace_period": false
     },
     "git_history": {
@@ -167,12 +158,30 @@
       "grace_period": false
     },
     "hazard_model": {
-      "trend": "STABLE",
-      "z_score": -0.5212860351426869,
+      "trend": "INSUFFICIENT_DATA",
+      "z_score": 0,
       "oscillation_count": 0,
       "credits_remaining": 1,
       "blocked": false,
-      "last_direction": "flat",
+      "last_direction": null,
+      "grace_period": false
+    },
+    "h_to_m": {
+      "trend": "INSUFFICIENT_DATA",
+      "z_score": 0,
+      "oscillation_count": 0,
+      "credits_remaining": 1,
+      "blocked": false,
+      "last_direction": null,
+      "grace_period": false
+    },
+    "b_to_f": {
+      "trend": "INSUFFICIENT_DATA",
+      "z_score": 0,
+      "oscillation_count": 0,
+      "credits_remaining": 1,
+      "blocked": false,
+      "last_direction": null,
       "grace_period": false
     }
   }

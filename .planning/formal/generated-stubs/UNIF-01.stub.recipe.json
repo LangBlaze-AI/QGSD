@@ -9,20 +9,21 @@
   },
   "source_files": [
     "bin/nForma.cjs",
-    "bin/run-formal-check.cjs"
+    "bin/formal-scope-scan.cjs",
+    "bin/debug-formal-context.cjs",
+    "bin/run-formal-check.cjs",
+    "bin/solution-simulation-loop.test.cjs"
   ],
   "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/nForma.cjs",
   "source_files_absolute": [
     "/Users/jonathanborduas/code/QGSD/bin/nForma.cjs",
-    "/Users/jonathanborduas/code/QGSD/bin/run-formal-check.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/formal-scope-scan.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/debug-formal-context.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/run-formal-check.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/solution-simulation-loop.test.cjs"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/nForma.cjs');",
   "test_strategy": "behavioral",
   "template": "import-and-call",
-  "template_boilerplate": "const mod = require(SOURCE);\nconst result = mod.FUNCTION(INPUT);\nassert.strictEqual(result, EXPECTED);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const mod = require(SOURCE);\nconst result = mod.FUNCTION(INPUT);\nassert.strictEqual(result, EXPECTED);"
 }

@@ -9,26 +9,43 @@
   },
   "source_files": [
     "bin/aggregate-requirements.test.cjs",
+    "bin/call-quorum-slot.cjs",
     "bin/task-classifier.cjs",
+    "bin/repowise/skeleton.cjs",
+    "bin/repowise/hotspot.cjs",
+    "bin/repowise/cochange.cjs",
     "bin/nForma.test.cjs",
     "bin/install.js",
-    "bin/nf-solve.cjs"
+    "bin/nf-solve.cjs",
+    "bin/diagnostic-diff-generator.test.cjs",
+    "bin/config-update.test.cjs",
+    "bin/quorum-slot-dispatch.cjs",
+    "hooks/dist/config-loader.js",
+    "hooks/dist/nf-post-edit-format.js",
+    "hooks/config-loader.js",
+    "hooks/nf-post-edit-format.js"
   ],
   "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/aggregate-requirements.test.cjs",
   "source_files_absolute": [
     "/Users/jonathanborduas/code/QGSD/bin/aggregate-requirements.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/call-quorum-slot.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/task-classifier.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/repowise/skeleton.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/repowise/hotspot.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/repowise/cochange.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/nForma.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/install.js",
-    "/Users/jonathanborduas/code/QGSD/bin/nf-solve.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/nf-solve.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/diagnostic-diff-generator.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/config-update.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/quorum-slot-dispatch.cjs",
+    "/Users/jonathanborduas/code/QGSD/hooks/dist/config-loader.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-post-edit-format.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/config-loader.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-post-edit-format.js"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/aggregate-requirements.test.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

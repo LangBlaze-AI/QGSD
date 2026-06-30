@@ -1,9 +1,9 @@
 {
   "requirement_id": "EVID-03",
-  "requirement_text": "`bin/git-heatmap.cjs` mines git history for numerical adjustments, bugfix hotspots, and churn ranking, producing `.planning/formal/evidence/git-heatmap.json` with multiplicative priority scoring and formal-coverage cross-reference for uncovered hot zones",
+  "requirement_text": "Failure taxonomy classifies all check-result failures into 5 categories (crash, timeout, logic-violation, drift, degradation)",
   "formal_property": {
-    "name": "Bool",
-    "model_file": ".planning/formal/alloy/evidence-scope-scan.als",
+    "name": "TraceEvent",
+    "model_file": ".planning/formal/alloy/evidence-layer.als",
     "definition": "",
     "type": "assertion"
   },
@@ -15,12 +15,7 @@
     "/Users/jonathanborduas/code/QGSD/bin/failure-taxonomy.cjs"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/failure-taxonomy.cjs');",
-  "test_strategy": "structural",
-  "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "test_strategy": "behavioral",
+  "template": "import-and-call",
+  "template_boilerplate": "const mod = require(SOURCE);\nconst result = mod.FUNCTION(INPUT);\nassert.strictEqual(result, EXPECTED);"
 }

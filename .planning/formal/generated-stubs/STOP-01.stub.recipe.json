@@ -8,19 +8,16 @@
     "type": "invariant"
   },
   "source_files": [
-    "bin/requirement-map.cjs"
+    "bin/requirement-map.cjs",
+    "commands/nf/solve-report.md"
   ],
   "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/requirement-map.cjs",
   "source_files_absolute": [
-    "/Users/jonathanborduas/code/QGSD/bin/requirement-map.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/requirement-map.cjs",
+    "/Users/jonathanborduas/code/QGSD/commands/nf/solve-report.md"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/requirement-map.cjs');",
   "test_strategy": "constant",
   "template": "config-validate",
-  "template_boilerplate": "const { DEFAULT_CONFIG } = require(CONFIG_PATH);\nassert.strictEqual(resolveConfigPath(PATH, DEFAULT_CONFIG), EXPECTED);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const { DEFAULT_CONFIG } = require(CONFIG_PATH);\nassert.strictEqual(resolveConfigPath(PATH, DEFAULT_CONFIG), EXPECTED);"
 }
