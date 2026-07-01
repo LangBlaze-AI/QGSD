@@ -2395,10 +2395,14 @@ function sweepDtoC() {
     categoryBreakdown[bc.category] = (categoryBreakdown[bc.category] || 0) + 1;
   }
 
-  // Persist D→C broken claims for manual review
+  // Persist D→C broken claims for manual review.
+  // Skipped under --report-only: the residual (weightedResidual) is already
+  // computed above from a live doc scan, so this write is pure persistence.
+  // Writing it during a diagnostic run mutates the tree and breaks report-only's
+  // no-mutation contract (and its run-to-run idempotency).
   try {
     const evidenceDir = path.join(ROOT, '.planning', 'formal', 'evidence');
-    if (fs.existsSync(evidenceDir)) {
+    if (!reportOnly && fs.existsSync(evidenceDir)) {
       fs.writeFileSync(
         path.join(evidenceDir, 'doc-claims.json'),
         JSON.stringify({
@@ -4138,8 +4142,14 @@ function sweepReqQuality() {
     const extraDetail = {};
 
     // Fold: aggregate-requirements sync check
+    // `--report-only` is a no-mutation diagnostic sweep: pass --dry-run so the
+    // sync CHECK still runs (exit code preserved) but requirements.json is NOT
+    // rewritten. A bare invocation refreshes `aggregated_at`, dirtying the file
+    // on every diagnostic run — the churn that pollutes the tree and makes two
+    // consecutive report-only runs non-idempotent.
     try {
-      const aggResult = spawnTool('bin/aggregate-requirements.cjs', []);
+      const aggArgs = reportOnly ? ['--dry-run'] : [];
+      const aggResult = spawnTool('bin/aggregate-requirements.cjs', aggArgs);
       extraDetail.aggregate_sync = aggResult.exitCode === 0;
       if (aggResult.exitCode !== 0) extraResidual += 1;
     } catch (_) { /* fail-open */ }
@@ -6794,11 +6804,15 @@ function main() {
     process.stderr.write(TAG + ' Step 8a: Skipped — consecutive_clean_sessions=' + (solveState.consecutive_clean_sessions || 0) + ' (need 3)\n');
   }
 
-  // Append trend entry to JSONL (after solve-state.json, before session persistence)
-  appendTrendEntry(finalResidual, converged, iterations.length, {
-    root: ROOT,
-    fastMode: fastMode,
-  });
+  // Append trend entry to JSONL (after solve-state.json, before session persistence).
+  // Report-only is a diagnostic sweep, not a progress-making run — it must not
+  // append to the convergence trend log (a mutation that also dirties the tree).
+  if (!reportOnly) {
+    appendTrendEntry(finalResidual, converged, iterations.length, {
+      root: ROOT,
+      fastMode: fastMode,
+    });
+  }
 
   // Update oscillation verdicts after trend entry is written
   if (!reportOnly) {
@@ -6871,8 +6885,13 @@ function main() {
   };
   const jsonText = JSON.stringify(jsonObj, null, 2);
 
-  // Persist session summary before stdout/exit
-  persistSessionSummary(reportText, jsonText, converged, iterations);
+  // Persist session summary before stdout/exit.
+  // Report-only is a no-mutation diagnostic sweep: it must not drop a
+  // solve-session-*.md file into .planning/formal/solve-sessions/ (a tree
+  // mutation, and a per-run one that breaks report-only idempotency).
+  if (!reportOnly) {
+    persistSessionSummary(reportText, jsonText, converged, iterations);
+  }
 
   const exitCode = 0;
   const outputText = jsonMode ? (jsonText + '\n') : reportText;
