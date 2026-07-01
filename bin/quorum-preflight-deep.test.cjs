@@ -15,8 +15,13 @@ describe('shouldRunDeepProbe — when to run the deep gate', () => {
   it('runs when --deep is set', () => {
     assert.equal(shouldRunDeepProbe({ deep: true, degraded: false, budgetMs: null }), true);
   });
-  it('auto-runs when the panel is degraded even without --deep', () => {
-    assert.equal(shouldRunDeepProbe({ deep: false, degraded: true, budgetMs: null }), true);
+  it('auto-runs on a degraded panel WITH an explicit sufficient budget (real dispatch path)', () => {
+    assert.equal(shouldRunDeepProbe({ deep: false, degraded: true, budgetMs: 60000, minBudgetMs: 45000 }), true);
+  });
+  it('does NOT auto-run on degraded with no budget — the cheap --all --probe path stays fast', () => {
+    // Regression guard: auto-running live deep probes in the budget-less liveness path
+    // blew its <8s budget (spawnSync ETIMEDOUT). Auto-enable requires an explicit budget.
+    assert.equal(shouldRunDeepProbe({ deep: false, degraded: true, budgetMs: null }), false);
   });
   it('does NOT run on a healthy panel with no --deep (happy path untouched)', () => {
     assert.equal(shouldRunDeepProbe({ deep: false, degraded: false, budgetMs: null }), false);

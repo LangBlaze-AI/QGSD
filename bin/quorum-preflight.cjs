@@ -32,6 +32,7 @@ const { resolveCli }  = require('./resolve-cli.cjs');
 const https           = require('https');
 const http            = require('http');
 const { resolveSpawnTarget } = require('./resolve-cli.cjs');
+const { resolveArgsTemplate } = require('./provider-arg-templates.cjs');
 const { loadProviders } = require('./resolve-providers.cjs');
 
 // Probe is ON by default for --all; --no-probe to skip, --probe still accepted for compat
@@ -375,6 +376,43 @@ function probeInferenceHistory(ttlMinutes = 30) {
   } catch (_) { return {}; } // fail-open
 }
 
+// ─── P1 — live deep inference probe (spawn) ──────────────────────────────────
+// Runs the provider's deep_probe prompt through the real CLI and classifies the
+// result via classifyDeepProbeResult. Regression-safe by construction: a spawn/args
+// error or a timeout resolves to ok:true (SKIP/INCONCLUSIVE) — the deep probe can
+// ONLY downgrade a slot on a fast explicit auth/quota signal, never on slowness or a
+// harness problem, so it cannot re-create the P2 slow-slot false-kill or knock out a
+// slot L1/L2 already vetted.
+function deepProbeSlot(provider, budgetMs) {
+  return new Promise((resolve) => {
+    const probe = provider.deep_probe || { prompt: 'respond with: PROBE_OK', expect: 'PROBE_OK', timeout_ms: 45000 };
+    const target = resolveSpawnTarget(provider) || provider.cli;
+    const tmpl = resolveArgsTemplate(provider);
+    if (!target || !Array.isArray(tmpl)) {
+      resolve({ ok: true, classification: 'SKIP', reason: 'no spawn target / args_template' });
+      return;
+    }
+    const args = tmpl.map(a => (a === '{prompt}' ? probe.prompt : a));
+    const timeoutMs = Math.min(probe.timeout_ms || 45000, budgetMs == null ? 2147483647 : budgetMs);
+    let out = '', done = false, timedOut = false, child;
+    const finish = (r) => {
+      if (done) return; done = true;
+      try { process.kill(-child.pid, 'SIGKILL'); } catch (_) { try { child.kill('SIGKILL'); } catch (_) {} }
+      resolve(r);
+    };
+    try {
+      child = spawn(target, args, { env: { ...process.env, ...(provider.env || {}) }, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
+    } catch (e) { resolve({ ok: true, classification: 'SKIP', reason: 'spawn error: ' + e.message }); return; }
+    const timer = setTimeout(() => { timedOut = true; finish(classifyDeepProbeResult(out, { timedOut: true, expect: probe.expect })); }, timeoutMs);
+    // ccr slots read the prompt from stdin; others are non-interactive.
+    try { if (provider.type === 'ccr') { child.stdin.write(probe.prompt); child.stdin.end(); } else { child.stdin.end(); } } catch (_) {}
+    child.stdout.on('data', d => { if (out.length < 65536) out += d.toString(); });
+    child.stderr.on('data', d => { if (out.length < 65536) out += d.toString(); });
+    child.on('close', () => { clearTimeout(timer); if (!timedOut) finish(classifyDeepProbeResult(out, { timedOut: false, expect: probe.expect })); });
+    child.on('error', (e) => { clearTimeout(timer); finish({ ok: true, classification: 'SKIP', reason: 'spawn error: ' + e.message }); });
+  });
+}
+
 // ─── Two-layer parallel health probe ────────────────────────────────────────
 async function probeHealth(providers) {
   const cache = loadCache();
@@ -661,10 +699,36 @@ async function main() {
         process.stderr.write(`[preflight] Tiered ordering: ${output.primary_slots.length} primary (CLI) + ${output.backup_slots.length} backup (HTTP API)\n`);
       }
 
+      // ─── P1 — deep inference gate. L1/L2/L3 can pass a quota/auth-dead slot (L2 even
+      // treats 401/403 as reachable). Run the real deep_probe when --deep OR when the
+      // prelim panel is already degraded, budget permitting, and downgrade any slot that
+      // returns a FAST auth/quota signal (timeouts/spawn errors never downgrade — see
+      // deepProbeSlot/classifyDeepProbeResult). This runs off the happy path by default.
+      const prelimGate = computeQuorumGate(output.available_slots.length, maxSize, FORCE_QUORUM);
+      if (shouldRunDeepProbe({ deep: DEEP_PROBE, degraded: prelimGate.degraded, budgetMs: BUDGET_MS })) {
+        const results = await Promise.all(
+          output.available_slots.map(async (name) => ({ name, r: await deepProbeSlot(providerByName.get(name) || {}, BUDGET_MS) }))
+        );
+        const downgraded = results.filter(({ r }) => r && r.ok === false);
+        if (downgraded.length > 0) {
+          const deadNames = new Set(downgraded.map(d => d.name));
+          for (const { name, r } of downgraded) {
+            if (output.health[name]) { output.health[name].healthy = false; output.health[name].layer4 = r; }
+            output.unavailable_slots.push({ name, reason: `layer4: ${r.reason}` });
+          }
+          output.available_slots = output.available_slots.filter(n => !deadNames.has(n));
+          output.primary_slots = output.available_slots.filter(s => typeMap.get(s) !== 'http');
+          output.backup_slots = output.available_slots.filter(s => typeMap.get(s) === 'http').concat(dedupedOut);
+          process.stderr.write(`[preflight] deep-probe downgraded ${downgraded.length} slot(s): ${downgraded.map(d => d.name).join(', ')}\n`);
+        }
+        output.deep_probe_ran = true;
+      }
+
       // ─── P3 — authoritative degraded-panel gate (see computeQuorumGate). Machine
       // field so the block/waiver decision is deterministic + testable, not re-derived
       // by LLM-interpreted markdown. `available_count` = distinct healthy slots eligible
-      // to vote (deduped primaries + HTTP backups; demoted duplicates excluded).
+      // to vote (deduped primaries + HTTP backups; demoted duplicates excluded). Computed
+      // AFTER the deep-probe pass so the gate reflects the post-deep roster.
       Object.assign(output, computeQuorumGate(output.available_slots.length, maxSize, FORCE_QUORUM));
       if (output.blocked) {
         process.stderr.write(`[preflight] ${output.gate_reason}\n`);
@@ -746,13 +810,16 @@ function validateProviders(providers) {
 // that could take the whole system down, so it lands with a mock-CLI integration
 // harness in a follow-up. These two pure helpers encode the safe policy and are unit-tested.
 
-// Run the deep probe when explicitly requested OR when the panel is degraded (so a
-// reduced panel is verified with real inference before we trust it), but only if the
-// remaining time budget covers at least one probe.
+// Decide whether to run the (expensive, spawn-per-slot) deep probe.
+//  - Explicit --deep: run (subject to budget when one is set).
+//  - Degraded panel WITHOUT --deep: auto-enable ONLY when an explicit budget is set and
+//    covers a probe. The default cheap `--all --probe` liveness path passes no budget
+//    (budgetMs == null), so it must NOT pay deep-probe latency there — the real quorum
+//    dispatch passes --budget-ms, so it still auto-verifies a reduced panel with inference.
 function shouldRunDeepProbe({ deep, degraded, budgetMs, minBudgetMs = 45000 }) {
-  if (!deep && !degraded) return false;
-  if (budgetMs == null) return true;          // no budget cap → allowed
-  return budgetMs >= minBudgetMs;
+  if (deep) return budgetMs == null ? true : budgetMs >= minBudgetMs;
+  if (!degraded) return false;
+  return budgetMs != null && budgetMs >= minBudgetMs;
 }
 
 // Classify a deep-probe result. CRITICAL: downgrade a slot ONLY on a FAST, explicit
@@ -781,4 +848,4 @@ if (require.main === module) {
   main().catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { dedupBySlotIdentity, probeHealth, findProviders, computeQuorumGate, validateProviders, shouldRunDeepProbe, classifyDeepProbeResult };
+module.exports = { dedupBySlotIdentity, probeHealth, findProviders, computeQuorumGate, validateProviders, shouldRunDeepProbe, classifyDeepProbeResult, deepProbeSlot };
