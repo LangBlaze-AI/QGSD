@@ -42,6 +42,11 @@ const PROBE = !NO_PROBE;
 // waiver so the machine field reflects the override deterministically (invariant: no downstream
 // dispatch on a blocked panel without this flag).
 const FORCE_QUORUM = process.argv.includes('--force-quorum');
+// P1 — deep inference probe. Opt-in (--deep) and auto-enabled when the panel is degraded
+// (P3). L1 (--version) and L2 (/models) can't tell a quota/auth-dead slot from a healthy
+// one (L2 even treats 401/403 as reachable), so a dead slot passes preflight and only fails
+// during the real review. The deep probe runs the provider's deep_probe prompt to catch it.
+const DEEP_PROBE = process.argv.includes('--deep');
 
 // ─── Time-budget parsing ────────────────────────────────────────────────────
 // --budget-ms <n> threads a soft deadline that --all degrades within: when the
@@ -735,8 +740,45 @@ function validateProviders(providers) {
   return { ok: errors.length === 0, errors, warnings };
 }
 
+// ─── P1 — deep inference probe: decision + result classification (pure) ──────
+// The spawn itself is intentionally NOT yet wired into the main() hot path — an
+// untested subprocess probe on the path that gates EVERY quorum is the one change
+// that could take the whole system down, so it lands with a mock-CLI integration
+// harness in a follow-up. These two pure helpers encode the safe policy and are unit-tested.
+
+// Run the deep probe when explicitly requested OR when the panel is degraded (so a
+// reduced panel is verified with real inference before we trust it), but only if the
+// remaining time budget covers at least one probe.
+function shouldRunDeepProbe({ deep, degraded, budgetMs, minBudgetMs = 45000 }) {
+  if (!deep && !degraded) return false;
+  if (budgetMs == null) return true;          // no budget cap → allowed
+  return budgetMs >= minBudgetMs;
+}
+
+// Classify a deep-probe result. CRITICAL: downgrade a slot ONLY on a FAST, explicit
+// auth/quota signal — the exact class L1/L2 miss. A timeout is treated as INCONCLUSIVE
+// and does NOT downgrade, so a slow-but-healthy slot (the P2 failure mode) is never
+// false-killed by the deep probe. Ambiguous non-error output is assumed alive.
+function classifyDeepProbeResult(output, { timedOut = false, expect = null } = {}) {
+  if (timedOut) {
+    return { ok: true, classification: 'INCONCLUSIVE', reason: 'deep-probe timed out (slow, not downgraded)' };
+  }
+  const text = String(output || '');
+  if (/\b(401|403)\b|unauthorized|forbidden|invalid.*api.?key/i.test(text)) {
+    return { ok: false, classification: 'AUTH', reason: 'deep-probe: authentication failure' };
+  }
+  if (/\b(402|429)\b|quota|resource.?exhausted|too many requests|exhausted your capacity|rate.?limit/i.test(text)) {
+    return { ok: false, classification: 'QUOTA', reason: 'deep-probe: quota/rate-limit' };
+  }
+  if (expect && text.includes(expect)) {
+    return { ok: true, classification: 'OK', reason: `deep-probe: matched "${expect}"` };
+  }
+  // Non-empty, no error, no expect match → assume alive (never false-kill on ambiguity).
+  return { ok: true, classification: text.trim() ? 'INCONCLUSIVE' : 'EMPTY', reason: 'deep-probe: no error signal' };
+}
+
 if (require.main === module) {
   main().catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { dedupBySlotIdentity, probeHealth, findProviders, computeQuorumGate, validateProviders };
+module.exports = { dedupBySlotIdentity, probeHealth, findProviders, computeQuorumGate, validateProviders, shouldRunDeepProbe, classifyDeepProbeResult };
