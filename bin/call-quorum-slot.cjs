@@ -560,6 +560,12 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     const MAX_BUF = 10 * 1024 * 1024;
     let l1Truncated = false;
     let l1OriginalSize = 0;
+    // P2: clamp the initial idle/hard timers to the max-safe bound. Node fires setTimeout
+    // delays above 2^31-1 ms IMMEDIATELY (silently disabling the timer), so an oversized
+    // idle_timeout_ms/hard_timeout_ms would leave a slot with no timeout at all. Mirrors
+    // stallTimeoutFor()'s clamp, which previously guarded only the stall window.
+    idleTimeoutMs = Math.min(idleTimeoutMs, TIMEOUT_MAX);
+    hardTimeoutMs = Math.min(hardTimeoutMs, TIMEOUT_MAX);
 
     // Kill entire process group, then destroy streams to force 'close' even if
     // grandchildren keep the pipes open (the common case with ccr/opencode).
@@ -599,21 +605,25 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     let rateLimitHits = 0;
     const RATE_LIMIT_THRESHOLD = 2; // kill after 2 consecutive rate-limit messages
     let totalBytesReceived = 0;
-    // Tighter idle timeout when the CLI has produced < STALL_BYTE_THRESHOLD bytes
-    // (header-only → probably hung). Per-slot override via providers.json
-    // `stall_timeout_ms` (see stallTimeoutFor): slow models (e.g. GLM-5.2[1m],
-    // MiniMax-M3) legitimately emit a small preamble then pause >30s mid-generation
-    // — they are slow, not stalled — so they need a longer threshold to avoid being
-    // false-killed.
+    // P2 — STALL detection = "no FIRST byte", NOT "model is thinking".
+    // Prior bug: the idle window was tightened to STALL_TIMEOUT_MS whenever total output
+    // was < 500 bytes, so a slow model that emitted a short preamble (e.g. 202-byte CLI
+    // framing) then paused >30s mid-generation was false-killed as STALL. A stall timeout
+    // is meant for "the process stopped writing", not "the model is still generating".
+    // Fix: a dedicated first-byte timer catches the genuine dead-on-arrival hang (zero bytes
+    // by STALL_TIMEOUT_MS); once ANY byte arrives it is cleared and the normal per-chunk
+    // idle window governs — so slow thinkers stream fine. Per-slot `stall_timeout_ms`
+    // (stallTimeoutFor) still tunes the first-byte budget for slow-to-start providers.
     const STALL_TIMEOUT_MS = stallTimeoutFor(provider);
-    const STALL_BYTE_THRESHOLD = 500; // below this = "just a header, probably stalled"
+    let firstByteTimer = setTimeout(() => {
+      if (totalBytesReceived === 0 && !timedOut) { timedOut = true; timeoutType = 'STALL'; killGroup(); }
+    }, STALL_TIMEOUT_MS);
 
     child.stdout.on('data', d => {
       totalBytesReceived += d.length;
+      clearTimeout(firstByteTimer);   // first byte seen → past the dead-on-arrival window
       clearTimeout(idleTimer);
-      // Adaptive idle: use tighter 30s timeout when CLI has barely produced output (header-only stall)
-      const effectiveIdle = totalBytesReceived < STALL_BYTE_THRESHOLD ? STALL_TIMEOUT_MS : idleTimeoutMs;
-      idleTimer = setTimeout(() => { timedOut = true; timeoutType = totalBytesReceived < STALL_BYTE_THRESHOLD ? 'STALL' : 'IDLE'; killGroup(); }, effectiveIdle);
+      idleTimer = setTimeout(() => { timedOut = true; timeoutType = 'IDLE'; killGroup(); }, idleTimeoutMs);
       const chunk = d.toString();
       l1OriginalSize += chunk.length;
       if (stdout.length < MAX_BUF) {
@@ -639,9 +649,9 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     });
     child.stderr.on('data', d => {
       totalBytesReceived += d.length;
+      clearTimeout(firstByteTimer);   // first byte seen (stderr counts) → past dead-on-arrival
       clearTimeout(idleTimer);
-      const effectiveIdle = totalBytesReceived < STALL_BYTE_THRESHOLD ? STALL_TIMEOUT_MS : idleTimeoutMs;
-      idleTimer = setTimeout(() => { timedOut = true; timeoutType = totalBytesReceived < STALL_BYTE_THRESHOLD ? 'STALL' : 'IDLE'; killGroup(); }, effectiveIdle);
+      idleTimer = setTimeout(() => { timedOut = true; timeoutType = 'IDLE'; killGroup(); }, idleTimeoutMs);
       const chunk = d.toString().slice(0, 4096);
       stderr += chunk;
       // Check stderr for rate-limit patterns too (gemini logs to stderr)
@@ -659,6 +669,7 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     child.on('close', (code) => {
       clearTimeout(idleTimer);
       clearTimeout(hardTimer);
+      clearTimeout(firstByteTimer);
       if (timedOut) {
         // Content-based reclassification: when STALL fires, inspect the partial
         // stdout/stderr for known error patterns before using the generic label.
