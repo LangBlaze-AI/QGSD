@@ -223,6 +223,37 @@ function classifyErrorType(msg) {
   return 'UNKNOWN';
 }
 
+// ─── P4 — parse a provider's quota-reset window from its error text ──────────
+// Quota errors often carry the reset time ("Resets in 32h54m49s", "resets in 30
+// minutes", "try again in 3600 seconds"). The default 30-min failure TTL is far
+// shorter than a rolling daily quota (~33h), so a quota-dead slot was re-probed and
+// re-failed every 30 min. Parsing the real reset lets the cooldown match it exactly.
+// Returns milliseconds until reset (clamped to [0, 48h]) or null if not present.
+function parseQuotaResetMs(msg) {
+  if (!msg) return null;
+  const s = String(msg);
+  const MAX = 48 * 3600 * 1000;
+  const clamp = (ms) => (ms > 0 ? Math.min(ms, MAX) : null);
+  // Compact form: 32h54m49s / 1h30m / 45m / 90s, optionally after "resets in".
+  let m = s.match(/resets?\s+in\s+((?:\d+\s*[hms]\s*){1,3})/i) || s.match(/\b((?:\d+\s*[hms]\s*){2,3})\b/i);
+  if (m) {
+    let ms = 0, mm; const re = /(\d+)\s*([hms])/gi;
+    while ((mm = re.exec(m[1]))) {
+      const n = Number(mm[1]); const u = mm[2].toLowerCase();
+      ms += n * (u === 'h' ? 3600000 : u === 'm' ? 60000 : 1000);
+    }
+    const c = clamp(ms); if (c) return c;
+  }
+  // Verbose: "resets in 30 minutes" / "try again in 2 hours" / "in 45 seconds".
+  m = s.match(/(?:resets?|try again|retry|available)\s+(?:in\s+)?(\d+)\s*(hours?|minutes?|seconds?|hrs?|mins?|secs?)\b/i);
+  if (m) {
+    const n = Number(m[1]); const u = m[2].toLowerCase();
+    const mult = u.startsWith('h') ? 3600000 : u.startsWith('m') ? 60000 : 1000;
+    return clamp(n * mult);
+  }
+  return null;
+}
+
 function writeFailureLog(slotName, errorMsg, stderrText) {
   try {
     const pp = require('./planning-paths.cjs');
@@ -234,22 +265,36 @@ function writeFailureLog(slotName, errorMsg, stderrText) {
     const rawPattern = (stderrText && stderrText.length > 0) ? stderrText : errorMsg;
     const pattern = rawPattern.replace(/\x1b\[[0-9;]*m/g, '').slice(0, 200);
 
+    // P4: for QUOTA failures, parse the provider's reset window so the cooldown matches
+    // the real quota (rolling ~33h) instead of the 30-min TTL.
+    const quotaResetMs = error_type === 'QUOTA' ? parseQuotaResetMs(rawPattern) : null;
+    const cooldownUntil = quotaResetMs ? new Date(Date.now() + quotaResetMs).toISOString() : null;
+
     // Lock-free read-modify-write under an exclusive writer lock so parallel slots
     // never lose records (and a torn read never wipes the whole log).
     atomicUpdateJson(logPath, (current) => {
       let records = Array.isArray(current) ? current : [];
 
-      // Garbage-collect stale records (older than 60 minutes) to prevent unbounded growth
-      const gcCutoff = Date.now() - 60 * 60 * 1000;
-      records = records.filter(r => new Date(r.last_seen).getTime() > gcCutoff);
+      // Garbage-collect stale records (older than 60 minutes) to prevent unbounded growth.
+      // EXCEPT: keep records whose cooldown_until is still in the future (a quota-dead slot
+      // whose reset is hours away must survive GC, or P4's long cooldown is lost after 60 min).
+      const now = Date.now();
+      const gcCutoff = now - 60 * 60 * 1000;
+      records = records.filter(r =>
+        new Date(r.last_seen).getTime() > gcCutoff ||
+        (r.cooldown_until && new Date(r.cooldown_until).getTime() > now));
 
       // Update or insert record
       const existing = records.find(r => r.slot === slotName && r.error_type === error_type);
       if (existing) {
         existing.count++;
         existing.last_seen = new Date().toISOString();
+        // Keep the latest known reset (a fresh quota message may push it out).
+        if (cooldownUntil) existing.cooldown_until = cooldownUntil;
       } else {
-        records.push({ slot: slotName, error_type, pattern, count: 1, last_seen: new Date().toISOString() });
+        const rec = { slot: slotName, error_type, pattern, count: 1, last_seen: new Date().toISOString() };
+        if (cooldownUntil) rec.cooldown_until = cooldownUntil;
+        records.push(rec);
       }
       return records;
     }, []);
@@ -1117,4 +1162,4 @@ if (require.main === module) {
 }
 
 // ─── Test exports (SHELL-ESCAPE-01, TRUNC-01, INFRA-367) ───────────────────────
-module.exports = { buildSpawnArgs, stallTimeoutFor, recordTelemetry, findProjectRoot, writeFailureLog, atomicUpdateJson, VERDICTS, VERDICT_LINE_RE, parseVerdictLine };
+module.exports = { buildSpawnArgs, stallTimeoutFor, recordTelemetry, findProjectRoot, writeFailureLog, atomicUpdateJson, parseQuotaResetMs, VERDICTS, VERDICT_LINE_RE, parseVerdictLine };

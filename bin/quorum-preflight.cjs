@@ -340,16 +340,29 @@ function probeInferenceHistory(ttlMinutes = 30) {
     if (!fs.existsSync(logPath)) return {};
     const records = JSON.parse(fs.readFileSync(logPath, 'utf8'));
     if (!Array.isArray(records)) return {};
-    const cutoff = Date.now() - ttlMinutes * 60 * 1000;
+    const now = Date.now();
+    const cutoff = now - ttlMinutes * 60 * 1000;
     const result = {};
     for (const r of records) {
-      if (new Date(r.last_seen).getTime() > cutoff) {
+      // P4 — a QUOTA failure with a parsed reset window (cooldown_until) keeps the slot
+      // unavailable until the ACTUAL reset (rolling ~33h), not just the 30-min TTL — so a
+      // quota-dead slot is not re-probed and re-failed every 30 min. Otherwise fall back
+      // to the recency TTL. The `retired` flag marks a slot held out by a long cooldown
+      // (transparency for the roster); a single non-quota blip never sets it.
+      const cooldownUntil = r.cooldown_until ? new Date(r.cooldown_until).getTime() : 0;
+      const coolingDown = cooldownUntil > now;
+      const recent = new Date(r.last_seen).getTime() > cutoff;
+      if (recent || coolingDown) {
+        const mins = coolingDown ? Math.round((cooldownUntil - now) / 60000) : 0;
         result[r.slot] = {
           ok: false,
-          reason: `${r.error_type}: ${(r.pattern || '').slice(0, 100)}`,
+          reason: coolingDown
+            ? `${r.error_type}: cooling down ~${mins}min (until ${r.cooldown_until})`
+            : `${r.error_type}: ${(r.pattern || '').slice(0, 100)}`,
           error_type: r.error_type,
           count: r.count,
           last_seen: r.last_seen,
+          ...(coolingDown ? { cooldown_until: r.cooldown_until, retired: r.error_type === 'QUOTA' } : {}),
         };
       }
     }
