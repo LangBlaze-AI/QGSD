@@ -1,6 +1,6 @@
 {
   "requirement_id": "OBS-08",
-  "requirement_text": "The analyze-assumptions CLI classifies each extracted assumption into priority tiers (Tier 1: directly monitorable numeric constants, Tier 2: named invariants/assertions checkable via probes, Tier 3: structural constraints not runtime-observable), sorts gap reports by tier, supports --actionable filtering to Tier 1 only, and generates Prometheus gauge/histogram instrumentation snippets for Tier 1 assumptions.",
+  "requirement_text": "Each source fetch handler has a configurable timeout and fail-open behavior — one failing source does not block the others",
   "formal_property": {
     "name": "Bool",
     "model_file": ".planning/formal/alloy/observability-analysis.als",
@@ -17,12 +17,7 @@
     "/Users/jonathanborduas/code/QGSD/commands/nf/observe.md"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/observe-registry.cjs');",
-  "test_strategy": "constant",
-  "template": "config-validate",
-  "template_boilerplate": "const { DEFAULT_CONFIG } = require(CONFIG_PATH);\nassert.strictEqual(resolveConfigPath(PATH, DEFAULT_CONFIG), EXPECTED);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "test_strategy": "structural",
+  "template": "source-grep",
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

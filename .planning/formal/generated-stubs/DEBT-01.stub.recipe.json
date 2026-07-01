@@ -1,6 +1,6 @@
 {
   "requirement_id": "DEBT-01",
-  "requirement_text": "The debt/observability subsystem (debt ledger, dedup, retention, state machine, drift fingerprinting) SHALL maintain requirement traceability via @requirement annotations in source and @req annotations in tests.",
+  "requirement_text": "`.formal/debt.json` stores debt entries with schema: id, fingerprint, title, occurrences, first_seen, last_seen, environments[], status, formal_ref, source_entries[]",
   "formal_property": {
     "name": "Bool",
     "model_file": ".planning/formal/alloy/traceability-obligations.als",
@@ -8,19 +8,48 @@
     "type": "assertion"
   },
   "source_files": [
-    "bin/task-classifier.cjs"
+    "bin/call-quorum-slot.cjs",
+    "bin/health-auto-adjust.test.cjs",
+    "bin/coderlm-cache.test.cjs",
+    "bin/auth-drivers/gh-cli.cjs",
+    "bin/execution-progress.test.cjs",
+    "bin/account-manager.cjs",
+    "bin/migrate-plaintext-tokens.cjs",
+    "bin/memory-store.test.cjs",
+    "bin/autoresearch-refine.test.cjs",
+    "bin/memory-store.cjs",
+    "bin/secrets.test.cjs",
+    "bin/unified-mcp-server.mjs",
+    "bin/update-scoreboard-recording-adversarial.test.cjs",
+    "bin/refinement-loop-diagnostic.test.cjs",
+    "hooks/config-loader-adversarial2.test.cjs",
+    "hooks/nf-prompt.test.js",
+    "hooks/nf-circuit-breaker.test.js",
+    "hooks/config-loader-validate-adversarial.test.cjs"
   ],
-  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/task-classifier.cjs",
+  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/call-quorum-slot.cjs",
   "source_files_absolute": [
-    "/Users/jonathanborduas/code/QGSD/bin/task-classifier.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/call-quorum-slot.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/health-auto-adjust.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/coderlm-cache.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/auth-drivers/gh-cli.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/execution-progress.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/account-manager.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/migrate-plaintext-tokens.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/memory-store.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/autoresearch-refine.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/memory-store.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/secrets.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/unified-mcp-server.mjs",
+    "/Users/jonathanborduas/code/QGSD/bin/update-scoreboard-recording-adversarial.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/refinement-loop-diagnostic.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/hooks/config-loader-adversarial2.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-prompt.test.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-circuit-breaker.test.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/config-loader-validate-adversarial.test.cjs"
   ],
-  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/task-classifier.cjs');",
+  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/call-quorum-slot.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-03-20T20:03:48.811Z",
+  "updated_at": "2026-06-30T12:46:45.499Z",
   "classifications": {
     "dtoc": {},
     "ctor": {
@@ -43,5 +43,71 @@
     "dtor": {
       "1e87ef8638400298": "genuine"
     }
+  },
+  "session_history": [
+    {
+      "session_id": "2026-06-30T12:02:49.292Z",
+      "scanner_stats": {
+        "dtoc": {
+          "total": 0,
+          "fp": 0,
+          "genuine": 0,
+          "review": 0
+        },
+        "ctor": {
+          "total": 14,
+          "fp": 14,
+          "genuine": 0,
+          "review": 0
+        },
+        "ttor": {
+          "total": 20,
+          "fp": 10,
+          "genuine": 0,
+          "review": 10
+        },
+        "dtor": {
+          "total": 1,
+          "fp": 0,
+          "genuine": 1,
+          "review": 0
+        }
+      }
+    },
+    {
+      "session_id": "2026-06-30T12:46:45.498Z",
+      "scanner_stats": {
+        "dtoc": {
+          "total": 0,
+          "fp": 0,
+          "genuine": 0,
+          "review": 0
+        },
+        "ctor": {
+          "total": 14,
+          "fp": 14,
+          "genuine": 0,
+          "review": 0
+        },
+        "ttor": {
+          "total": 20,
+          "fp": 10,
+          "genuine": 0,
+          "review": 10
+        },
+        "dtor": {
+          "total": 1,
+          "fp": 0,
+          "genuine": 1,
+          "review": 0
+        }
+      }
+    }
+  ],
+  "tuning": {
+    "dtoc": 0.5,
+    "ctor": 0.5,
+    "ttor": 0.5,
+    "dtor": 0.5
   }
 }

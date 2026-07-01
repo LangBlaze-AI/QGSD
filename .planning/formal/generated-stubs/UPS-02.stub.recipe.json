@@ -8,25 +8,36 @@
     "type": "invariant"
   },
   "source_files": [
+    "bin/continuous-verify.test.cjs",
+    "bin/audit-allowlist-precision.test.cjs",
+    "bin/continuous-verify.cjs",
+    "bin/nf-solve.cjs",
+    "bin/run-formal-check.cjs",
+    "bin/run-formal-check.test.cjs",
+    "hooks/nf-mcp-dispatch-guard.test.js",
     "hooks/dist/config-loader.js",
     "hooks/dist/nf-prompt.js",
     "hooks/config-loader.js",
+    "hooks/nf-prompt.test.js",
     "hooks/nf-prompt.js"
   ],
-  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/hooks/dist/config-loader.js",
+  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/continuous-verify.test.cjs",
   "source_files_absolute": [
+    "/Users/jonathanborduas/code/QGSD/bin/continuous-verify.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/audit-allowlist-precision.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/continuous-verify.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/nf-solve.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/run-formal-check.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/run-formal-check.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-mcp-dispatch-guard.test.js",
     "/Users/jonathanborduas/code/QGSD/hooks/dist/config-loader.js",
     "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-prompt.js",
     "/Users/jonathanborduas/code/QGSD/hooks/config-loader.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-prompt.test.js",
     "/Users/jonathanborduas/code/QGSD/hooks/nf-prompt.js"
   ],
-  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/hooks/dist/config-loader.js');",
+  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/continuous-verify.test.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

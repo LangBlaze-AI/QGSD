@@ -8,31 +8,32 @@
     "type": "invariant"
   },
   "source_files": [
+    "bin/observe-pipeline.test.cjs",
     "bin/run-prism.test.cjs",
-    "hooks/dist/nf-prompt.test.js",
+    "bin/provider-arg-templates.test.cjs",
+    "bin/observe-pipeline.cjs",
+    "hooks/nf-precompact.test.js",
+    "hooks/dist/nf-context-monitor.js",
     "hooks/dist/nf-precompact.js",
-    "hooks/dist/gsd-context-monitor.js",
     "hooks/nf-prompt.test.js",
-    "hooks/nf-precompact.js",
-    "hooks/gsd-context-monitor.js"
+    "hooks/nf-context-monitor.js",
+    "hooks/nf-precompact.js"
   ],
-  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/run-prism.test.cjs",
+  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/observe-pipeline.test.cjs",
   "source_files_absolute": [
+    "/Users/jonathanborduas/code/QGSD/bin/observe-pipeline.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/run-prism.test.cjs",
-    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-prompt.test.js",
+    "/Users/jonathanborduas/code/QGSD/bin/provider-arg-templates.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/observe-pipeline.cjs",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-precompact.test.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-context-monitor.js",
     "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-precompact.js",
-    "/Users/jonathanborduas/code/QGSD/hooks/dist/gsd-context-monitor.js",
     "/Users/jonathanborduas/code/QGSD/hooks/nf-prompt.test.js",
-    "/Users/jonathanborduas/code/QGSD/hooks/nf-precompact.js",
-    "/Users/jonathanborduas/code/QGSD/hooks/gsd-context-monitor.js"
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-context-monitor.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-precompact.js"
   ],
-  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/run-prism.test.cjs');",
+  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/observe-pipeline.test.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

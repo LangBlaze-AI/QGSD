@@ -1,10 +1,10 @@
 {
   "requirement_id": "INST-02",
-  "requirement_text": "QGSD's package.json pins GSD version — version lockstep ensures hook compatibility",
+  "requirement_text": "Install detects missing hooks/dist files and either rebuilds or warns with clear instructions",
   "formal_property": {
-    "name": "AllEquivalence",
+    "name": "NonUninstalled",
     "model_file": ".planning/formal/alloy/install-scope.als",
-    "definition": "assert AllEquivalence {\n    all s1, s2: InstallState |\n        (AllSelected[s1] and AllSelected[s2]) => SameState[s1, s2]\n}",
+    "definition": "",
     "type": "assertion"
   },
   "source_files": [
@@ -17,10 +17,5 @@
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/requirement-map.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

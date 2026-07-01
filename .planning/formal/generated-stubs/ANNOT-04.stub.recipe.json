@@ -3,7 +3,7 @@
   "requirement_text": "`bin/extract-annotations.cjs` parses `@requirement` comments from TLA+, Alloy, and PRISM files and returns a structured JSON map of `{ model_file: [{ property, requirement_ids }] }`",
   "formal_property": {
     "name": "ModelType",
-    "model_file": ".planning/formal/alloy/traceability-annotations.als",
+    "model_file": ".planning/formal/alloy/annotation-extraction.als",
     "definition": "",
     "type": "assertion"
   },
@@ -17,10 +17,5 @@
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/extract-annotations.cjs');",
   "test_strategy": "behavioral",
   "template": "import-and-call",
-  "template_boilerplate": "const mod = require(SOURCE);\nconst result = mod.FUNCTION(INPUT);\nassert.strictEqual(result, EXPECTED);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const mod = require(SOURCE);\nconst result = mod.FUNCTION(INPUT);\nassert.strictEqual(result, EXPECTED);"
 }

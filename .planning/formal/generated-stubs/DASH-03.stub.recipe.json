@@ -9,36 +9,51 @@
   },
   "source_files": [
     "bin/manage-agents.test.cjs",
+    "bin/solve-tui.cjs",
     "bin/observe-handler-grafana.test.cjs",
     "bin/token-dashboard.test.cjs",
     "bin/formal-core.cjs",
     "bin/manage-agents-core.cjs",
     "bin/cross-layer-dashboard.test.cjs",
     "bin/observe-handler-grafana.cjs",
+    "bin/compute-per-model-gates.cjs",
     "bin/token-dashboard.cjs",
+    "bin/nforma-cli.js",
+    "bin/migrate-plaintext-tokens.cjs",
+    "bin/install.js",
     "bin/nf-solve.cjs",
-    "bin/cross-layer-dashboard.cjs"
+    "bin/cross-layer-dashboard.cjs",
+    "bin/batch7-guards.test.cjs",
+    "bin/validate-invariant.test.cjs",
+    "hooks/dist/nf-prompt.js",
+    "hooks/nf-prompt.test.js",
+    "hooks/nf-prompt.js"
   ],
   "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/manage-agents.test.cjs",
   "source_files_absolute": [
     "/Users/jonathanborduas/code/QGSD/bin/manage-agents.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/solve-tui.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/observe-handler-grafana.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/token-dashboard.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/formal-core.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/manage-agents-core.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/cross-layer-dashboard.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/observe-handler-grafana.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/compute-per-model-gates.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/token-dashboard.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/nforma-cli.js",
+    "/Users/jonathanborduas/code/QGSD/bin/migrate-plaintext-tokens.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/install.js",
     "/Users/jonathanborduas/code/QGSD/bin/nf-solve.cjs",
-    "/Users/jonathanborduas/code/QGSD/bin/cross-layer-dashboard.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/cross-layer-dashboard.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/batch7-guards.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/validate-invariant.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-prompt.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-prompt.test.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-prompt.js"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/manage-agents.test.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

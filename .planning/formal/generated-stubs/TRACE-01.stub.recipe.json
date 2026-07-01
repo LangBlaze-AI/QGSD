@@ -1,26 +1,23 @@
 {
   "requirement_id": "TRACE-01",
-  "requirement_text": "`bin/generate-traceability-matrix.cjs` reads model-registry, requirements.json, and check-results.ndjson to produce `.planning/formal/traceability-matrix.json` with property-level links between requirements and formal properties",
+  "requirement_text": "`bin/generate-traceability-matrix.cjs` reads model-registry, requirements.json, and check-results.ndjson to produce `.formal/traceability-matrix.json` with property-level links between requirements and formal properties",
   "formal_property": {
-    "name": "ModelType",
-    "model_file": ".planning/formal/alloy/traceability-annotations.als",
+    "name": "ModelFile",
+    "model_file": ".planning/formal/alloy/trace-coverage-matrix.als",
     "definition": "",
     "type": "assertion"
   },
   "source_files": [
+    "bin/formal-proximity.cjs",
     "bin/generate-traceability-matrix.cjs"
   ],
-  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/generate-traceability-matrix.cjs",
+  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/formal-proximity.cjs",
   "source_files_absolute": [
+    "/Users/jonathanborduas/code/QGSD/bin/formal-proximity.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/generate-traceability-matrix.cjs"
   ],
-  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/generate-traceability-matrix.cjs');",
+  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/formal-proximity.cjs');",
   "test_strategy": "behavioral",
   "template": "import-and-call",
-  "template_boilerplate": "const mod = require(SOURCE);\nconst result = mod.FUNCTION(INPUT);\nassert.strictEqual(result, EXPECTED);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const mod = require(SOURCE);\nconst result = mod.FUNCTION(INPUT);\nassert.strictEqual(result, EXPECTED);"
 }

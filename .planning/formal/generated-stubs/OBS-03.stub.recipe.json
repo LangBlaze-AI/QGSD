@@ -1,6 +1,6 @@
 {
   "requirement_id": "OBS-03",
-  "requirement_text": "Each slot gets a flakiness score from recent UNAVAIL/timeout frequency; high-flakiness slots deprioritized in dispatch ordering",
+  "requirement_text": "`/qgsd:observe` supports `prometheus` source type that executes a PromQL query against a configured endpoint and maps results to the standard issue schema",
   "formal_property": {
     "name": "S=? [ \"slot1_unavail\" ]",
     "model_file": ".planning/formal/prism/observability-delivery.props",
@@ -8,25 +8,36 @@
     "type": "property"
   },
   "source_files": [
-    "bin/update-scoreboard.cjs",
-    "bin/scoreboard-observability.test.cjs",
-    "hooks/dist/nf-prompt.js",
-    "hooks/nf-prompt.js"
+    "bin/health-auto-adjust.test.cjs",
+    "bin/nForma.cjs",
+    "bin/solve-debt-bridge.test.cjs",
+    "bin/sweep-reverse.test.cjs",
+    "bin/nf-solve.test.cjs",
+    "bin/coderlm-adapter-filter.test.cjs",
+    "bin/nForma.test.cjs",
+    "bin/run-prism.test.cjs",
+    "bin/install.js",
+    "bin/run-prism.cjs",
+    "bin/nf-solve.cjs",
+    "bin/build-phase-index.cjs"
   ],
-  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/update-scoreboard.cjs",
+  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/health-auto-adjust.test.cjs",
   "source_files_absolute": [
-    "/Users/jonathanborduas/code/QGSD/bin/update-scoreboard.cjs",
-    "/Users/jonathanborduas/code/QGSD/bin/scoreboard-observability.test.cjs",
-    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-prompt.js",
-    "/Users/jonathanborduas/code/QGSD/hooks/nf-prompt.js"
+    "/Users/jonathanborduas/code/QGSD/bin/health-auto-adjust.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/nForma.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/solve-debt-bridge.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/sweep-reverse.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/nf-solve.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/coderlm-adapter-filter.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/nForma.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/run-prism.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/install.js",
+    "/Users/jonathanborduas/code/QGSD/bin/run-prism.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/nf-solve.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/build-phase-index.cjs"
   ],
-  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/update-scoreboard.cjs');",
-  "test_strategy": "structural",
-  "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/health-auto-adjust.test.cjs');",
+  "test_strategy": "behavioral",
+  "template": "import-and-call",
+  "template_boilerplate": "const mod = require(SOURCE);\nconst result = mod.FUNCTION(INPUT);\nassert.strictEqual(result, EXPECTED);"
 }

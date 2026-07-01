@@ -10,23 +10,22 @@
   "source_files": [
     "bin/aggregate-requirements.test.cjs",
     "bin/analyze-state-space.cjs",
-    "hooks/dist/nf-circuit-breaker.test.js",
-    "hooks/nf-circuit-breaker.test.js"
+    "hooks/dist/nf-stop.js",
+    "hooks/nf-prompt.test.js",
+    "hooks/nf-circuit-breaker.test.js",
+    "hooks/nf-stop.js"
   ],
   "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/aggregate-requirements.test.cjs",
   "source_files_absolute": [
     "/Users/jonathanborduas/code/QGSD/bin/aggregate-requirements.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/analyze-state-space.cjs",
-    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-circuit-breaker.test.js",
-    "/Users/jonathanborduas/code/QGSD/hooks/nf-circuit-breaker.test.js"
+    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-stop.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-prompt.test.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-circuit-breaker.test.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-stop.js"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/aggregate-requirements.test.cjs');",
   "test_strategy": "constant",
   "template": "config-validate",
-  "template_boilerplate": "const { DEFAULT_CONFIG } = require(CONFIG_PATH);\nassert.strictEqual(resolveConfigPath(PATH, DEFAULT_CONFIG), EXPECTED);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const { DEFAULT_CONFIG } = require(CONFIG_PATH);\nassert.strictEqual(resolveConfigPath(PATH, DEFAULT_CONFIG), EXPECTED);"
 }

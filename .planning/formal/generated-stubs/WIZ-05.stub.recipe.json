@@ -8,27 +8,30 @@
     "type": "invariant"
   },
   "source_files": [
+    "bin/nf-property-bridge.cjs",
     "bin/run-prism.test.cjs",
     "bin/oscillation-audit.test.cjs",
     "bin/generate-tla-cfg.test.cjs",
+    "bin/call-quorum-slot-stall-timeout.test.cjs",
     "bin/validate-requirements-haiku.test.cjs",
-    "bin/analyze-assumptions.test.cjs"
+    "bin/analyze-assumptions.test.cjs",
+    "hooks/dist/nf-stop.js",
+    "hooks/nf-stop.js"
   ],
-  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/run-prism.test.cjs",
+  "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/nf-property-bridge.cjs",
   "source_files_absolute": [
+    "/Users/jonathanborduas/code/QGSD/bin/nf-property-bridge.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/run-prism.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/oscillation-audit.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/generate-tla-cfg.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/call-quorum-slot-stall-timeout.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/validate-requirements-haiku.test.cjs",
-    "/Users/jonathanborduas/code/QGSD/bin/analyze-assumptions.test.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/analyze-assumptions.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/hooks/dist/nf-stop.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-stop.js"
   ],
-  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/run-prism.test.cjs');",
+  "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/nf-property-bridge.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

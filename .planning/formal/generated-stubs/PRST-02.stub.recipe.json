@@ -2,31 +2,42 @@
   "requirement_id": "PRST-02",
   "requirement_text": "User can clone an existing slot — copies provider URL and model config, prompts for new slot name",
   "formal_property": {
-    "name": "CloneSlot",
-    "model_file": ".planning/formal/tla/QGSDAgentProvisioning.tla",
+    "name": "Entity",
+    "model_file": ".planning/formal/alloy/provider-wizard.als",
     "definition": "",
-    "type": "invariant"
+    "type": "assertion"
   },
   "source_files": [
     "bin/manage-agents.test.cjs",
     "bin/nForma.cjs",
+    "bin/coderlm-lifecycle.cjs",
+    "bin/mcp-update-classify.test.cjs",
     "bin/nForma.test.cjs",
-    "bin/xstate-trace-walker.cjs"
+    "bin/nf-benchmark-debug.cjs",
+    "bin/build-code-trace.cjs",
+    "bin/xstate-trace-walker.cjs",
+    "bin/install.js",
+    "hooks/config-loader-adversarial2.test.cjs",
+    "hooks/nf-prompt.test.js",
+    "hooks/config-loader-validate-adversarial.test.cjs"
   ],
   "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/manage-agents.test.cjs",
   "source_files_absolute": [
     "/Users/jonathanborduas/code/QGSD/bin/manage-agents.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/nForma.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/coderlm-lifecycle.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/mcp-update-classify.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/nForma.test.cjs",
-    "/Users/jonathanborduas/code/QGSD/bin/xstate-trace-walker.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/nf-benchmark-debug.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/build-code-trace.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/xstate-trace-walker.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/install.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/config-loader-adversarial2.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/hooks/nf-prompt.test.js",
+    "/Users/jonathanborduas/code/QGSD/hooks/config-loader-validate-adversarial.test.cjs"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/manage-agents.test.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

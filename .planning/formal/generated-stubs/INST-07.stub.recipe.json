@@ -9,32 +9,43 @@
   },
   "source_files": [
     "bin/execute-phase-formal-gate.test.cjs",
+    "bin/install-helpers.test.cjs",
     "bin/failure-taxonomy.test.cjs",
     "bin/run-formal-verify.cjs",
+    "bin/nforma-cli.test.cjs",
     "bin/run-installer-alloy.cjs",
     "bin/install-formal-tools.cjs",
     "bin/run-tlc.cjs",
     "bin/verifier-formal-context.test.cjs",
-    "bin/run-installer-alloy.test.cjs"
+    "bin/nforma-cli.js",
+    "bin/solve-focus-filter.test.cjs",
+    "bin/install-helpers.cjs",
+    "bin/run-installer-alloy.test.cjs",
+    "bin/install.js",
+    "bin/run-formal-check.cjs",
+    "bin/test-formal-integration.test.cjs"
   ],
   "source_file_absolute": "/Users/jonathanborduas/code/QGSD/bin/execute-phase-formal-gate.test.cjs",
   "source_files_absolute": [
     "/Users/jonathanborduas/code/QGSD/bin/execute-phase-formal-gate.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/install-helpers.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/failure-taxonomy.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/run-formal-verify.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/nforma-cli.test.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/run-installer-alloy.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/install-formal-tools.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/run-tlc.cjs",
     "/Users/jonathanborduas/code/QGSD/bin/verifier-formal-context.test.cjs",
-    "/Users/jonathanborduas/code/QGSD/bin/run-installer-alloy.test.cjs"
+    "/Users/jonathanborduas/code/QGSD/bin/nforma-cli.js",
+    "/Users/jonathanborduas/code/QGSD/bin/solve-focus-filter.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/install-helpers.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/run-installer-alloy.test.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/install.js",
+    "/Users/jonathanborduas/code/QGSD/bin/run-formal-check.cjs",
+    "/Users/jonathanborduas/code/QGSD/bin/test-formal-integration.test.cjs"
   ],
   "import_hint": "const mod = require('/Users/jonathanborduas/code/QGSD/bin/execute-phase-formal-gate.test.cjs');",
   "test_strategy": "structural",
   "template": "source-grep",
-  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);",
-  "observed_test_patterns": {
-    "test_files": [],
-    "assert_patterns": [],
-    "setup_patterns": []
-  }
+  "template_boilerplate": "const content = fs.readFileSync(SOURCE, 'utf8');\nassert.match(content, /PATTERN/);"
 }

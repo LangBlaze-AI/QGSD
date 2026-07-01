@@ -1,14 +1,14 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-29T18:52:08.319Z",
-  "total_failures": 7,
+  "generated": "2026-06-30T12:46:58.043Z",
+  "total_failures": 6,
   "categories": {
     "crash": [
       {
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-29T18:51:55.612Z",
+        "timestamp": "2026-06-30T12:46:52.005Z",
         "check_id": "tla:mcagentloop",
         "surface": "agent-loop",
         "property": "MCAgentLoop",
@@ -30,7 +30,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-29T18:51:56.151Z",
+        "timestamp": "2026-06-30T12:46:52.559Z",
         "check_id": "tla:mcbugmodellookup",
         "surface": "tla",
         "property": "MCBugModelLookup",
@@ -52,7 +52,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-29T18:51:56.667Z",
+        "timestamp": "2026-06-30T12:46:53.511Z",
         "check_id": "tla:mcconvergencetest",
         "surface": "convergence",
         "property": "MCConvergenceTest",
@@ -74,7 +74,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-29T18:51:57.313Z",
+        "timestamp": "2026-06-30T12:46:54.218Z",
         "check_id": "tla:mcdeliberationrevision",
         "surface": "deliberation-revision",
         "property": "MCDeliberationRevision",
@@ -96,7 +96,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-29T18:52:01.953Z",
+        "timestamp": "2026-06-30T12:46:56.675Z",
         "check_id": "tla:mcgatepromotion",
         "surface": "tla",
         "property": "MCGatePromotion",
@@ -118,7 +118,7 @@
         "tool": "run-tlc",
         "formalism": "tla",
         "result": "error",
-        "timestamp": "2026-06-29T18:52:02.733Z",
+        "timestamp": "2026-06-30T12:46:57.595Z",
         "check_id": "tla:mcp-environment",
         "surface": "mcp-calls",
         "property": "MCP environment — MCPEnvSafety, MCPEnvLiveness",
@@ -139,28 +139,6 @@
         },
         "category": "crash",
         "classification_reason": "Error pattern in summary: error: state-space guard blocked MCMCPEnv (HIGH risk, ~null states)"
-      },
-      {
-        "tool": "run-tlc",
-        "formalism": "tla",
-        "result": "error",
-        "timestamp": "2026-06-29T18:52:08.185Z",
-        "check_id": "tla:mcnfdisttag",
-        "surface": "tla",
-        "property": "MCNFDistTag",
-        "runtime_ms": 0,
-        "summary": "error: state-space guard blocked MCNFDistTag (HIGH risk, ~null states)",
-        "triage_tags": [
-          "state-space-blocked"
-        ],
-        "requirement_ids": [],
-        "metadata": {
-          "config": "MCNFDistTag",
-          "estimated_states": null,
-          "risk": "HIGH"
-        },
-        "category": "crash",
-        "classification_reason": "Error pattern in summary: error: state-space guard blocked MCNFDistTag (HIGH risk, ~null states)"
       }
     ],
     "timeout": [],
@@ -169,7 +147,7 @@
     "degradation": []
   },
   "category_counts": {
-    "crash": 7,
+    "crash": 6,
     "timeout": 0,
     "logic_violation": 0,
     "drift": 0,
@@ -177,5 +155,5 @@
   },
   "degradation_fallback_note": "When no baseline exists, potential degradation entries are classified as logic_violation",
   "unclassified": [],
-  "summary": "7 failures classified: crash=7, timeout=0, logic_violation=0, drift=0, degradation=0. 0 unclassified."
+  "summary": "6 failures classified: crash=6, timeout=0, logic_violation=0, drift=0, degradation=0. 0 unclassified."
 }

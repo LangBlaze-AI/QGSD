@@ -1,10 +1,10 @@
 {
-  "last_run": "2026-04-16T21:04:58.093Z",
-  "converged": false,
-  "iteration_count": 1,
-  "final_residual_total": 334,
-  "reverse_discovery_total": 351,
-  "heatmap_total": 0,
+  "last_run": "2026-06-30T12:46:45.488Z",
+  "converged": true,
+  "iteration_count": 3,
+  "final_residual_total": 0,
+  "reverse_discovery_total": 0,
+  "heatmap_total": 1028,
   "real_impact": {
     "bugs_fixed": 0,
     "tests_added": 0,
@@ -20,44 +20,30 @@
         "docs_fixed": 0,
         "dead_code_removed": 0
       }
+    },
+    {
+      "iteration": 2,
+      "real_impact": {
+        "bugs_fixed": 0,
+        "tests_added": 0,
+        "docs_fixed": 0,
+        "dead_code_removed": 0
+      }
+    },
+    {
+      "iteration": 3,
+      "real_impact": {
+        "bugs_fixed": 0,
+        "tests_added": 0,
+        "docs_fixed": 0,
+        "dead_code_removed": 0
+      }
     }
   ],
   "known_issues": [
     {
-      "layer": "f_to_t",
-      "residual": 219
-    },
-    {
-      "layer": "r_to_d",
-      "residual": 1
-    },
-    {
-      "layer": "d_to_c",
-      "residual": 114,
-      "net_residual": 58
-    },
-    {
-      "layer": "c_to_r",
-      "residual": 155,
-      "net_residual": 142
-    },
-    {
-      "layer": "t_to_r",
-      "residual": 193,
-      "net_residual": 183
-    },
-    {
-      "layer": "d_to_r",
-      "residual": 3,
-      "net_residual": 3
-    },
-    {
-      "layer": "l1_to_l3",
-      "residual": 1
-    },
-    {
-      "layer": "l3_to_tc",
-      "residual": 1
+      "layer": "git_heatmap",
+      "residual": 1028
     },
     {
       "layer": "git_history",
@@ -68,16 +54,16 @@
       "residual": 1
     },
     {
+      "layer": "hazard_model",
+      "residual": 4
+    },
+    {
       "layer": "req_quality",
-      "residual": 10
+      "residual": 27
     },
     {
       "layer": "config_health",
-      "residual": 20
-    },
-    {
-      "layer": "security",
-      "residual": 17
+      "residual": 8
     },
     {
       "layer": "asset_stale",
@@ -102,4 +88,3 @@
   },
   "consecutive_clean_sessions": 0
 }
-

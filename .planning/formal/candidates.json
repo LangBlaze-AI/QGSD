@@ -1,15 +1,15 @@
 {
   "metadata": {
-    "generated": "2026-06-29T18:52:02.509Z",
-    "proximity_index_hash": "630abb72",
+    "generated": "2026-06-30T12:48:04.732Z",
+    "proximity_index_hash": "e60120e9",
     "threshold": 0.7,
     "max_hops": 5,
     "total_pairs_checked": 0,
     "candidates_found": 0,
     "candidates_filtered": 0,
     "orphan_models_count": 1,
-    "orphan_requirements_count": 7,
-    "uncovered_requirements_count": 5,
+    "orphan_requirements_count": 17,
+    "uncovered_requirements_count": 17,
     "non_neighbor_top": 20,
     "fast_path": true
   },
@@ -23,55 +23,143 @@
     ],
     "requirements": [
       {
-        "id": "BENCH-07",
+        "id": "COCH-01",
         "edges": 0
       },
       {
-        "id": "BENCH-08",
+        "id": "COCH-02",
         "edges": 0
       },
       {
-        "id": "BENCH-09",
+        "id": "COCH-03",
         "edges": 0
       },
       {
-        "id": "BENCH-DETECT-04",
+        "id": "COCH-04",
         "edges": 0
       },
       {
-        "id": "BF-03",
+        "id": "HOT-01",
         "edges": 0
       },
       {
-        "id": "TOOL-01",
+        "id": "HOT-02",
         "edges": 0
       },
       {
-        "id": "TOOL-02",
+        "id": "HOT-03",
+        "edges": 0
+      },
+      {
+        "id": "HOT-04",
+        "edges": 0
+      },
+      {
+        "id": "HOT-05",
+        "edges": 0
+      },
+      {
+        "id": "PACK-01",
+        "edges": 0
+      },
+      {
+        "id": "PACK-02",
+        "edges": 0
+      },
+      {
+        "id": "PACK-03",
+        "edges": 0
+      },
+      {
+        "id": "PACK-04",
+        "edges": 0
+      },
+      {
+        "id": "SKEL-01",
+        "edges": 0
+      },
+      {
+        "id": "SKEL-02",
+        "edges": 0
+      },
+      {
+        "id": "SKEL-03",
+        "edges": 0
+      },
+      {
+        "id": "SKEL-04",
         "edges": 0
       }
     ]
   },
   "uncovered_requirements": [
     {
-      "id": "BENCH-07",
-      "text": "Provide a generic benchmark runner CLI (bin/nf-benchmark.cjs) that loads fixtures from benchmarks/<skill>/fixtures.json, evaluates pass conditions, and enforces skill-specific baseline floors in CI gates."
+      "id": "COCH-01",
+      "text": "User can mine file co-occurrence from git history, counting how often file pairs appear in the same commit"
     },
     {
-      "id": "BENCH-08",
-      "text": "The system detects seeded algorithmic bugs via TLC counterexample discovery and verifies fixes through TLC verification pass conditions, integrated with the nf:debug benchmark track."
+      "id": "COCH-02",
+      "text": "User can compute temporal coupling scores with configurable thresholds (min_shared_commits, min_coupling_degree) to identify implicitly related files"
     },
     {
-      "id": "BENCH-09",
-      "text": "The nf:debug pipeline measures autonomy via a graded benchmark suite scoring 0-100 based on the fraction of seeded bugs (7 stubs across 3 difficulty tiers) that the AI quorum fixes end-to-end."
+      "id": "COCH-03",
+      "text": "User can filter out mass-refactoring commits by inverse file-count weighting, so commits touching 50+ files contribute less coupling signal than focused changes"
     },
     {
-      "id": "BENCH-DETECT-04",
-      "text": "nf-solve detects cross-layer mutations, formal model changes, and documentation claim violations in fast mode with active layer sweeps for l1_to_l3, l3_to_tc, formal_lint, and ghost-command scanning for /nf: slash-command references in doc files."
+      "id": "COCH-04",
+      "text": "User can have co-change pairs injected into the debug context bundle, so `/nf:debug` surfaces implicit coupling when investigating bugs in related files"
     },
     {
-      "id": "BF-03",
-      "text": "Benchmark requirement with broken provenance"
+      "id": "HOT-01",
+      "text": "User can compute per-file churn scores from git log with streaming parsing that handles repos with 10K+ commits without exceeding maxBuffer"
+    },
+    {
+      "id": "HOT-02",
+      "text": "User can compute per-file cyclomatic complexity by counting decision points in the tree-sitter AST, producing a language-agnostic complexity score"
+    },
+    {
+      "id": "HOT-03",
+      "text": "User can compute a hotspot risk score as the normalized intersection of churn and complexity, identifying files that are both frequently changed and structurally complex"
+    },
+    {
+      "id": "HOT-04",
+      "text": "User can exclude high-noise paths (generated files, vendored dirs, mass-refactor commits) and normalize by file size to reduce false positive hotspot signals"
+    },
+    {
+      "id": "HOT-05",
+      "text": "User can have high-risk hotspot files automatically escalate quorum fan-out in `nf-prompt.js`, so agents receive more review capacity on risky code changes"
+    },
+    {
+      "id": "PACK-01",
+      "text": "User can deliver file contents to LLMs in XML-style tagged format (`<file path=\"...\">...</file>`) that preserves structure while reducing token overhead vs raw source inclusion"
+    },
+    {
+      "id": "PACK-02",
+      "text": "User can escape XML-special characters in packed content via an `escapeXml()` helper that handles `<`, `>`, `&`, `\"`, `'` — preventing malformed XML output"
+    },
+    {
+      "id": "PACK-03",
+      "text": "User can invoke `context-packer.cjs` as a single entry point that orchestrates all Repowise intelligence modules (skeleton, hotspot, co-change) and produces a unified packed context output"
+    },
+    {
+      "id": "PACK-04",
+      "text": "User can compress skeleton detail level based on a token budget, so that the system adapts output to fit within context window constraints rather than producing uniformly detailed output"
+    },
+    {
+      "id": "SKEL-01",
+      "text": "User can parse source files into ASTs via `web-tree-sitter` WASM with lazy initialization (Parser.init() on first use, not at CLI startup)"
+    },
+    {
+      "id": "SKEL-02",
+      "text": "User can extract a structural skeleton from parsed AST showing function/class/method names with line ranges (start-end), producing ~5-10% of original token count"
+    },
+    {
+      "id": "SKEL-03",
+      "text": "User can parse JavaScript, TypeScript, and Python files out of the box via bundled grammar packages; additional languages available via optional grammar installation"
+    },
+    {
+      "id": "SKEL-04",
+      "text": "User can see hotspot risk scores and coupling degree embedded in skeleton output, so skeleton entries for high-risk or highly-coupled code are annotated with behavioral intelligence"
     }
   ]
 }
