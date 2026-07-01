@@ -562,6 +562,11 @@ async function main() {
     console.log('OK');
   } else if (mode === '--all') {
     const providers    = findProviders();
+    // P5 — surface providers.json config problems (drift, unspawnable slots, missing
+    // deep_probe) as non-fatal diagnostics rather than letting them crash at fan-out.
+    const _val = validateProviders(providers);
+    for (const e of _val.errors)   process.stderr.write(`[preflight] config ERROR: ${e}\n`);
+    for (const w of _val.warnings) process.stderr.write(`[preflight] config warn: ${w}\n`);
     const active       = cfg.quorum_active || [];
     const team         = buildTeam(providers, active);
     const maxSize      = cfg.max_quorum_size ?? 3;
@@ -699,8 +704,39 @@ function computeQuorumGate(availableCount, maxSize, forceQuorum) {
   return gate;
 }
 
+// ─── P5 — providers.json schema validator (pure, testable) ───────────────────
+// There was no schema gate on providers.json: a subprocess slot with no resolvable
+// spawn target, or an http slot missing baseUrl/apiKeyEnv, only surfaced as a spawn
+// crash at dispatch (spawn(null) → whole quorum offline). A slot with no deep_probe
+// can't be inference-health-gated (P1). This validator surfaces those as errors /
+// warnings so config drift is caught up front instead of at fan-out time.
+function validateProviders(providers) {
+  const errors = [], warnings = [];
+  const list = Array.isArray(providers) ? providers : [];
+  const seen = new Set();
+  for (const p of list) {
+    if (!p || typeof p !== 'object' || !p.name) { errors.push('provider entry missing/!object name'); continue; }
+    if (seen.has(p.name)) errors.push(`duplicate provider name: ${p.name}`);
+    seen.add(p.name);
+    const type = p.type;
+    if (type === 'subprocess' || type === 'ccr') {
+      if (!p.cli && !p.mainTool) errors.push(`${p.name}: subprocess/ccr slot has no spawn target (cli or mainTool)`);
+    } else if (type === 'http') {
+      if (!p.baseUrl) errors.push(`${p.name}: http slot missing baseUrl`);
+      if (!p.apiKeyEnv) errors.push(`${p.name}: http slot missing apiKeyEnv`);
+    } else if (!type) {
+      errors.push(`${p.name}: missing type`);
+    }
+    // Inference slots without a deep_probe can't be health-gated by P1's deep layer.
+    if ((type === 'subprocess' || type === 'ccr' || type === 'http') && !p.deep_probe) {
+      warnings.push(`${p.name}: no deep_probe — cannot be inference-health-gated`);
+    }
+  }
+  return { ok: errors.length === 0, errors, warnings };
+}
+
 if (require.main === module) {
   main().catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { dedupBySlotIdentity, probeHealth, findProviders, computeQuorumGate };
+module.exports = { dedupBySlotIdentity, probeHealth, findProviders, computeQuorumGate, validateProviders };
