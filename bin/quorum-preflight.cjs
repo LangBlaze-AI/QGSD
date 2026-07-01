@@ -37,6 +37,11 @@ const { loadProviders } = require('./resolve-providers.cjs');
 // Probe is ON by default for --all; --no-probe to skip, --probe still accepted for compat
 const NO_PROBE = process.argv.includes('--no-probe');
 const PROBE = !NO_PROBE;
+// P3 — when the panel is degraded (fewer available slots than max_quorum_size), preflight
+// emits an authoritative `blocked`/`waiver_required` gate. --force-quorum records an explicit
+// waiver so the machine field reflects the override deterministically (invariant: no downstream
+// dispatch on a blocked panel without this flag).
+const FORCE_QUORUM = process.argv.includes('--force-quorum');
 
 // ─── Time-budget parsing ────────────────────────────────────────────────────
 // --budget-ms <n> threads a soft deadline that --all degrades within: when the
@@ -632,6 +637,15 @@ async function main() {
       if (output.backup_slots.length > 0) {
         process.stderr.write(`[preflight] Tiered ordering: ${output.primary_slots.length} primary (CLI) + ${output.backup_slots.length} backup (HTTP API)\n`);
       }
+
+      // ─── P3 — authoritative degraded-panel gate (see computeQuorumGate). Machine
+      // field so the block/waiver decision is deterministic + testable, not re-derived
+      // by LLM-interpreted markdown. `available_count` = distinct healthy slots eligible
+      // to vote (deduped primaries + HTTP backups; demoted duplicates excluded).
+      Object.assign(output, computeQuorumGate(output.available_slots.length, maxSize, FORCE_QUORUM));
+      if (output.blocked) {
+        process.stderr.write(`[preflight] ${output.gate_reason}\n`);
+      }
     }
 
     console.log(JSON.stringify(output));
@@ -642,8 +656,38 @@ async function main() {
   }
 }
 
+// ─── P3 — authoritative degraded-panel gate (pure, testable) ─────────────────
+// Was LLM-interpreted prose in quorum.md (availableCount < max_quorum_size → BLOCK
+// unless --force-quorum). Now a machine field so the decision is deterministic.
+// Invariant (quorum review 2026-07-01): when `blocked` is true, no downstream path may
+// dispatch a quorum without a recorded --force-quorum waiver.
+function computeQuorumGate(availableCount, maxSize, forceQuorum) {
+  const quorumMet = availableCount >= maxSize;
+  const gate = {
+    available_count: availableCount,
+    quorum_met: quorumMet,
+    // `degraded` = some slots present but fewer than required. P1's deep-probe gate auto-enables on this.
+    degraded: availableCount >= 1 && !quorumMet,
+  };
+  if (quorumMet) {
+    gate.blocked = false;
+    gate.gate_reason = `quorum met: ${availableCount}/${maxSize} slots available`;
+  } else if (forceQuorum) {
+    gate.blocked = false;
+    gate.waiver_used = true;
+    gate.gate_reason = `reduced quorum WAIVED via --force-quorum: ${availableCount}/${maxSize} available`;
+  } else {
+    gate.blocked = true;
+    gate.waiver_required = true;
+    gate.gate_reason = availableCount === 0
+      ? `BLOCKED: 0/${maxSize} slots available (panel down) — pass --force-quorum only with explicit user awareness`
+      : `BLOCKED: only ${availableCount}/${maxSize} slots available — pass --force-quorum to proceed on a reduced quorum`;
+  }
+  return gate;
+}
+
 if (require.main === module) {
   main().catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { dedupBySlotIdentity, probeHealth, findProviders };
+module.exports = { dedupBySlotIdentity, probeHealth, findProviders, computeQuorumGate };
