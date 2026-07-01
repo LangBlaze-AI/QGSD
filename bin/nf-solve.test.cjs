@@ -1551,6 +1551,59 @@ test('TC-IDEMPOTENT-2: the auto-commit is guarded so report-only never commits',
     'the auto-commit must be guarded by !reportOnly so a report-only run never creates a commit');
 });
 
+// TC-IDEMPOTENT-3..6 extend the no-mutation contract past solve-state.json.
+// A report-only sweep from a clean tree is residual-idempotent, but it still
+// wrote FOUR other artifacts (requirements.json's aggregated_at, doc-claims.json,
+// solve-trend.jsonl, solve-session-*.md). Those writes dirty the tree on every
+// diagnostic run (the auto-commit-pollution source) and make report-only
+// non-idempotent whenever the starting tree is inconsistent — a second run reads
+// what the first run rewrote. Each must be guarded / made no-write under report-only.
+
+test('TC-IDEMPOTENT-3: aggregate-requirements runs --dry-run under report-only (no requirements.json rewrite)', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'nf-solve.cjs'), 'utf8');
+  // The sync CHECK must still run (exit code feeds residual), but the bare
+  // invocation rewrites requirements.json's `aggregated_at` every time. Under
+  // report-only it must pass --dry-run (stdout only, no file write).
+  const idx = src.indexOf("spawnTool('bin/aggregate-requirements.cjs'");
+  assert.ok(idx !== -1, 'expected the aggregate-requirements invocation');
+  const window = src.slice(Math.max(0, idx - 200), idx + 80);
+  assert.ok(/reportOnly\s*\?\s*\[\s*'--dry-run'\s*\]/.test(window),
+    'aggregate-requirements must be invoked with --dry-run under report-only so requirements.json is not rewritten');
+});
+
+test('TC-IDEMPOTENT-4: the doc-claims.json write is guarded by !reportOnly', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'nf-solve.cjs'), 'utf8');
+  // The D→C residual is computed from a live doc scan before this persistence
+  // write, so guarding the write costs no signal but keeps report-only clean.
+  const idx = src.indexOf("path.join(evidenceDir, 'doc-claims.json')");
+  assert.ok(idx !== -1, 'expected the doc-claims.json write site');
+  const preceding = src.slice(Math.max(0, idx - 300), idx);
+  assert.ok(/if\s*\(\s*!reportOnly\s*&&/.test(preceding),
+    'the doc-claims.json write must be guarded by !reportOnly');
+});
+
+test('TC-IDEMPOTENT-5: appendTrendEntry is guarded by !reportOnly', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'nf-solve.cjs'), 'utf8');
+  // The convergence trend log records progress-making runs; a diagnostic sweep
+  // must not append to it.
+  const idx = src.indexOf('appendTrendEntry(finalResidual');
+  assert.ok(idx !== -1, 'expected the appendTrendEntry call site');
+  const preceding = src.slice(Math.max(0, idx - 200), idx);
+  assert.ok(/if\s*\(\s*!reportOnly\s*\)\s*\{/.test(preceding),
+    'appendTrendEntry must be guarded by if (!reportOnly)');
+});
+
+test('TC-IDEMPOTENT-6: persistSessionSummary is guarded by !reportOnly', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'nf-solve.cjs'), 'utf8');
+  // The session summary drops a solve-session-*.md file per run; report-only
+  // must not create one.
+  const idx = src.indexOf('persistSessionSummary(reportText, jsonText, converged, iterations);');
+  assert.ok(idx !== -1, 'expected the persistSessionSummary call site');
+  const preceding = src.slice(Math.max(0, idx - 200), idx);
+  assert.ok(/if\s*\(\s*!reportOnly\s*\)\s*\{/.test(preceding),
+    'persistSessionSummary must be guarded by if (!reportOnly)');
+});
+
 // ── TC-MISSING: Missing-file residual tests (DIAG-02) ────────────────────────
 
 test('TC-MISSING-1: missing-file returns use residual -1 not 0 (source verification)', () => {
