@@ -389,15 +389,26 @@ function deepProbeSlot(provider, budgetMs) {
     const target = resolveSpawnTarget(provider) || provider.cli;
     const tmpl = resolveArgsTemplate(provider);
     if (!target || !Array.isArray(tmpl)) {
+      // F3 (known gap): http slots have no CLI → resolveSpawnTarget returns '' → SKIP here.
+      // http backups are L1/L2-verified only (L2 pings /models); P1's CLI deep_probe cannot
+      // inference-verify them. Closing that hole needs a real HTTP chat-completion probe —
+      // a separate deep_probe contract, out of scope for this layer.
       resolve({ ok: true, classification: 'SKIP', reason: 'no spawn target / args_template' });
       return;
     }
     const args = tmpl.map(a => (a === '{prompt}' ? probe.prompt : a));
+    // N1: budgetMs is applied PER SLOT (probes fan out in parallel, so wall-clock ≈ the
+    // slowest single probe, not the sum). Callers sizing an aggregate deadline should
+    // account for N parallel spawns of up to this cap each.
     const timeoutMs = Math.min(probe.timeout_ms || 45000, budgetMs == null ? 2147483647 : budgetMs);
     let out = '', done = false, timedOut = false, child;
     const finish = (r) => {
       if (done) return; done = true;
-      try { process.kill(-child.pid, 'SIGKILL'); } catch (_) { try { child.kill('SIGKILL'); } catch (_) {} }
+      // N2 — capture child locally + guard: finish() is only wired after a successful
+      // spawn, but guard the kill so a not-yet-assigned/exited child can never throw a
+      // ReferenceError out of the probe (which would reject the Promise.all fan-out).
+      const c = child;
+      if (c && c.pid) { try { process.kill(-c.pid, 'SIGKILL'); } catch (_) { try { c.kill('SIGKILL'); } catch (_) {} } }
       resolve(r);
     };
     try {
@@ -704,6 +715,12 @@ async function main() {
       // prelim panel is already degraded, budget permitting, and downgrade any slot that
       // returns a FAST auth/quota signal (timeouts/spawn errors never downgrade — see
       // deepProbeSlot/classifyDeepProbeResult). This runs off the happy path by default.
+      // F1 (known limitation): a quota/auth-dead slot in a FULL panel (available >= maxSize,
+      // so degraded=false) with no --deep is NOT deep-probed — it dispatches and fails at
+      // the real review, and L3 failure-history catches it the NEXT round (self-heals, one
+      // wasted round). Deep-probing every slot every run is expensive, so this is accepted;
+      // pass --deep (or run when the panel is already degraded) to pre-empt it. NOTE this
+      // also means --force-quorum on a full panel won't pre-screen a known-suspect slot.
       const prelimGate = computeQuorumGate(output.available_slots.length, maxSize, FORCE_QUORUM);
       if (shouldRunDeepProbe({ deep: DEEP_PROBE, degraded: prelimGate.degraded, budgetMs: BUDGET_MS })) {
         const results = await Promise.all(
@@ -785,6 +802,10 @@ function validateProviders(providers) {
   const seen = new Set();
   for (const p of list) {
     if (!p || typeof p !== 'object' || !p.name) { errors.push('provider entry missing/!object name'); continue; }
+    // F2 — skip intentionally-disabled slots: an `active:false` provider (e.g. the api-*
+    // HTTP slots) may legitimately omit baseUrl/apiKeyEnv until it's turned on — validating
+    // it would flood stderr with ERRORs on every preflight. Only gate slots that can run.
+    if (p.active === false) continue;
     if (seen.has(p.name)) errors.push(`duplicate provider name: ${p.name}`);
     seen.add(p.name);
     const type = p.type;

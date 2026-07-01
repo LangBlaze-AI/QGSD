@@ -59,4 +59,22 @@ describe('validateProviders — providers.json schema gate', () => {
     assert.equal(validateProviders(null).ok, true);
     assert.equal(validateProviders([]).ok, true);
   });
+
+  it('F2: SKIPS intentionally-disabled (active:false) slots — no ERROR flood for off slots', () => {
+    // An inactive http slot legitimately omits baseUrl/apiKeyEnv until turned on. Validating
+    // it would emit ERRORs on every preflight (stderr flood). It must be skipped entirely.
+    const r = validateProviders([
+      { name: 'api-1', type: 'http', active: false },              // off + incomplete → skipped
+      { name: 'codex-1', type: 'subprocess', cli: '/x', deep_probe: {} },
+    ]);
+    assert.equal(r.ok, true, 'inactive incomplete slot must not error');
+    assert.equal(r.errors.length, 0);
+    assert.ok(!r.warnings.join().includes('api-1'), 'inactive slot must not warn either');
+  });
+
+  it('F2: an ACTIVE incomplete http slot still errors (skip is scoped to active:false only)', () => {
+    const r = validateProviders([{ name: 'api-2', type: 'http' }]); // active undefined → validated
+    assert.equal(r.ok, false);
+    assert.match(r.errors.join(), /api-2: http slot missing baseUrl/);
+  });
 });

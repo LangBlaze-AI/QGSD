@@ -9,7 +9,7 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { shouldRunDeepProbe, classifyDeepProbeResult } = require('./quorum-preflight.cjs');
+const { shouldRunDeepProbe, classifyDeepProbeResult, computeQuorumGate } = require('./quorum-preflight.cjs');
 
 describe('shouldRunDeepProbe — when to run the deep gate', () => {
   it('runs when --deep is set', () => {
@@ -29,6 +29,18 @@ describe('shouldRunDeepProbe — when to run the deep gate', () => {
   it('is skipped when the time budget cannot cover a probe', () => {
     assert.equal(shouldRunDeepProbe({ deep: true, degraded: true, budgetMs: 1000, minBudgetMs: 45000 }), false);
     assert.equal(shouldRunDeepProbe({ deep: true, degraded: true, budgetMs: 60000, minBudgetMs: 45000 }), true);
+  });
+
+  it('F1 (known gap, regression bar): a FULL panel is NOT deep-probed → a quota-dead slot slips', () => {
+    // Documents the accepted limitation so a future change that closes it trips this test.
+    // Full panel (3/3): degraded=false, so even with a sufficient budget and no --deep the
+    // deep probe does NOT run — a quota-dead slot is not pre-screened and the gate reports met.
+    assert.equal(shouldRunDeepProbe({ deep: false, degraded: false, budgetMs: 60000 }), false);
+    const gate = computeQuorumGate(3, 3, false);
+    assert.equal(gate.quorum_met, true);
+    assert.equal(gate.blocked, false);
+    // --deep DOES force a full-panel probe (the escape hatch for known-suspect slots).
+    assert.equal(shouldRunDeepProbe({ deep: true, degraded: false, budgetMs: 60000 }), true);
   });
 });
 
