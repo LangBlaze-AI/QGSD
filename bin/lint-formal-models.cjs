@@ -122,6 +122,68 @@ function parseFields(body) {
   return fields;
 }
 
+// Static semantic check: flag references to signatures that are not defined in
+// this model — a dangling signature reference (e.g. a predicate quantifying over
+// a nonexistent sig, or a field targeting an undefined type). This catches
+// semantic corruption that the structural counters (max-sigs/fields/scenarios)
+// miss, without invoking the real Alloy analyzer (stays --fast-native, no Java).
+//
+// Conservative to avoid false positives on valid models: only Capitalized
+// identifiers (Alloy sig naming convention) that appear in a TYPE position —
+// a field target type, an `extends` parent, or a quantifier binding `x: Type` —
+// and are neither a defined sig nor an Alloy built-in are flagged. nForma's
+// models use no `open` imports, so the in-file sig set is the complete universe.
+var ALLOY_BUILTINS = new Set(['Int', 'Bool', 'univ', 'none', 'iden', 'seq', 'String', 'Time', 'Ord']);
+
+function extractAlloyTypeRefs(typeExpr) {
+  // Candidate sig identifiers in a (possibly composite) type expression, e.g.
+  // "Account -> lone Balance", "set PoolState". Capitalized tokens only. Inline
+  // comments are stripped first — a multi-field sig body can leave a trailing
+  // `-- …Word` on an earlier field's type (parseFields only removes one to EOS),
+  // and prose Capitalized words must never be read as signatures.
+  var clean = String(typeExpr).replace(/--.*$/gm, '').replace(/\/\/.*$/gm, '');
+  return clean.match(/\b[A-Z]\w*/g) || [];
+}
+
+// Strip Alloy comments so prose (which is full of Capitalized words) is never
+// mistaken for code: line comments `--…` and `//…`, and block comments `/* … */`.
+function stripAlloyComments(content) {
+  return content
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/--[^\n]*/g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ');
+}
+
+function checkAlloyDanglingRefs(content, sigs) {
+  var violations = [];
+  var known = new Set();
+  for (var s = 0; s < sigs.length; s++) known.add(sigs[s].name);
+  var seen = new Set();
+  function consider(name, where) {
+    if (!name || known.has(name) || ALLOY_BUILTINS.has(name)) return;
+    if (seen.has(name)) return;
+    seen.add(name);
+    violations.push({ rule: 'dangling-sig-ref', message: 'reference to undefined signature "' + name + '" (' + where + ')' });
+  }
+  // Field target types and `extends` parents come from the structural parse.
+  for (var i = 0; i < sigs.length; i++) {
+    if (sigs[i].parent) consider(sigs[i].parent, 'extends ' + sigs[i].name);
+    for (var j = 0; j < sigs[i].fields.length; j++) {
+      var refs = extractAlloyTypeRefs(sigs[i].fields[j].type);
+      for (var k = 0; k < refs.length; k++) consider(refs[k], 'field ' + sigs[i].name + '.' + sigs[i].fields[j].name);
+    }
+  }
+  // Quantifier bindings must be anchored to a real Alloy quantifier keyword —
+  // `all x: Type`, `some x: Type`, etc. — NOT any `word: Word` (which matches
+  // prose). Comments are stripped first. This is what catches a predicate that
+  // quantifies over a nonexistent signature.
+  var code = stripAlloyComments(content);
+  var bindingRe = /\b(?:all|some|no|one|lone|sum)\s+(?:disj\s+)?\w+(?:\s*,\s*\w+)*\s*:\s*(?:set\s+|one\s+|lone\s+|some\s+|seq\s+)?([A-Z]\w*)/g;
+  var m;
+  while ((m = bindingRe.exec(code)) !== null) consider(m[1], 'quantifier binding');
+  return violations;
+}
+
 function parseAlloyCommands(content) {
   var commands = [];
   var cmdRegex = /\b(run|check)\s+(?:(\w+)\s*)?(?:\{[^}]*\}\s*)?for\s+(.+)/g;
@@ -350,6 +412,11 @@ function lintAlloyModels(policy) {
       var violations = [];
       var suggestions = [];
 
+      // Semantic: dangling signature references (undefined sigs used in fields,
+      // extends, or quantifier bindings). Catches corruption the counters miss.
+      var danglingRefs = checkAlloyDanglingRefs(content, sigs);
+      for (var dr = 0; dr < danglingRefs.length; dr++) violations.push(danglingRefs[dr]);
+
       if (sigs.length > policy.max_sigs) {
         violations.push({ rule: 'max-sigs', message: sigs.length + ' sigs (max ' + policy.max_sigs + ')' });
       }
@@ -577,4 +644,9 @@ function main() {
 function good(f) { return f.filter(function(x) { return x.pass; }).length; }
 function bad(f) { return f.filter(function(x) { return !x.pass; }).length; }
 
-main();
+// Export semantic-check helpers for unit testing without running the CLI scan.
+module.exports = { checkAlloyDanglingRefs: checkAlloyDanglingRefs, extractAlloyTypeRefs: extractAlloyTypeRefs, stripAlloyComments: stripAlloyComments, parseAlloySigs: parseAlloySigs };
+
+if (require.main === module) {
+  main();
+}
