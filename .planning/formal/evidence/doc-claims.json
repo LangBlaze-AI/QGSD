@@ -1,33 +1,15 @@
 {
-  "generated": "2026-05-18T14:59:56.910Z",
+  "generated": "2026-07-01T22:07:23.957Z",
   "total_claims_checked": 188,
   "doc_files_scanned": 14,
-  "raw_broken_count": 58,
-  "weighted_residual": 114,
-  "suppressed_fp_count": 7,
+  "raw_broken_count": 55,
+  "weighted_residual": 109,
+  "suppressed_fp_count": 4,
   "category_breakdown": {
-    "user": 56,
-    "developer": 2
+    "user": 54,
+    "developer": 1
   },
   "broken_claims": [
-    {
-      "doc_file": "README.md",
-      "line": 179,
-      "type": "file_path",
-      "value": ".claude/settings.json",
-      "reason": "file not found",
-      "category": "user",
-      "weight": 2
-    },
-    {
-      "doc_file": "README.md",
-      "line": 690,
-      "type": "file_path",
-      "value": "gates/per-model-gates.json",
-      "reason": "file not found",
-      "category": "user",
-      "weight": 2
-    },
     {
       "doc_file": "README.md",
       "line": 970,
@@ -45,15 +27,6 @@
       "reason": "not in any dependency manifest",
       "category": "user",
       "weight": 2
-    },
-    {
-      "doc_file": "docs/dev/requirements-coverage.md",
-      "line": 1762,
-      "type": "file_path",
-      "value": ".claude/circuit-breaker-state.json",
-      "reason": "file not found",
-      "category": "developer",
-      "weight": 1
     },
     {
       "doc_file": "docs/USER-GUIDE.md",
