@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generated_at": "2026-06-30T12:46:29.127Z",
+    "generated_at": "2026-06-30T12:53:39.077Z",
     "generator_version": "1.1",
     "data_sources": {
       "annotations": {
@@ -12,7 +12,7 @@
         "used_as_fallback": 7
       },
       "check_results": {
-        "entry_count": 249
+        "entry_count": 258
       },
       "unit_test_coverage": {
         "available": true,
@@ -6595,28 +6595,28 @@
           "property_name": "ThresholdPasses",
           "source": "annotation",
           "latest_result": "pass",
-          "check_id": "alloy:quorum-votes"
+          "check_id": "tla:quorum-safety"
         },
         {
           "model_file": ".planning/formal/alloy/quorum-votes.als",
           "property_name": "BelowThresholdFails",
           "source": "annotation",
           "latest_result": "pass",
-          "check_id": "alloy:quorum-votes"
+          "check_id": "tla:quorum-safety"
         },
         {
           "model_file": ".planning/formal/tla/NFQuorum.tla",
           "property_name": "UnanimityMet",
           "source": "annotation",
           "latest_result": "pass",
-          "check_id": "alloy:quorum-votes"
+          "check_id": "tla:quorum-safety"
         },
         {
           "model_file": ".planning/formal/tla/QGSDQuorum.tla",
           "property_name": "UnanimityMet",
           "source": "annotation",
           "latest_result": "pass",
-          "check_id": "alloy:quorum-votes"
+          "check_id": "tla:quorum-safety"
         },
         {
           "model_file": ".planning/formal/petri/quorum-petri-net.dot",
@@ -6639,28 +6639,28 @@
           "property_name": "ThresholdPasses",
           "source": "annotation",
           "latest_result": "pass",
-          "check_id": "alloy:quorum-votes"
+          "check_id": "tla:quorum-safety"
         },
         {
           "model_file": ".planning/formal/alloy/quorum-votes.als",
           "property_name": "BelowThresholdFails",
           "source": "annotation",
           "latest_result": "pass",
-          "check_id": "alloy:quorum-votes"
+          "check_id": "tla:quorum-safety"
         },
         {
           "model_file": ".planning/formal/tla/NFQuorum.tla",
           "property_name": "UnanimityMet",
           "source": "annotation",
           "latest_result": "pass",
-          "check_id": "alloy:quorum-votes"
+          "check_id": "tla:quorum-safety"
         },
         {
           "model_file": ".planning/formal/tla/QGSDQuorum.tla",
           "property_name": "UnanimityMet",
           "source": "annotation",
           "latest_result": "pass",
-          "check_id": "alloy:quorum-votes"
+          "check_id": "tla:quorum-safety"
         }
       ],
       "unit_test_coverage": {
@@ -22713,7 +22713,7 @@
       ],
       "source": "annotation",
       "latest_result": "pass",
-      "check_id": "alloy:quorum-votes"
+      "check_id": "tla:quorum-safety"
     },
     ".planning/formal/alloy/quorum-votes.als::BelowThresholdFails": {
       "model_file": ".planning/formal/alloy/quorum-votes.als",
@@ -22724,7 +22724,7 @@
       ],
       "source": "annotation",
       "latest_result": "pass",
-      "check_id": "alloy:quorum-votes"
+      "check_id": "tla:quorum-safety"
     },
     ".planning/formal/alloy/quorum-votes.als::ZeroApprovalsFail": {
       "model_file": ".planning/formal/alloy/quorum-votes.als",
@@ -26602,7 +26602,7 @@
       ],
       "source": "annotation",
       "latest_result": "pass",
-      "check_id": "alloy:quorum-votes"
+      "check_id": "tla:quorum-safety"
     },
     ".planning/formal/tla/NFQuorum.tla::QuorumCeilingMet": {
       "model_file": ".planning/formal/tla/NFQuorum.tla",
@@ -28064,7 +28064,7 @@
       ],
       "source": "annotation",
       "latest_result": "pass",
-      "check_id": "alloy:quorum-votes"
+      "check_id": "tla:quorum-safety"
     },
     ".planning/formal/tla/QGSDQuorum.tla::QuorumCeilingMet": {
       "model_file": ".planning/formal/tla/QGSDQuorum.tla",
@@ -35890,7 +35890,7 @@
   },
   "coverage_preservation": {
     "baseline_found": true,
-    "baseline_date": "2026-06-30T12:41:26.439Z",
+    "baseline_date": "2026-06-30T12:46:29.127Z",
     "requirements_checked": 586,
     "regressions": [],
     "summary": {
