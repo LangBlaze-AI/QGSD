@@ -27,6 +27,7 @@ var ROOT      = process.cwd();
 var ALLOY_DIR = path.join(ROOT, '.planning', 'formal', 'alloy');
 var POLICY    = path.join(ROOT, '.planning', 'formal', 'policy.yaml');
 var TLA_REPORT = path.join(ROOT, '.planning', 'formal', 'state-space-report.json');
+var TLA_DIR   = path.join(ROOT, '.planning', 'formal', 'tla');
 var TAG       = '[lint-formal]';
 
 var cliArgs = process.argv.slice(2);
@@ -485,44 +486,143 @@ function lintAlloyModels(policy) {
   return findings;
 }
 
+// Strip TLA+ comments so their prose can't be mistaken for spec text:
+// block comments `(* … *)` and line comments `\* …`.
+function stripTLAComments(content) {
+  return String(content)
+    .replace(/\(\*[\s\S]*?\*\)/g, ' ')
+    .replace(/\\\*[^\n]*/g, ' ');
+}
+
+// A definition body is a trivial tautology when it is true by construction,
+// independent of any .cfg CONSTANTS — the source alone decides it. This is the
+// TLA+ analog of the Alloy dangling-ref check: purely syntactic, so it fires
+// during a benchmark solve where a precomputed TLC report can't (the report is
+// stale relative to the mutated source). Kept deliberately narrow — only forms
+// that NEVER appear in a genuine spec (verified: 0 across the 67 real models):
+//   x = x | x <= x | x >= x  (same identifier, unprimed) · 1 = 1
+// `x' = x` (UNCHANGED) is safe: the prime makes the two tokens differ. Bare
+// `TRUE` is deliberately NOT flagged — a real model (QGSDSetupWizard's
+// `WizardStartsCorrectly == TRUE \* Enforced by Init`) uses it as a documented
+// placeholder invariant, so it is not a reliable corruption signal.
+function isTrivialTautology(body) {
+  var b = String(body).replace(/\s+/g, ' ').trim();
+  var idm = b.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(=|<=|>=)\s*([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (idm && idm[1] === idm[3]) return true;
+  var numm = b.match(/^(\d+)\s*=\s*(\d+)$/);
+  if (numm && numm[1] === numm[2]) return true;
+  return false;
+}
+
+// Scan a TLA+ module's source for definitions whose body is a trivial
+// tautology (a "meaningful invariant replaced with x = x" — BENCH-023). Blocks
+// are delimited by the next top-level `Name ==` header, so multi-line bodies
+// are captured. Only the module body (before the `====` terminator) is scanned.
+function checkTLATrivialInvariant(content) {
+  var violations = [];
+  var clean = stripTLAComments(content);
+  var term = clean.search(/^====/m);
+  if (term !== -1) clean = clean.slice(0, term);
+  var lines = clean.split('\n');
+  var headRe = /^([A-Za-z_][A-Za-z0-9_]*)(\([^)]*\))?\s*==(.*)$/;
+  var i = 0;
+  while (i < lines.length) {
+    var h = lines[i].match(headRe);
+    if (!h) { i++; continue; }
+    var name = h[1];
+    var parts = [h[3]];
+    var j = i + 1;
+    for (; j < lines.length; j++) {
+      if (headRe.test(lines[j])) break;
+      parts.push(lines[j]);
+    }
+    var body = parts.join(' ').replace(/\s+/g, ' ').trim();
+    if (body && isTrivialTautology(body)) {
+      violations.push({ rule: 'trivial-invariant', message: name + ' has a trivially-true body: ' + body });
+    }
+    i = j;
+  }
+  return violations;
+}
+
+// Source-level TLA+ scan, independent of the precomputed state-space report
+// (which is stale relative to a freshly-mutated .tla and may be absent in a SUT
+// worktree). Returns a map of file basename → trivial-invariant violations.
+function scanTLASourceViolations() {
+  var byFile = {};
+  if (!fs.existsSync(TLA_DIR)) return byFile;
+  var files;
+  try { files = fs.readdirSync(TLA_DIR).filter(function(f) { return f.endsWith('.tla') && f.indexOf('_TTrace_') === -1; }); }
+  catch (_) { return byFile; }
+  for (var i = 0; i < files.length; i++) {
+    try {
+      var v = checkTLATrivialInvariant(fs.readFileSync(path.join(TLA_DIR, files[i]), 'utf8'));
+      if (v.length) byFile[files[i]] = v;
+    } catch (_) { /* unreadable model — skip, never crash the sweep */ }
+  }
+  return byFile;
+}
+
 function lintTLAModels(policy) {
   var findings = [];
-  if (!fs.existsSync(TLA_REPORT)) return findings;
 
-  var report;
-  try { report = JSON.parse(fs.readFileSync(TLA_REPORT, 'utf8')); } catch (_) { return findings; }
+  // Source-level violations (trivial-invariant) — computed independent of the
+  // report so they fire even when the report is stale or absent. Consumed by
+  // basename as report findings are built; leftovers become their own findings.
+  var srcViolations = scanTLASourceViolations();
 
-  var entries = Object.entries(report.models || {});
-  for (var i = 0; i < entries.length; i++) {
-    var modelPath = entries[i][0];
-    var data = entries[i][1];
-    var name = data.module_name || path.basename(modelPath, '.tla');
-    if (name.indexOf('_TTrace_') !== -1) continue;
+  if (fs.existsSync(TLA_REPORT)) {
+    var report;
+    try { report = JSON.parse(fs.readFileSync(TLA_REPORT, 'utf8')); } catch (_) { report = null; }
+    var entries = report ? Object.entries(report.models || {}) : [];
+    for (var i = 0; i < entries.length; i++) {
+      var modelPath = entries[i][0];
+      var data = entries[i][1];
+      var name = data.module_name || path.basename(modelPath, '.tla');
+      if (name.indexOf('_TTrace_') !== -1) continue;
 
-    var violations = [];
-    var suggestions = [];
-    var states = data.estimated_states;
+      var violations = [];
+      var suggestions = [];
+      var states = data.estimated_states;
 
-    if (policy.require_bounded_tla && data.has_unbounded) {
-      violations.push({ rule: 'unbounded-tla', message: 'Unbounded: ' + (data.unbounded_domains || []).join(', ') });
-      suggestions = suggestTLAFix(data);
+      if (policy.require_bounded_tla && data.has_unbounded) {
+        violations.push({ rule: 'unbounded-tla', message: 'Unbounded: ' + (data.unbounded_domains || []).join(', ') });
+        suggestions = suggestTLAFix(data);
+      }
+      if (states !== null && states > policy.max_scenarios) {
+        violations.push({ rule: 'max-scenarios', message: states + ' states (max ' + policy.max_scenarios + ')' });
+      }
+      if (!data.cfg_file && policy.require_bounded_tla) {
+        violations.push({ rule: 'missing-cfg', message: 'No .cfg file — cannot be checked by TLC' });
+        if (suggestions.length === 0) suggestions = suggestTLAFix(data);
+      }
+
+      var base = path.basename(modelPath);
+      if (srcViolations[base]) {
+        violations = violations.concat(srcViolations[base]);
+        delete srcViolations[base];
+      }
+
+      findings.push({
+        framework: 'TLA+', model: name, file: base,
+        scenarios: states !== null ? BigInt(states) : null,
+        scenariosStr: states !== null ? String(states) : (data.has_unbounded ? 'UNBOUNDED' : '?'),
+        sigCount: (data.variables || []).length, fieldCount: 0,
+        commandCount: (data.invariant_count || 0) + (data.property_count || 0),
+        violations: violations, suggestions: suggestions, heatMap: [],
+        pass: violations.length === 0,
+      });
     }
-    if (states !== null && states > policy.max_scenarios) {
-      violations.push({ rule: 'max-scenarios', message: states + ' states (max ' + policy.max_scenarios + ')' });
-    }
-    if (!data.cfg_file && policy.require_bounded_tla) {
-      violations.push({ rule: 'missing-cfg', message: 'No .cfg file — cannot be checked by TLC' });
-      if (suggestions.length === 0) suggestions = suggestTLAFix(data);
-    }
+  }
 
+  // Files with trivial-invariant violations not covered by the report (report
+  // absent, or model missing from it) still surface as findings.
+  var leftover = Object.keys(srcViolations);
+  for (var k = 0; k < leftover.length; k++) {
     findings.push({
-      framework: 'TLA+', model: name, file: path.basename(modelPath),
-      scenarios: states !== null ? BigInt(states) : null,
-      scenariosStr: states !== null ? String(states) : (data.has_unbounded ? 'UNBOUNDED' : '?'),
-      sigCount: (data.variables || []).length, fieldCount: 0,
-      commandCount: (data.invariant_count || 0) + (data.property_count || 0),
-      violations: violations, suggestions: suggestions, heatMap: [],
-      pass: violations.length === 0,
+      framework: 'TLA+', model: leftover[k].replace(/\.tla$/, ''), file: leftover[k],
+      scenarios: null, scenariosStr: '?', sigCount: 0, fieldCount: 0, commandCount: 0,
+      violations: srcViolations[leftover[k]], suggestions: [], heatMap: [], pass: false,
     });
   }
   return findings;
@@ -648,7 +748,7 @@ function good(f) { return f.filter(function(x) { return x.pass; }).length; }
 function bad(f) { return f.filter(function(x) { return !x.pass; }).length; }
 
 // Export semantic-check helpers for unit testing without running the CLI scan.
-module.exports = { checkAlloyDanglingRefs: checkAlloyDanglingRefs, extractAlloyTypeRefs: extractAlloyTypeRefs, stripAlloyComments: stripAlloyComments, parseAlloySigs: parseAlloySigs };
+module.exports = { checkAlloyDanglingRefs: checkAlloyDanglingRefs, extractAlloyTypeRefs: extractAlloyTypeRefs, stripAlloyComments: stripAlloyComments, parseAlloySigs: parseAlloySigs, checkTLATrivialInvariant: checkTLATrivialInvariant, isTrivialTautology: isTrivialTautology, stripTLAComments: stripTLAComments };
 
 if (require.main === module) {
   main();

@@ -8,7 +8,11 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { checkAlloyDanglingRefs, extractAlloyTypeRefs, stripAlloyComments, parseAlloySigs } = require('./lint-formal-models.cjs');
+const { checkAlloyDanglingRefs, extractAlloyTypeRefs, stripAlloyComments, parseAlloySigs, checkTLATrivialInvariant, isTrivialTautology, stripTLAComments } = require('./lint-formal-models.cjs');
+
+function trivialRules(content) {
+  return checkTLATrivialInvariant(content).filter(v => v.rule === 'trivial-invariant').map(v => v.message);
+}
 
 function danglingRules(content) {
   return checkAlloyDanglingRefs(content, parseAlloySigs(content))
@@ -85,4 +89,71 @@ test('no false positive from a Capitalized word inside a block comment in a fiel
   const model = 'sig Account {}\nsig Ledger { bal: one /* Legacy Balance Field */ Account }';
   assert.deepStrictEqual(danglingRules(model), [],
     'a block comment in a field type must not produce a dangling-sig-ref');
+});
+
+// ── TLA+ trivial-invariant detection (BENCH-023) ────────────────────────────
+// A meaningful safety invariant replaced with a tautology (x = x) is corruption
+// the structural counters and the precomputed TLC report both miss. Detected
+// purely from source so it fires during a --fast benchmark solve.
+
+test('detects a multi-line invariant whose body was replaced with x = x', () => {
+  const model = [
+    '---- MODULE M ----',
+    'VARIABLES recovered, fileExists',
+    'RecoveryRequiresFile ==',
+    '    recovered = recovered',
+    '====',
+  ].join('\n');
+  assert.deepStrictEqual(trivialRules(model),
+    ['RecoveryRequiresFile has a trivially-true body: recovered = recovered']);
+});
+
+test('detects inline x = x, x <= x, and 1 = 1 tautologies', () => {
+  assert.ok(isTrivialTautology('x = x'));
+  assert.ok(isTrivialTautology('stepCount <= stepCount'));
+  assert.ok(isTrivialTautology('n >= n'));
+  assert.ok(isTrivialTautology('1 = 1'));
+});
+
+test('does NOT flag UNCHANGED (x\' = x) — the prime makes the tokens differ', () => {
+  assert.ok(!isTrivialTautology("recovered' = recovered"));
+  const model = '---- MODULE M ----\nKeep ==\n    x\' = x\n====';
+  assert.deepStrictEqual(trivialRules(model), []);
+});
+
+test('does NOT flag a meaningful implication invariant', () => {
+  const model = [
+    '---- MODULE M ----',
+    'ActivityValid ==',
+    '    fileExists = TRUE => activity \\in Activities',
+    '====',
+  ].join('\n');
+  assert.deepStrictEqual(trivialRules(model), []);
+});
+
+test('does NOT flag bare TRUE — a documented placeholder invariant is legitimate', () => {
+  const model = '---- MODULE M ----\nWizardStartsCorrectly ==\n    TRUE \\* Enforced by Init\n====';
+  assert.deepStrictEqual(trivialRules(model), []);
+});
+
+test('does NOT flag a different-identifier equality (x = y)', () => {
+  assert.ok(!isTrivialTautology('x = y'));
+  assert.ok(!isTrivialTautology('a = b'));
+});
+
+test('ignores content after the ==== module terminator', () => {
+  const model = '---- MODULE M ----\nReal ==\n    x => y\n====\ntrailing == z = z';
+  assert.deepStrictEqual(trivialRules(model), [],
+    'a tautology after the terminator is dead text, not a spec definition');
+});
+
+test('does NOT flag a tautology hidden inside a comment', () => {
+  const model = '---- MODULE M ----\nReal ==\n    x => y  \\* note: x = x would be trivial\n====';
+  assert.deepStrictEqual(trivialRules(model), []);
+});
+
+test('stripTLAComments removes line and block comments', () => {
+  const stripped = stripTLAComments('Foo == bar \\* trailing\n(* block\ncomment *)\nBaz == qux');
+  assert.ok(/Foo == bar/.test(stripped) && /Baz == qux/.test(stripped));
+  assert.ok(!/trailing/.test(stripped) && !/block/.test(stripped));
 });
