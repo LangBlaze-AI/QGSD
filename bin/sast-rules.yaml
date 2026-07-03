@@ -1,0 +1,51 @@
+# nForma bundled SAST ruleset — curated code-vulnerability patterns for the
+# `sast` sweep (bin/sast-sweep.cjs). Deterministic, offline (no registry/network).
+# Verified 0 findings on nForma's own bin/ + hooks/ (real code uses spawnSync,
+# no exec-concat / SQL / eval), so any finding is a genuine injected vulnerability.
+# All `pattern` values are quoted (they contain YAML-significant : { } chars).
+rules:
+  - id: sql-injection-string-concat
+    languages: [javascript]
+    severity: ERROR
+    message: SQL query built via string concatenation/interpolation with a variable (SQL injection).
+    patterns:
+      - pattern-either:
+          - pattern: '$DB.query("..." + $X)'
+          - pattern: '$DB.query("..." + $X + "...")'
+          - pattern: '$DB.query(`...${$X}...`)'
+          - pattern: '$DB.execute("..." + $X)'
+          - pattern: '$DB.raw("..." + $X)'
+  - id: command-injection
+    languages: [javascript]
+    severity: ERROR
+    message: Shell command built with a variable (command injection).
+    patterns:
+      - pattern-either:
+          - pattern: '$CP.exec("..." + $X)'
+          - pattern: '$CP.exec(`...${$X}...`)'
+          - pattern: '$CP.execSync("..." + $X)'
+          - pattern: '$CP.execSync(`...${$X}...`)'
+  - id: eval-of-input
+    languages: [javascript]
+    severity: ERROR
+    message: eval() of a dynamic value (code injection). (new Function(src) syntax
+      checks are intentionally NOT flagged — they compile trusted source, not input.)
+    patterns:
+      - pattern: 'eval($X)'
+      - metavariable-pattern:
+          metavariable: $X
+          patterns:
+            - pattern-not: "'...'"
+            - pattern-not: '"..."'
+  - id: xss-unescaped-output
+    languages: [javascript]
+    severity: ERROR
+    message: User input assigned to innerHTML without escaping (XSS). (.write/.send
+      are NOT flagged — ambiguous with CLI stdout writes; use a taint rule for HTTP.)
+    patterns:
+      - pattern: '$EL.innerHTML = $X'
+      - metavariable-pattern:
+          metavariable: $X
+          patterns:
+            - pattern-not: "'...'"
+            - pattern-not: '"..."'
