@@ -269,8 +269,33 @@ const NF_FORMAL_HOME = path.join(os.homedir(), '.local', 'share', 'nf-formal');
       ok('Petri nets — @hpcc-js/wasm-graphviz installed');
       results.push({ name: 'Petri', status: 'ok' });
     } else {
-      warn('Petri nets — failed to install @hpcc-js/wasm-graphviz');
-      results.push({ name: 'Petri', status: 'warn' });
+      info('Petri nets — failed to install @hpcc-js/wasm-graphviz');
+      results.push({ name: 'Petri', status: 'skip' });
+    }
+  }
+
+  // ── SAST (Semgrep) — powers nf-solve's `sast` layer (bin/sast-sweep.cjs) ──
+  // Best-effort, like the formal analyzers: skip if present, try pipx then pip.
+  const semgrepPresent = spawnSync('semgrep', ['--version'], { encoding: 'utf8', stdio: 'pipe' }).status === 0
+    || fs.existsSync(path.join(process.env.HOME || '', '.local', 'bin', 'semgrep'));
+  if (semgrepPresent) {
+    skip('Semgrep (SAST) already present — skipping');
+    results.push({ name: 'Semgrep', status: 'skip' });
+  } else {
+    process.stdout.write('  Installing Semgrep (SAST)…\n');
+    let installed = false;
+    if (spawnSync('pipx', ['--version'], { stdio: 'pipe' }).status === 0) {
+      installed = spawnSync('pipx', ['install', 'semgrep'], { stdio: 'pipe', timeout: 300000 }).status === 0;
+    }
+    if (!installed && spawnSync('pip3', ['--version'], { stdio: 'pipe' }).status === 0) {
+      installed = spawnSync('pip3', ['install', '--user', 'semgrep'], { stdio: 'pipe', timeout: 300000 }).status === 0;
+    }
+    if (installed) {
+      ok('Semgrep (SAST) installed');
+      results.push({ name: 'Semgrep', status: 'ok' });
+    } else {
+      info('Semgrep (SAST) — install skipped (need pipx or pip3); nf-solve sast layer will fail-open until installed');
+      results.push({ name: 'Semgrep', status: 'skip' });
     }
   }
 
