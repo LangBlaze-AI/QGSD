@@ -4241,7 +4241,7 @@ function sweepConfigHealth() {
 
 function sweepSecurity() {
   try {
-    const scriptPath = path.join(ROOT, 'bin', 'security-sweep.cjs');
+    const scriptPath = path.join(SCRIPT_DIR, 'security-sweep.cjs'); // SUT's bin, not ROOT (may be a separate fixture)
     if (!fs.existsSync(scriptPath)) {
       return { residual: -1, detail: { skipped: true, reason: 'security-sweep.cjs not found' } };
     }
@@ -4267,7 +4267,7 @@ function sweepSecurity() {
 // finding is a genuine corruption — the residual IS the findings count.
 function sweepRequireGraph() {
   try {
-    const scriptPath = path.join(ROOT, 'bin', 'check-require-graph.cjs');
+    const scriptPath = path.join(SCRIPT_DIR, 'check-require-graph.cjs'); // SUT's bin, not ROOT (may be a separate fixture)
     if (!fs.existsSync(scriptPath)) {
       return { residual: -1, detail: { skipped: true, reason: 'check-require-graph.cjs not found' } };
     }
@@ -4297,7 +4297,9 @@ function sweepRequireGraph() {
 // nForma's own code (curated ruleset), so any finding is a real injected vuln.
 function sweepSast() {
   try {
-    const scriptPath = path.join(ROOT, 'bin', 'sast-sweep.cjs');
+    // Check the SUT's own bin (SCRIPT_DIR) — spawnTool runs the script from there,
+    // NOT from ROOT (the scanned project, which may be a separate fixture with no bin/).
+    const scriptPath = path.join(SCRIPT_DIR, 'sast-sweep.cjs');
     if (!fs.existsSync(scriptPath)) {
       return { residual: -1, detail: { skipped: true, reason: 'sast-sweep.cjs not found' } };
     }
