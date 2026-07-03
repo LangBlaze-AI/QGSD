@@ -1,0 +1,64 @@
+# nForma bundled SAST ruleset — curated code-vulnerability patterns for the
+# `sast` sweep (bin/sast-sweep.cjs). Deterministic, offline (no registry/network).
+# Verified 0 findings on nForma's own bin/ + hooks/ (real code uses spawnSync,
+# no exec-concat / SQL / eval), so any finding is a genuine injected vulnerability.
+# All `pattern` values are quoted (they contain YAML-significant : { } chars).
+rules:
+  - id: sql-injection-string-concat
+    languages: [javascript]
+    severity: ERROR
+    message: SQL query built via string concatenation/interpolation with a variable (SQL injection).
+    patterns:
+      - pattern-either:
+          - pattern: '$DB.query("..." + $X)'
+          - pattern: '$DB.query("..." + $X + "...")'
+          - pattern: '$DB.query(`...${$X}...`)'
+          - pattern: '$DB.execute("..." + $X)'
+          - pattern: '$DB.raw("..." + $X)'
+  - id: command-injection
+    languages: [javascript]
+    severity: ERROR
+    message: Shell command built with a variable (command injection).
+    patterns:
+      - pattern-either:
+          - pattern: '$CP.exec("..." + $X)'
+          - pattern: '$CP.exec(`...${$X}...`)'
+          - pattern: '$CP.execSync("..." + $X)'
+          - pattern: '$CP.execSync(`...${$X}...`)'
+  - id: eval-of-input
+    languages: [javascript]
+    severity: ERROR
+    message: eval() of a dynamic value (code injection). (new Function(src) syntax
+      checks are intentionally NOT flagged — they compile trusted source, not input.)
+    patterns:
+      - pattern: 'eval($X)'
+      - metavariable-pattern:
+          metavariable: $X
+          patterns:
+            - pattern-not: "'...'"
+            - pattern-not: '"..."'
+  - id: xss-unescaped-output
+    languages: [javascript]
+    severity: ERROR
+    message: Un-escaped value written to HTML/response (XSS). The concatenated value
+      is not passed through an escaping/sanitizing helper. The sweep only scans
+      web-app source dirs (src/app/server/api), so this is a real XSS vector.
+    patterns:
+      - pattern-either:
+          - pattern: '$RES.send("..." + $X + "...")'
+          - pattern: '$RES.send("..." + $X)'
+          - pattern: '$RES.write("..." + $X + "...")'
+          - pattern: '$RES.end("..." + $X + "...")'
+          - pattern: '$EL.innerHTML = $X'
+      - metavariable-pattern:
+          metavariable: $X
+          patterns:
+            # Not flagged when the value is already escaped/sanitized, or a literal.
+            - pattern-not: 'escapeHtml(...)'
+            - pattern-not: 'escape(...)'
+            - pattern-not: 'encodeURIComponent(...)'
+            - pattern-not: 'sanitizeHtml(...)'
+            - pattern-not: 'sanitize(...)'
+            - pattern-not: 'he.encode(...)'
+            - pattern-not: "'...'"
+            - pattern-not: '"..."'

@@ -4241,7 +4241,7 @@ function sweepConfigHealth() {
 
 function sweepSecurity() {
   try {
-    const scriptPath = path.join(ROOT, 'bin', 'security-sweep.cjs');
+    const scriptPath = path.join(SCRIPT_DIR, 'security-sweep.cjs'); // SUT's bin, not ROOT (may be a separate fixture)
     if (!fs.existsSync(scriptPath)) {
       return { residual: -1, detail: { skipped: true, reason: 'security-sweep.cjs not found' } };
     }
@@ -4267,7 +4267,7 @@ function sweepSecurity() {
 // finding is a genuine corruption — the residual IS the findings count.
 function sweepRequireGraph() {
   try {
-    const scriptPath = path.join(ROOT, 'bin', 'check-require-graph.cjs');
+    const scriptPath = path.join(SCRIPT_DIR, 'check-require-graph.cjs'); // SUT's bin, not ROOT (may be a separate fixture)
     if (!fs.existsSync(scriptPath)) {
       return { residual: -1, detail: { skipped: true, reason: 'check-require-graph.cjs not found' } };
     }
@@ -4278,6 +4278,39 @@ function sweepRequireGraph() {
       return { residual: -1, detail: { skipped: true, reason: 'check-require-graph.cjs produced no output', stderr: (result.stderr || '').slice(0, 500) } };
     }
     const data = JSON.parse(result.stdout);
+    const arr = Array.isArray(data.findings) ? data.findings : [];
+    return {
+      residual: arr.length,
+      detail: { findings_count: arr.length, findings: arr },
+    };
+  } catch (err) {
+    return { residual: -1, detail: { error: err.message } };
+  }
+}
+
+// ── SAST sweep (diagnostic) ──────────────────────────────────────────────────
+// Runs Semgrep with a bundled, offline ruleset (bin/sast-sweep.cjs) to detect
+// code-injection vulnerabilities (SQL/command/eval/XSS) that the cross-layer
+// CONSISTENCY sweeps cannot see — the same external-analyzer pattern as
+// run-formal-verify (TLC/Alloy/PRISM). Fail-open: if Semgrep isn't installed the
+// helper reports skipped, so residual is -1 (NOT a false 0). Baseline is 0 on
+// nForma's own code (curated ruleset), so any finding is a real injected vuln.
+function sweepSast() {
+  try {
+    // Check the SUT's own bin (SCRIPT_DIR) — spawnTool runs the script from there,
+    // NOT from ROOT (the scanned project, which may be a separate fixture with no bin/).
+    const scriptPath = path.join(SCRIPT_DIR, 'sast-sweep.cjs');
+    if (!fs.existsSync(scriptPath)) {
+      return { residual: -1, detail: { skipped: true, reason: 'sast-sweep.cjs not found' } };
+    }
+    const result = spawnTool('bin/sast-sweep.cjs', ['--json']);
+    if (!result.stdout) {
+      return { residual: -1, detail: { skipped: true, reason: 'sast-sweep.cjs produced no output', stderr: (result.stderr || '').slice(0, 500) } };
+    }
+    const data = JSON.parse(result.stdout);
+    if (data.skipped) {
+      return { residual: -1, detail: { skipped: true, reason: data.reason || 'sast skipped' } };
+    }
     const arr = Array.isArray(data.findings) ? data.findings : [];
     return {
       residual: arr.length,
@@ -4836,6 +4869,10 @@ function computeResidual() {
   const require_graph = checkLayerSkip('require_graph') || sweepRequireGraph();
   _timing.require_graph = { duration_ms: Date.now() - _t_require_graph, skipped: !!(require_graph.detail && require_graph.detail.skipped) };
 
+  const _t_sast = Date.now();
+  const sast = checkLayerSkip('sast') || sweepSast();
+  _timing.sast = { duration_ms: Date.now() - _t_sast, skipped: !!(sast.detail && sast.detail.skipped) };
+
   const _t_trace_health = Date.now();
   const trace_health = checkLayerSkip('trace_health') || sweepTraceHealth();
   _timing.trace_health = { duration_ms: Date.now() - _t_trace_health, skipped: !!(trace_health.detail && trace_health.detail.skipped) };
@@ -4890,6 +4927,7 @@ function computeResidual() {
     (config_health.residual >= 0 ? config_health.residual : 0) +
     (security.residual >= 0 ? security.residual : 0) +
     (require_graph.residual >= 0 ? require_graph.residual : 0) +
+    (sast.residual >= 0 ? sast.residual : 0) +
     (trace_health.residual >= 0 ? trace_health.residual : 0) +
     (asset_stale.residual >= 0 ? asset_stale.residual : 0) +
     (arch_constraints.residual >= 0 ? arch_constraints.residual : 0) +
@@ -4923,6 +4961,7 @@ function computeResidual() {
     config_health,
     security,
     require_graph,
+    sast,
     trace_health,
     asset_stale,
     arch_constraints,
