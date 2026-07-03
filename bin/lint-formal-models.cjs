@@ -28,6 +28,7 @@ var ALLOY_DIR = path.join(ROOT, '.planning', 'formal', 'alloy');
 var POLICY    = path.join(ROOT, '.planning', 'formal', 'policy.yaml');
 var TLA_REPORT = path.join(ROOT, '.planning', 'formal', 'state-space-report.json');
 var TLA_DIR   = path.join(ROOT, '.planning', 'formal', 'tla');
+var PRISM_DIR = path.join(ROOT, '.planning', 'formal', 'prism');
 var TAG       = '[lint-formal]';
 
 var cliArgs = process.argv.slice(2);
@@ -628,6 +629,95 @@ function lintTLAModels(policy) {
   return findings;
 }
 
+// ── PRISM probabilistic-model checks ─────────────────────────────────────────
+
+// Strip PRISM comments (`// …` line, `/* … */` block) so commented-out example
+// commands can't be read as live transitions.
+function stripPrismComments(content) {
+  return String(content)
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ');
+}
+
+// Split on a separator char only at paren-depth 0 — so `+` between probability
+// branches splits, but `+`/`-` inside a branch expression like `(1 - p)` or an
+// update `(a + b)` does not.
+function splitTopLevel(str, sep) {
+  var out = [], depth = 0, cur = '';
+  for (var i = 0; i < str.length; i++) {
+    var ch = str[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    if (ch === sep && depth === 0) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+// Sum the probability coefficients of a command's update section that are PURE
+// numeric literals. Symbolic branches (`p`, `(1 - p)`) are un-evaluable from
+// source and are skipped — so a valid `p : … + (1-p) : …` contributes no
+// literal and is never flagged, while an injected `1.5 : …` (or `0.7 : … +
+// 0.5 : …`) makes the literal sum exceed 1.0. Returns null when the command has
+// no literal branch at all. The probability is the text before the FIRST
+// top-level `:` in each `+`-separated branch.
+function prismLiteralProbSum(updateSection) {
+  var branches = splitTopLevel(updateSection, '+');
+  var sum = 0, sawLiteral = false;
+  for (var i = 0; i < branches.length; i++) {
+    var parts = splitTopLevel(branches[i], ':');
+    if (parts.length < 2) continue;
+    var coeff = parts[0].trim();
+    if (/^\d+(\.\d+)?$/.test(coeff)) { sum += parseFloat(coeff); sawLiteral = true; }
+  }
+  return sawLiteral ? sum : null;
+}
+
+// Flag PRISM commands whose literal branch probabilities sum to > 1.0 — an
+// invalid probability distribution (BENCH-017). Purely source-decidable, so it
+// fires under --fast without invoking the PRISM binary. A command is the text
+// between `->` and its terminating `;`.
+function checkPRISMProbSum(content) {
+  var violations = [];
+  var clean = stripPrismComments(content);
+  var re = /->([\s\S]*?);/g;
+  var m;
+  while ((m = re.exec(clean)) !== null) {
+    var sum = prismLiteralProbSum(m[1]);
+    if (sum !== null && sum > 1.0 + 1e-9) {
+      violations.push({ rule: 'prob-sum-exceeds-one', message: 'transition probabilities sum to ' + sum + ' (> 1.0)' });
+    }
+  }
+  return violations;
+}
+
+function lintPRISMModels(policy) {
+  var findings = [];
+  if (!fs.existsSync(PRISM_DIR)) return findings;
+  var files;
+  try { files = fs.readdirSync(PRISM_DIR).filter(function(f) { return f.endsWith('.pm') || f.endsWith('.prism') || f.endsWith('.nm'); }).sort(); }
+  catch (_) { return findings; }
+  for (var i = 0; i < files.length; i++) {
+    var name = files[i].replace(/\.(pm|prism|nm)$/, '');
+    try {
+      var violations = checkPRISMProbSum(fs.readFileSync(path.join(PRISM_DIR, files[i]), 'utf8'));
+      findings.push({
+        framework: 'PRISM', model: name, file: files[i],
+        scenarios: null, scenariosStr: '?', sigCount: 0, fieldCount: 0, commandCount: 0,
+        violations: violations, suggestions: [], heatMap: [], pass: violations.length === 0,
+      });
+    } catch (err) {
+      findings.push({
+        framework: 'PRISM', model: name, file: files[i],
+        scenarios: null, scenariosStr: '?', sigCount: 0, fieldCount: 0, commandCount: 0,
+        violations: [{ rule: 'parse-error', message: err.message }], suggestions: [], heatMap: [], pass: false,
+      });
+    }
+  }
+  return findings;
+}
+
 // ── Output ──────────────────────────────────────────────────────────────────
 
 function formatBig(n) {
@@ -715,7 +805,7 @@ function printFindings(findings, policy) {
 
 function main() {
   var policy = loadPolicy();
-  var findings = lintAlloyModels(policy).concat(lintTLAModels(policy));
+  var findings = lintAlloyModels(policy).concat(lintTLAModels(policy)).concat(lintPRISMModels(policy));
 
   findings.sort(function(a, b) {
     if (a.pass !== b.pass) return a.pass ? 1 : -1;
@@ -748,7 +838,7 @@ function good(f) { return f.filter(function(x) { return x.pass; }).length; }
 function bad(f) { return f.filter(function(x) { return !x.pass; }).length; }
 
 // Export semantic-check helpers for unit testing without running the CLI scan.
-module.exports = { checkAlloyDanglingRefs: checkAlloyDanglingRefs, extractAlloyTypeRefs: extractAlloyTypeRefs, stripAlloyComments: stripAlloyComments, parseAlloySigs: parseAlloySigs, checkTLATrivialInvariant: checkTLATrivialInvariant, isTrivialTautology: isTrivialTautology, stripTLAComments: stripTLAComments };
+module.exports = { checkAlloyDanglingRefs: checkAlloyDanglingRefs, extractAlloyTypeRefs: extractAlloyTypeRefs, stripAlloyComments: stripAlloyComments, parseAlloySigs: parseAlloySigs, checkTLATrivialInvariant: checkTLATrivialInvariant, isTrivialTautology: isTrivialTautology, stripTLAComments: stripTLAComments, checkPRISMProbSum: checkPRISMProbSum, prismLiteralProbSum: prismLiteralProbSum, stripPrismComments: stripPrismComments };
 
 if (require.main === module) {
   main();

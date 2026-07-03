@@ -157,3 +157,52 @@ test('stripTLAComments removes line and block comments', () => {
   assert.ok(/Foo == bar/.test(stripped) && /Baz == qux/.test(stripped));
   assert.ok(!/trailing/.test(stripped) && !/block/.test(stripped));
 });
+
+// ── PRISM transition-probability-sum detection (BENCH-017) ───────────────────
+// A command whose literal branch probabilities sum to > 1.0 is an invalid
+// distribution. Symbolic branches (p, 1-p) are un-evaluable from source and are
+// skipped, so the correct `p : … + (1-p) : …` idiom is never flagged.
+
+const { checkPRISMProbSum, prismLiteralProbSum, stripPrismComments } = require('./lint-formal-models.cjs');
+
+function probRules(content) {
+  return checkPRISMProbSum(content).filter(v => v.rule === 'prob-sum-exceeds-one').map(v => v.message);
+}
+
+test('flags a command whose literal probabilities sum to > 1.0', () => {
+  const model = 'module m\n  [] s=0 -> 0.7 : (s\'=1) + 0.5 : (s\'=2);\nendmodule';
+  assert.deepStrictEqual(probRules(model), ['transition probabilities sum to 1.2 (> 1.0)']);
+});
+
+test('flags a single out-of-range literal probability (1.5)', () => {
+  const model = "module m\n  [] s=0 -> openai_up : (s'=1) + 1.5 : (s'=0);\nendmodule";
+  assert.deepStrictEqual(probRules(model), ['transition probabilities sum to 1.5 (> 1.0)']);
+});
+
+test('does NOT flag the valid p / (1-p) idiom (symbolic, un-evaluable)', () => {
+  const model = "module m\n  [] s=0 -> openai_up : (s'=1) + (1 - openai_up) : (s'=0);\nendmodule";
+  assert.deepStrictEqual(probRules(model), []);
+});
+
+test('does NOT flag a lone 1.0 literal (sums to exactly 1.0)', () => {
+  assert.deepStrictEqual(probRules("module m\n  [] s=1 -> 1.0 : (s'=1);\nendmodule"), []);
+});
+
+test('does NOT flag literals summing to exactly 1.0', () => {
+  assert.deepStrictEqual(probRules("module m\n  [] s=0 -> 0.3 : (s'=1) + 0.7 : (s'=2);\nendmodule"), []);
+});
+
+test('does not split + inside a branch expression or update', () => {
+  // (a + b) update and (1 - p) coefficient must stay intact — no false split.
+  assert.strictEqual(prismLiteralProbSum("(1 - p) : (x'=a + b)"), null);
+});
+
+test('ignores probabilities inside comments', () => {
+  const model = "module m\n  // [] s=0 -> 0.9 : (s'=1) + 0.9 : (s'=2);\n  [] s=1 -> 1.0 : (s'=1);\nendmodule";
+  assert.deepStrictEqual(probRules(model), []);
+});
+
+test('stripPrismComments removes // and /* */ comments', () => {
+  const s = stripPrismComments('a // line\n/* block */ b');
+  assert.ok(/a/.test(s) && /b/.test(s) && !/line/.test(s) && !/block/.test(s));
+});
