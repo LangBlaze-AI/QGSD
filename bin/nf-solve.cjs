@@ -3906,7 +3906,23 @@ function sweepFormalLint() {
     }
 
     const data = JSON.parse(result.stdout);
-    const violations = data.violations || [];
+    // lint-formal-models emits per-model results under `findings[]`, not a
+    // top-level `violations` array — so `data.violations` was always undefined
+    // and every per-model violation (semantic corruption included) was ignored.
+    // Count only CORRUPTION-class violation rules from findings: genuine defects
+    // that should raise the residual (a dangling signature reference, a parse
+    // error, an excess-complexity flag), NOT the structural budget rules
+    // (max-sigs/fields/scenarios) which are expected baseline noise across the
+    // real model corpus (~276 of those) and would swamp the signal.
+    const CORRUPTION_RULES = new Set(['dangling-sig-ref', 'parse-error', 'excess-variables', 'model_file_missing']);
+    const violations = (Array.isArray(data.violations) ? data.violations.slice() : []);
+    for (const finding of (data.findings || [])) {
+      for (const v of (finding.violations || [])) {
+        if (CORRUPTION_RULES.has(v.rule)) {
+          violations.push({ model: finding.model || finding.file, rule: v.rule, message: v.message });
+        }
+      }
+    }
 
     // Direct solve-state.json check — BENCH-225: wave_count=0 is a mutation indicator
     try {
