@@ -72,9 +72,18 @@ function runSast(root) {
   try { data = JSON.parse(res.stdout); } catch (e) {
     return { skipped: true, reason: 'semgrep output parse error: ' + e.message, findings: [], count: 0 };
   }
+  // Surface fatal Semgrep errors (e.g. a rule that failed to compile) rather than
+  // treating a curtailed/empty scan as "clean" — a false 0 would defeat the sweep.
+  const errs = Array.isArray(data.errors) ? data.errors : [];
+  const fatal = errs.find(e => (e && (e.level === 'error' || /SemgrepError|InvalidRule|ParseError/i.test(String(e.type || '')))));
+  if (fatal) {
+    return { skipped: true, reason: 'semgrep scan error: ' + String(fatal.message || fatal.type || 'unknown').slice(0, 200), findings: [], count: 0 };
+  }
   const findings = (data.results || []).map(r => ({
     rule: (r.check_id || '').split('.').pop(),
-    file: path.relative(root, r.path),
+    // Semgrep paths are absolute here (we pass absolute targets); relativize to the
+    // scan root, but pass through an already-relative path unchanged (defensive).
+    file: path.isAbsolute(r.path) ? path.relative(root, r.path) : r.path,
     line: r.start && r.start.line,
     message: (r.extra && r.extra.message) || '',
   }));

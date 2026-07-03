@@ -67,12 +67,15 @@ test('detects SQL injection, command injection, and eval (when semgrep present)'
 test('does NOT flag new Function(src) syntax checks or process.stdout.write (when semgrep present)', { skip: !SEMGREP }, () => {
   const root = tmpDir();
   try {
-    writeSrc(root, 'bin/util.js', [
+    // Must live under a SCANNED source dir (src/), else the assertion passes
+    // trivially because nothing was scanned — not because the FP guard works.
+    writeSrc(root, 'src/util.js', [
       "function validate(src){ try { new Function(src); return true; } catch(_) { return false; } }",
       "function log(x){ process.stdout.write('value: ' + x); }",
       "module.exports={validate,log};",
     ].join('\n'));
     const r = runSast(root);
-    assert.strictEqual(r.count, 0, 'legit new Function / stdout.write must not be flagged (CLI FP guard)');
+    assert.strictEqual(r.skipped, false, 'src/ is a scan target — the sweep must actually run');
+    assert.strictEqual(r.count, 0, 'legit new Function / stdout.write must not be flagged (FP guard)');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
