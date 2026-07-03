@@ -22,9 +22,14 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 // Git-tracked first-party JS/CJS source (skip tests, vendored, and build output).
+// Surfaces git failures (spawn error, nonzero exit, maxBuffer overflow) rather
+// than returning [] — a silent failure would report 0 findings and masquerade as
+// a clean tree, defeating the "0 findings ⇒ clean" invariant this check relies on.
 function trackedCodeFiles(root) {
   const res = spawnSync('git', ['ls-files'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (res.status !== 0 || !res.stdout) return [];
+  if (res.error) throw new Error('check-require-graph: failed to spawn git: ' + res.error.message);
+  if (res.status !== 0) throw new Error('check-require-graph: `git ls-files` exited with status ' + res.status + (res.stderr ? ': ' + String(res.stderr).trim() : ''));
+  if (!res.stdout) return [];
   return res.stdout.split('\n').filter(Boolean).filter(function (f) {
     return /\.c?js$/.test(f) &&
       !/node_modules\//.test(f) &&
@@ -147,7 +152,15 @@ module.exports = { analyze: analyze, findings: findings, relRequires: relRequire
 if (require.main === module) {
   const root = process.cwd();
   const asJson = process.argv.includes('--json');
-  const fnd = findings(root);
+  let fnd;
+  try {
+    fnd = findings(root);
+  } catch (err) {
+    // Distinct exit 2 (not 0=clean, not 1=violations) with NO stdout, so nf-solve's
+    // sweep sees "no output" → residual -1 (skipped) rather than a false "0 = clean".
+    process.stderr.write(String((err && err.message) || err) + '\n');
+    process.exit(2);
+  }
   if (asJson) {
     process.stdout.write(JSON.stringify({ findings: fnd, count: fnd.length }, null, 2) + '\n');
   } else {

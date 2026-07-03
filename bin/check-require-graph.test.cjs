@@ -108,6 +108,15 @@ test('a 3-node cycle is detected', () => {
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test('a non-git directory THROWS rather than reporting a false-clean result', () => {
+  // A silent git failure returning [] would masquerade as a clean tree and
+  // defeat the "0 findings ⇒ clean" invariant (CodeRabbit #301). It must throw.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rg-nogit-'));
+  try {
+    assert.throws(() => findings(root), /git ls-files.*exited with status|failed to spawn git/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('a DAG (diamond, no cycle) is NOT flagged', () => {
   const root = tmpRepo();
   try {
