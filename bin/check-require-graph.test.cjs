@@ -128,3 +128,73 @@ test('a DAG (diamond, no cycle) is NOT flagged', () => {
     assert.deepStrictEqual(rules(root, 'circular-require'), []);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+// ── export/import mismatch (BENCH-039) ──────────────────────────────────────
+// A destructured key the required first-party module doesn't export (e.g. a
+// typo'd export key breaking a consumer). Opaque/dynamic-export modules and
+// `require(...).sub` destructuring are skipped to stay false-positive-free.
+
+const { staticExports, checkExportImportMismatch } = require('./check-require-graph.cjs');
+
+function mismatchRules(root) { return findings(root).filter(f => f.rule === 'export-mismatch').map(f => f.message); }
+
+test('flags a destructured key the required module does not export', () => {
+  const root = tmpRepo();
+  try {
+    write(root, 'mod.cjs', 'module.exports = { foo: 1, bar: 2 };');
+    write(root, 'consumer.cjs', "const { fooo } = require('./mod.cjs');");
+    commit(root);
+    const m = mismatchRules(root);
+    assert.strictEqual(m.length, 1);
+    assert.match(m[0], /fooo.*does not export/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('does NOT flag a correctly destructured export', () => {
+  const root = tmpRepo();
+  try {
+    write(root, 'mod.cjs', 'module.exports = { foo: 1, bar: 2 };');
+    write(root, 'consumer.cjs', "const { foo, bar } = require('./mod.cjs');");
+    commit(root);
+    assert.deepStrictEqual(mismatchRules(root), []);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('does NOT judge a module with opaque/dynamic exports', () => {
+  const root = tmpRepo();
+  try {
+    write(root, 'dyn.cjs', 'module.exports = buildApi();');
+    write(root, 'spread.cjs', 'module.exports = { ...base, x: 1 };');
+    write(root, 'c1.cjs', "const { anything } = require('./dyn.cjs');");
+    write(root, 'c2.cjs', "const { whatever } = require('./spread.cjs');");
+    commit(root);
+    assert.deepStrictEqual(mismatchRules(root), [], 'opaque/spread exports must not be judged');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('does NOT flag destructuring off a sub-object (require(...).sub)', () => {
+  const root = tmpRepo();
+  try {
+    write(root, 'mod.cjs', 'module.exports._pure = { helper: 1 };');
+    write(root, 'consumer.cjs', "const { helper } = require('./mod.cjs')._pure;");
+    commit(root);
+    assert.deepStrictEqual(mismatchRules(root), [], 'keys live in the sub-object, not top-level exports');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('recognizes exports.X = and module.exports.X = keys', () => {
+  const root = tmpRepo();
+  try {
+    write(root, 'mod.cjs', 'exports.alpha = 1;\nmodule.exports.beta = 2;');
+    write(root, 'consumer.cjs', "const { alpha, beta } = require('./mod.cjs');");
+    commit(root);
+    assert.deepStrictEqual(mismatchRules(root), []);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('staticExports returns null for opaque, a key set for object literals', () => {
+  assert.strictEqual(staticExports('module.exports = something;'), null);
+  assert.strictEqual(staticExports('module.exports = { ...x };'), null);
+  const keys = staticExports('module.exports = { a: 1, b };');
+  assert.ok(keys.has('a') && keys.has('b'));
+});

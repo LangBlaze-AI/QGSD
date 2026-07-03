@@ -113,6 +113,80 @@ function detectCycles(root, graph) {
 }
 
 // Build the require graph and collect dangling requires + cycles.
+// Static export key set of a CJS module, or null when the exports are opaque
+// (dynamic) and the key set can't be determined from source. Opaque cases:
+//   module.exports = <non-object-literal>   (a var, call, function, class)
+//   module.exports = { ...spread }          (spread pulls in unknown keys)
+// Object-literal keys and `exports.X = ` / `module.exports.X = ` are collected.
+// Returning null (not an empty set) means "don't judge this module" — the guard
+// that keeps export-mismatch false-positive-free on dynamic-export modules.
+function staticExports(content) {
+  const c = stripComments(content);
+  const keys = new Set();
+  let sawObjectLiteral = false;
+  const meIdx = c.search(/module\.exports\s*=/);
+  if (meIdx !== -1) {
+    const after = c.slice(c.indexOf('=', meIdx) + 1).trimStart();
+    if (after[0] === '{') {
+      sawObjectLiteral = true;
+      const start = c.indexOf('{', meIdx);
+      let depth = 0, end = -1;
+      for (let i = start; i < c.length; i++) { if (c[i] === '{') depth++; else if (c[i] === '}') { depth--; if (depth === 0) { end = i; break; } } }
+      const body = end > start ? c.slice(start + 1, end) : '';
+      if (/\.\.\./.test(body)) return null; // spread → unknown keys
+      const km = body.match(/(\w+)\s*(?::|,|$)/g) || [];
+      for (let i = 0; i < km.length; i++) { const m = km[i].match(/(\w+)/); if (m) keys.add(m[1]); }
+    } else {
+      return null; // module.exports = <expression> → opaque
+    }
+  }
+  const propRe = /(?:module\.)?exports\.(\w+)\s*=/g;
+  let m;
+  while ((m = propRe.exec(c)) !== null) keys.add(m[1]);
+  if (!sawObjectLiteral && keys.size === 0) return null; // no static exports found → opaque
+  return keys;
+}
+
+// `const { a, b } = require('./rel')` destructuring targets. The negative
+// lookahead `(?!\s*\.)` excludes `require('./rel').sub` (destructuring off a
+// sub-object, e.g. nForma's `._pure` internals) — those keys are not top-level
+// exports, so judging them would be a false positive.
+const DESTRUCTURE_RE = /(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require\(\s*(['"])(\.\.?\/[^'"]+)\2\s*\)(?!\s*\.)/g;
+
+// export/import mismatch: a destructured key that the required first-party module
+// (with a determinable static export set) does not export — e.g. a typo'd export
+// key breaking a downstream consumer (BENCH-039). Modules with opaque/dynamic
+// exports are skipped. Verified 0 baseline false positives across the corpus.
+function checkExportImportMismatch(root, files) {
+  const exportsByAbs = new Map();
+  for (let i = 0; i < files.length; i++) {
+    const abs = path.resolve(root, files[i]);
+    try { exportsByAbs.set(abs, staticExports(fs.readFileSync(abs, 'utf8'))); } catch (_) { /* unreadable */ }
+  }
+  const mismatches = [];
+  for (let i = 0; i < files.length; i++) {
+    let content;
+    try { content = stripComments(fs.readFileSync(path.resolve(root, files[i]), 'utf8')); } catch (_) { continue; }
+    let m;
+    DESTRUCTURE_RE.lastIndex = 0;
+    while ((m = DESTRUCTURE_RE.exec(content)) !== null) {
+      const resolved = resolveRel(root, files[i], m[3]);
+      if (!resolved || resolved.endsWith('.json')) continue;
+      const exp = exportsByAbs.get(resolved);
+      if (!exp) continue; // opaque module — can't judge
+      const parts = m[1].split(',');
+      for (let p = 0; p < parts.length; p++) {
+        const key = parts[p].trim().split(':')[0].trim();
+        if (!/^\w+$/.test(key)) continue; // skip rest/spread/computed
+        if (!exp.has(key)) {
+          mismatches.push({ file: files[i], key: key, spec: m[3] });
+        }
+      }
+    }
+  }
+  return mismatches;
+}
+
 function analyze(root) {
   const files = trackedCodeFiles(root);
   const graph = new Map();
@@ -131,7 +205,7 @@ function analyze(root) {
     }
     graph.set(abs, deps);
   }
-  return { dangling: dangling, cycles: detectCycles(root, graph), files_scanned: files.length };
+  return { dangling: dangling, cycles: detectCycles(root, graph), mismatches: checkExportImportMismatch(root, files), files_scanned: files.length };
 }
 
 // Flatten to a uniform findings list (the shape nf-solve's sweep aggregates).
@@ -144,10 +218,14 @@ function findings(root) {
   for (let i = 0; i < a.cycles.length; i++) {
     out.push({ rule: 'circular-require', file: a.cycles[i][0], message: 'circular require: ' + a.cycles[i].join(' -> ') });
   }
+  for (let i = 0; i < (a.mismatches || []).length; i++) {
+    const mm = a.mismatches[i];
+    out.push({ rule: 'export-mismatch', file: mm.file, message: 'destructures { ' + mm.key + ' } from require("' + mm.spec + '") which does not export it' });
+  }
   return out;
 }
 
-module.exports = { analyze: analyze, findings: findings, relRequires: relRequires, resolveRel: resolveRel, detectCycles: detectCycles, stripComments: stripComments, trackedCodeFiles: trackedCodeFiles };
+module.exports = { analyze: analyze, findings: findings, relRequires: relRequires, resolveRel: resolveRel, detectCycles: detectCycles, stripComments: stripComments, trackedCodeFiles: trackedCodeFiles, staticExports: staticExports, checkExportImportMismatch: checkExportImportMismatch };
 
 if (require.main === module) {
   const root = process.cwd();
