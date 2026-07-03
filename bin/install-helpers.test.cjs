@@ -780,6 +780,16 @@ test('GUARD-01: shouldCopyToNfBin should return false (not throw) for non-string
   }
 });
 
+// The SAST sweep loads its bundled ruleset (sast-rules.yaml) via __dirname, so the
+// nf-bin copy loop MUST install it alongside sast-sweep.cjs — otherwise the installed
+// sweep fails-open to "no ruleset" and never detects. Other .yaml are NOT copied.
+test('shouldCopyToNfBin copies sast-rules.yaml (bundled runtime data), not arbitrary .yaml', () => {
+  assert.equal(shouldCopyToNfBin('sast-rules.yaml'), true);
+  assert.equal(shouldCopyToNfBin('sast-sweep.cjs'), true);
+  assert.equal(shouldCopyToNfBin('policy.yaml'), false);
+  assert.equal(shouldCopyToNfBin('providers.json'), false);
+});
+
 // GUARD-03: mcpArgsNeedMigration — a bare relative filename resolves under CWD, not
 // nf-bin, so it MUST be flagged for migration. Also: a path that merely CONTAINS the
 // filename as a substring but does not END with it (e.g. a .bak sibling) must NOT be
