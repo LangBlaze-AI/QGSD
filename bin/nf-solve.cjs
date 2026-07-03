@@ -3914,7 +3914,7 @@ function sweepFormalLint() {
     // error, an excess-complexity flag), NOT the structural budget rules
     // (max-sigs/fields/scenarios) which are expected baseline noise across the
     // real model corpus (~276 of those) and would swamp the signal.
-    const CORRUPTION_RULES = new Set(['dangling-sig-ref', 'parse-error', 'excess-variables', 'model_file_missing', 'trivial-invariant']);
+    const CORRUPTION_RULES = new Set(['dangling-sig-ref', 'parse-error', 'excess-variables', 'model_file_missing', 'trivial-invariant', 'prob-sum-exceeds-one']);
     const violations = (Array.isArray(data.violations) ? data.violations.slice() : []);
     for (const finding of (data.findings || [])) {
       for (const v of (finding.violations || [])) {
