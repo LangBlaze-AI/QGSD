@@ -141,7 +141,10 @@ function extractAlloyTypeRefs(typeExpr) {
   // comments are stripped first — a multi-field sig body can leave a trailing
   // `-- …Word` on an earlier field's type (parseFields only removes one to EOS),
   // and prose Capitalized words must never be read as signatures.
-  var clean = String(typeExpr).replace(/--.*$/gm, '').replace(/\/\/.*$/gm, '');
+  // Strip ALL comment forms (line --/// AND block; per CodeRabbit review) — an
+  // inline block comment in a field type ("one /* Word */ Balance") would leak a
+  // prose Capitalized word as a false-positive dangling ref.
+  var clean = stripAlloyComments(String(typeExpr));
   return clean.match(/\b[A-Z]\w*/g) || [];
 }
 

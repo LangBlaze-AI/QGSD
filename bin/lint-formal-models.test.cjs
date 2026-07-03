@@ -77,4 +77,12 @@ test('stripAlloyComments removes line and block comments', () => {
 test('extractAlloyTypeRefs pulls Capitalized tokens, ignoring inline comments', () => {
   assert.deepStrictEqual(extractAlloyTypeRefs('Account -> lone Balance'), ['Account', 'Balance']);
   assert.deepStrictEqual(extractAlloyTypeRefs('Bool  -- must be False per INTENT-03'), ['Bool']);
+  // Block comments must also be stripped (CodeRabbit review on #297).
+  assert.deepStrictEqual(extractAlloyTypeRefs('one /* Some Prose Word */ Balance'), ['Balance']);
+});
+
+test('no false positive from a Capitalized word inside a block comment in a field type', () => {
+  const model = 'sig Account {}\nsig Ledger { bal: one /* Legacy Balance Field */ Account }';
+  assert.deepStrictEqual(danglingRules(model), [],
+    'a block comment in a field type must not produce a dangling-sig-ref');
 });
