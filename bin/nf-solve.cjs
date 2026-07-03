@@ -4260,6 +4260,34 @@ function sweepSecurity() {
   }
 }
 
+// ── Require-Graph sweep (diagnostic) ─────────────────────────────────────────
+// Source-decidable code-consistency: dangling relative requires + circular
+// require cycles. --fast-native (delegates to check-require-graph.cjs; pure fs +
+// git, no execution, no external server). Baseline is 0 on a clean tree, so any
+// finding is a genuine corruption — the residual IS the findings count.
+function sweepRequireGraph() {
+  try {
+    const scriptPath = path.join(ROOT, 'bin', 'check-require-graph.cjs');
+    if (!fs.existsSync(scriptPath)) {
+      return { residual: -1, detail: { skipped: true, reason: 'check-require-graph.cjs not found' } };
+    }
+    const result = spawnTool('bin/check-require-graph.cjs', ['--json']);
+    // Exit code 1 = violations found (still valid JSON on stdout); only a missing
+    // stdout / crash is a real failure.
+    if (!result.stdout) {
+      return { residual: -1, detail: { skipped: true, reason: 'check-require-graph.cjs produced no output', stderr: (result.stderr || '').slice(0, 500) } };
+    }
+    const data = JSON.parse(result.stdout);
+    const arr = Array.isArray(data.findings) ? data.findings : [];
+    return {
+      residual: arr.length,
+      detail: { findings_count: arr.length, findings: arr },
+    };
+  } catch (err) {
+    return { residual: -1, detail: { error: err.message } };
+  }
+}
+
 // ── Trace Health sweep (diagnostic) ──────────────────────────────────────────
 
 function sweepTraceHealth() {
@@ -4804,6 +4832,10 @@ function computeResidual() {
   const security = checkLayerSkip('security') || sweepSecurity();
   _timing.security = { duration_ms: Date.now() - _t_security, skipped: !!(security.detail && security.detail.skipped) };
 
+  const _t_require_graph = Date.now();
+  const require_graph = checkLayerSkip('require_graph') || sweepRequireGraph();
+  _timing.require_graph = { duration_ms: Date.now() - _t_require_graph, skipped: !!(require_graph.detail && require_graph.detail.skipped) };
+
   const _t_trace_health = Date.now();
   const trace_health = checkLayerSkip('trace_health') || sweepTraceHealth();
   _timing.trace_health = { duration_ms: Date.now() - _t_trace_health, skipped: !!(trace_health.detail && trace_health.detail.skipped) };
@@ -4857,6 +4889,7 @@ function computeResidual() {
     (p_to_f.residual >= 0 ? p_to_f.residual : 0) +
     (config_health.residual >= 0 ? config_health.residual : 0) +
     (security.residual >= 0 ? security.residual : 0) +
+    (require_graph.residual >= 0 ? require_graph.residual : 0) +
     (trace_health.residual >= 0 ? trace_health.residual : 0) +
     (asset_stale.residual >= 0 ? asset_stale.residual : 0) +
     (arch_constraints.residual >= 0 ? arch_constraints.residual : 0) +
@@ -4889,6 +4922,7 @@ function computeResidual() {
     req_quality,
     config_health,
     security,
+    require_graph,
     trace_health,
     asset_stale,
     arch_constraints,
