@@ -123,17 +123,3 @@ check RemoveShrinksPool       for 5 Account, 5 PoolState
 
 -- Witness: confirm a valid state with 2 accounts exists
 run { some s: PoolState | ValidState[s] and #s.pool = 2 } for 3 Account, 1 PoolState
-
-// modified by benchmark
-// modified by benchmark
-// modified by benchmark
-// modified by benchmark
-// modified by benchmark
-// modified by benchmark
-// modified by benchmark
-// modified by benchmark
-// modified by benchmark
-// modified by benchmark
-// modified by benchmark
-// modified by benchmark
-// modified by benchmark
