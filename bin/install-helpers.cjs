@@ -17,6 +17,11 @@ const path = require('path');
 // filter is the generic `*.cjs` match; these are the non-.cjs runtime files).
 const NF_BIN_RUNTIME_MJS = new Set(['unified-mcp-server.mjs']);
 
+// Bundled non-code DATA files a runtime script loads by path relative to itself
+// (e.g. sast-sweep.cjs resolves sast-rules.yaml via __dirname). Without this they
+// never land in nf-bin/ and the installed sweep silently fails to find its ruleset.
+const NF_BIN_RUNTIME_DATA = new Set(['sast-rules.yaml']);
+
 // True for a plain object (excludes null, arrays, and primitives). Shared guard so the
 // "deref a non-object" crash class (providers entries, preset entries, preset.env) is
 // closed in ONE place rather than pasted per call-site.
@@ -31,6 +36,7 @@ function shouldCopyToNfBin(entry) {
   if (entry === 'providers.json') return false;
   if (entry.endsWith('.cjs')) return true;
   if (NF_BIN_RUNTIME_MJS.has(entry)) return true;
+  if (NF_BIN_RUNTIME_DATA.has(entry)) return true;
   return false;
 }
 
