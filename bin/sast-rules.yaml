@@ -40,12 +40,25 @@ rules:
   - id: xss-unescaped-output
     languages: [javascript]
     severity: ERROR
-    message: User input assigned to innerHTML without escaping (XSS). (.write/.send
-      are NOT flagged — ambiguous with CLI stdout writes; use a taint rule for HTTP.)
+    message: Un-escaped value written to HTML/response (XSS). The concatenated value
+      is not passed through an escaping/sanitizing helper. The sweep only scans
+      web-app source dirs (src/app/server/api), so this is a real XSS vector.
     patterns:
-      - pattern: '$EL.innerHTML = $X'
+      - pattern-either:
+          - pattern: '$RES.send("..." + $X + "...")'
+          - pattern: '$RES.send("..." + $X)'
+          - pattern: '$RES.write("..." + $X + "...")'
+          - pattern: '$RES.end("..." + $X + "...")'
+          - pattern: '$EL.innerHTML = $X'
       - metavariable-pattern:
           metavariable: $X
           patterns:
+            # Not flagged when the value is already escaped/sanitized, or a literal.
+            - pattern-not: 'escapeHtml(...)'
+            - pattern-not: 'escape(...)'
+            - pattern-not: 'encodeURIComponent(...)'
+            - pattern-not: 'sanitizeHtml(...)'
+            - pattern-not: 'sanitize(...)'
+            - pattern-not: 'he.encode(...)'
             - pattern-not: "'...'"
             - pattern-not: '"..."'
