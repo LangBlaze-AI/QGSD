@@ -4355,6 +4355,39 @@ function sweepModelCheck() {
   }
 }
 
+// ── Petri reachability sweep (diagnostic) ────────────────────────────────────
+// Structural reachability over Petri nets (PNML): flags places that can never hold
+// a token (no initial marking + no incoming arc) — a modeled marking the net can
+// NEVER reach, which structural file-lint misses. Decidable + false-positive-free
+// (a place with no incoming arcs starting empty is permanently empty), same
+// confidence profile as sweepModelCheck. Fail-open: an ambiguous/malformed PNML
+// skips (residual -1, never a false 0). 0-baseline on nForma's own nets.
+function sweepPetriReachability() {
+  try {
+    // Check the SUT's own bin (SCRIPT_DIR), NOT ROOT — the scanned project may be a
+    // separate fixture with no bin/. spawnTool runs the script from SCRIPT_DIR.
+    const scriptPath = path.join(SCRIPT_DIR, 'check-petri-reachability.cjs');
+    if (!fs.existsSync(scriptPath)) {
+      return { residual: -1, detail: { skipped: true, reason: 'check-petri-reachability.cjs not found' } };
+    }
+    const result = spawnTool('bin/check-petri-reachability.cjs', ['--json']);
+    if (!result.stdout) {
+      return { residual: -1, detail: { skipped: true, reason: 'check-petri-reachability.cjs produced no output', stderr: (result.stderr || '').slice(0, 500) } };
+    }
+    const data = JSON.parse(result.stdout);
+    if (data.skipped) {
+      return { residual: -1, detail: { skipped: true, reason: data.reason || 'petri-check skipped' } };
+    }
+    const arr = Array.isArray(data.findings) ? data.findings : [];
+    return {
+      residual: arr.length,
+      detail: { findings_count: arr.length, findings: arr },
+    };
+  } catch (err) {
+    return { residual: -1, detail: { error: err.message } };
+  }
+}
+
 // ── Trace Health sweep (diagnostic) ──────────────────────────────────────────
 
 function sweepTraceHealth() {
@@ -4911,6 +4944,10 @@ function computeResidual() {
   const model_check = checkLayerSkip('model_check') || sweepModelCheck();
   _timing.model_check = { duration_ms: Date.now() - _t_model_check, skipped: !!(model_check.detail && model_check.detail.skipped) };
 
+  const _t_petri_check = Date.now();
+  const petri_check = checkLayerSkip('petri_check') || sweepPetriReachability();
+  _timing.petri_check = { duration_ms: Date.now() - _t_petri_check, skipped: !!(petri_check.detail && petri_check.detail.skipped) };
+
   const _t_trace_health = Date.now();
   const trace_health = checkLayerSkip('trace_health') || sweepTraceHealth();
   _timing.trace_health = { duration_ms: Date.now() - _t_trace_health, skipped: !!(trace_health.detail && trace_health.detail.skipped) };
@@ -4967,6 +5004,7 @@ function computeResidual() {
     (require_graph.residual >= 0 ? require_graph.residual : 0) +
     (sast.residual >= 0 ? sast.residual : 0) +
     (model_check.residual >= 0 ? model_check.residual : 0) +
+    (petri_check.residual >= 0 ? petri_check.residual : 0) +
     (trace_health.residual >= 0 ? trace_health.residual : 0) +
     (asset_stale.residual >= 0 ? asset_stale.residual : 0) +
     (arch_constraints.residual >= 0 ? arch_constraints.residual : 0) +
@@ -5002,6 +5040,7 @@ function computeResidual() {
     require_graph,
     sast,
     model_check,
+    petri_check,
     trace_health,
     asset_stale,
     arch_constraints,
@@ -5702,6 +5741,7 @@ function formatReport(iterations, finalResidual, converged) {
     { label: 'MH (Memory Health)', key: 'memory_health' },
     { label: 'MS (Model Stale)', key: 'model_stale' },
     { label: 'MC (Model Check)', key: 'model_check' },
+    { label: 'PC (Petri Check)', key: 'petri_check' },
   ];
 
   for (const row of diagRows) {

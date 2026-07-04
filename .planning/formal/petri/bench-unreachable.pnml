@@ -1,1 +1,0 @@
-<?xml version="1.0"?><pnml><net id="bench" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel"><page id="p1"><place id="s1"><initialMarking><text>1</text></initialMarking></place><place id="s2"/><place id="s3"/><transition id="t1"/><arc id="a1" source="s1" target="t1"/><arc id="a2" source="t1" target="s2"/></page></net></pnml>
