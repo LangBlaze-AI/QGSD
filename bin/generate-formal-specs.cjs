@@ -332,6 +332,12 @@ const safetyCfg = tlaCfgHeader('.planning/formal/tla/MCsafety.cfg',
   '    MaxSize = ' + maxSize,
   '    MaxBound = ' + SAFETY_AGENTS,
   'INVARIANT TypeOK',
+  // Real safety invariants (each TLC-verified to hold): a decided quorum meets
+  // unanimity-or-bound, never exceeds the size ceiling, and stays within MaxDeliberation.
+  // Without these the safety model only type-checked (see formal-model-teeth).
+  'INVARIANT UnanimityMet',
+  'INVARIANT QuorumCeilingMet',
+  'INVARIANT DeliberationBounded',
   'CHECK_DEADLOCK FALSE',
   '',
 ].join('\n');
