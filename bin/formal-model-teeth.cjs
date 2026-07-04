@@ -93,11 +93,23 @@ function literalInits(tlaContent) {
 // which checks no property explores states but verifies nothing meaningful.
 function ownAssertedInvariants(cfgContent) {
   const names = [];
+  let mode = null; // 'inv' | 'prop' | null — tracks the current INVARIANTS/PROPERTIES block
+  const add = (s, kind) => {
+    for (const n of s.split(/\s+/)) {
+      if (!n) continue;
+      if (kind === 'inv' && /^Type(OK|Invariant|Inv)?$/i.test(n)) continue;   // TypeOK asserts nothing
+      if (kind === 'prop' && /^(WF_|SF_|\/\\|\\\/)/.test(n)) continue;          // pure fairness, not a checked property
+      names.push(n);
+    }
+  };
   for (const raw of stripComments(cfgContent).split('\n')) {
-    const inv = raw.trim().match(/^INVARIANTS?\s+(.+)$/i);
-    if (inv) for (const n of inv[1].split(/\s+/)) if (n && !/^Type(OK|Invariant|Inv)?$/i.test(n)) names.push(n);
-    const prop = raw.trim().match(/^PROPERT(?:Y|IES)\s+(.+)$/i);
-    if (prop) for (const n of prop[1].split(/\s+/)) if (n) names.push(n);
+    const line = raw.trim();
+    if (!line) continue;
+    let m;
+    if ((m = line.match(/^INVARIANTS?\b\s*(.*)$/i))) { mode = 'inv'; if (m[1]) add(m[1], 'inv'); continue; }
+    if ((m = line.match(/^PROPERT(?:Y|IES)\b\s*(.*)$/i))) { mode = 'prop'; if (m[1]) add(m[1], 'prop'); continue; }
+    if (/^(SPECIFICATION|CONSTANTS?|CHECK_DEADLOCK|SYMMETRY|CONSTRAINT|INIT|NEXT|VIEW|ALIAS|POSTCONDITION)\b/i.test(line)) { mode = null; continue; }
+    if (mode) add(line, mode); // continuation line under a multi-line block
   }
   return names;
 }
