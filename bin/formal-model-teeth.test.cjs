@@ -46,3 +46,14 @@ test('ownAssertedInvariants counts non-TypeOK invariants and any PROPERTY, exclu
   assert.strictEqual(ownAssertedInvariants('INVARIANT TypeOK\nPROPERTY EventuallyDone').length, 1, 'a temporal property counts');
   assert.strictEqual(ownAssertedInvariants('INVARIANT TypeOK\nINVARIANT Safe\nPROPERTY Live').length, 2);
 });
+
+test('ownAssertedInvariants handles the multi-line INVARIANTS/PROPERTIES block form', () => {
+  const cfg = ['SPECIFICATION Spec', 'CONSTANTS', '    MaxPool = 4', 'INVARIANTS', '    TypeOK', '    ActiveIsPoolMember', '    NoActiveWhenEmpty', 'PROPERTIES', '    IdleReachable'].join('\n');
+  const got = ownAssertedInvariants(cfg);
+  assert.deepStrictEqual(got.sort(), ['ActiveIsPoolMember', 'IdleReachable', 'NoActiveWhenEmpty'], 'block-form names counted, TypeOK excluded');
+});
+
+test('ownAssertedInvariants ignores pure fairness (WF_/SF_) in a PROPERTIES block', () => {
+  const cfg = ['SPECIFICATION Spec', 'INVARIANTS', '    TypeOK', 'PROPERTIES', '    /\\ WF_vars(Finish)', '    /\\ SF_vars(Retry)'].join('\n');
+  assert.strictEqual(ownAssertedInvariants(cfg).length, 0, 'fairness-only asserts no checked property');
+});
