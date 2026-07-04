@@ -185,8 +185,10 @@ function checkFsmModels(root) {
       if (liveCfg) {
         const cfgName = base + '-live.cfg';
         fs.writeFileSync(path.join(tmp, cfgName), liveCfg);
-        // -workers 1: TLC's older liveness checker has known multi-worker bugs (see run-tlc.cjs).
-        const r = spawnSync('java', ['-cp', jar, 'tlc2.TLC', '-config', cfgName, spec, '-workers', '1'], { cwd: tmp, encoding: 'utf8', timeout: PER_MODEL_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 });
+        // -workers 1: TLC's older liveness checker has known multi-worker bugs (see
+        // run-tlc.cjs). Options BEFORE the spec positional — TLC wants the spec module
+        // last, so a trailing flag is fragile across versions.
+        const r = spawnSync('java', ['-cp', jar, 'tlc2.TLC', '-workers', '1', '-config', cfgName, spec], { cwd: tmp, encoding: 'utf8', timeout: PER_MODEL_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 });
         const out = (r.stdout || '') + (r.stderr || '');
         if (/Temporal properties were violated/.test(out)) {
           findings.push({ rule: 'fsm-liveness-violation', source: 'fsm-transpiled', model: spec.replace(/\.tla$/, ''), cfg: cfg, message: 'TLC found a declared liveness property unsatisfiable under the model\'s own fairness in transpiled state machine ' + spec + ' (cfg ' + cfg + ')' });
