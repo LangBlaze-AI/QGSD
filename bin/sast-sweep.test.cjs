@@ -64,6 +64,42 @@ test('detects SQL injection, command injection, and eval (when semgrep present)'
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test('detects a hardcoded live secret by known provider format (when semgrep present)', { skip: !SEMGREP }, () => {
+  const root = tmpDir();
+  try {
+    // Build the Stripe-format token by concatenation so this test SOURCE file never
+    // contains a contiguous sk_live_ literal (which GitHub push protection blocks) —
+    // the contiguous secret only exists in the written fixture, where the rule scans.
+    const stripeLiteral = 'sk_' + 'live_' + '51H8xY2eZvKYlo2CabcdefghijklmnopQR'; // pragma: allowlist secret
+    writeSrc(root, 'src/leak.js', [
+      "const stripeKey = '" + stripeLiteral + "';",
+      "const awsKey = 'AKIAIOSFODNN7EXAMPLE';", // pragma: allowlist secret
+      "module.exports = { stripeKey, awsKey };",
+    ].join('\n'));
+    const r = runSast(root);
+    const rules = new Set(r.findings.map(f => f.rule));
+    assert.ok(rules.has('hardcoded-secret'), 'a sk_live_/AKIA literal is flagged');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the secret rule is FP-safe: env reads and secret-named non-secrets are NOT flagged (when semgrep present)', { skip: !SEMGREP }, () => {
+  const root = tmpDir();
+  try {
+    // Known-format matching (not name/entropy heuristics) means these clean lines,
+    // which trip naive secret scanners, must NOT be flagged.
+    writeSrc(root, 'src/config.js', [
+      "const stripeKey = process.env.STRIPE_SECRET_KEY;",
+      "const tokenType = 'Bearer';",
+      "const passwordLabel = 'Enter your password below';", // pragma: allowlist secret
+      "const apiKeyHeader = 'x-api-key';", // pragma: allowlist secret
+      "module.exports = { stripeKey };",
+    ].join('\n'));
+    const r = runSast(root);
+    assert.strictEqual(r.skipped, false, 'src/ is scanned — the guard is real, not vacuous');
+    assert.strictEqual(r.count, 0, 'env reads + secret-named non-secret strings must not be flagged');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('does NOT flag new Function(src) syntax checks or process.stdout.write (when semgrep present)', { skip: !SEMGREP }, () => {
   const root = tmpDir();
   try {
