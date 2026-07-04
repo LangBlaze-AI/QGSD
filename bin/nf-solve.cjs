@@ -4321,6 +4321,40 @@ function sweepSast() {
   }
 }
 
+// ── Model-check sweep (diagnostic) ───────────────────────────────────────────
+// Runs TLC on CONCRETE (no-CONSTANTS) TLA models with an auto-generated cfg to find
+// BEHAVIORAL safety defects — reachable invariant violations (e.g. a deadlock state
+// that a NoDeadlock invariant forbids) — that the static formal_lint sweep cannot
+// see because they only manifest during state-space exploration. Same external-
+// analyzer pattern as sweepSast/run-formal-verify. Fail-open: if tla2tools.jar is
+// absent the helper reports skipped, so residual is -1 (NOT a false 0). Baseline is
+// 0 on nForma's own concrete models, so any finding is a real reachable violation.
+function sweepModelCheck() {
+  try {
+    // Check the SUT's own bin (SCRIPT_DIR), NOT ROOT — the scanned project may be a
+    // separate fixture with no bin/. spawnTool runs the script from SCRIPT_DIR.
+    const scriptPath = path.join(SCRIPT_DIR, 'check-model-invariants.cjs');
+    if (!fs.existsSync(scriptPath)) {
+      return { residual: -1, detail: { skipped: true, reason: 'check-model-invariants.cjs not found' } };
+    }
+    const result = spawnTool('bin/check-model-invariants.cjs', ['--json']);
+    if (!result.stdout) {
+      return { residual: -1, detail: { skipped: true, reason: 'check-model-invariants.cjs produced no output', stderr: (result.stderr || '').slice(0, 500) } };
+    }
+    const data = JSON.parse(result.stdout);
+    if (data.skipped) {
+      return { residual: -1, detail: { skipped: true, reason: data.reason || 'model-check skipped' } };
+    }
+    const arr = Array.isArray(data.findings) ? data.findings : [];
+    return {
+      residual: arr.length,
+      detail: { findings_count: arr.length, findings: arr },
+    };
+  } catch (err) {
+    return { residual: -1, detail: { error: err.message } };
+  }
+}
+
 // ── Trace Health sweep (diagnostic) ──────────────────────────────────────────
 
 function sweepTraceHealth() {
@@ -4873,6 +4907,10 @@ function computeResidual() {
   const sast = checkLayerSkip('sast') || sweepSast();
   _timing.sast = { duration_ms: Date.now() - _t_sast, skipped: !!(sast.detail && sast.detail.skipped) };
 
+  const _t_model_check = Date.now();
+  const model_check = checkLayerSkip('model_check') || sweepModelCheck();
+  _timing.model_check = { duration_ms: Date.now() - _t_model_check, skipped: !!(model_check.detail && model_check.detail.skipped) };
+
   const _t_trace_health = Date.now();
   const trace_health = checkLayerSkip('trace_health') || sweepTraceHealth();
   _timing.trace_health = { duration_ms: Date.now() - _t_trace_health, skipped: !!(trace_health.detail && trace_health.detail.skipped) };
@@ -4928,6 +4966,7 @@ function computeResidual() {
     (security.residual >= 0 ? security.residual : 0) +
     (require_graph.residual >= 0 ? require_graph.residual : 0) +
     (sast.residual >= 0 ? sast.residual : 0) +
+    (model_check.residual >= 0 ? model_check.residual : 0) +
     (trace_health.residual >= 0 ? trace_health.residual : 0) +
     (asset_stale.residual >= 0 ? asset_stale.residual : 0) +
     (arch_constraints.residual >= 0 ? arch_constraints.residual : 0) +
@@ -4962,6 +5001,7 @@ function computeResidual() {
     security,
     require_graph,
     sast,
+    model_check,
     trace_health,
     asset_stale,
     arch_constraints,
@@ -5661,6 +5701,7 @@ function formatReport(iterations, finalResidual, converged) {
     { label: 'DH (Debt Health)', key: 'debt_health' },
     { label: 'MH (Memory Health)', key: 'memory_health' },
     { label: 'MS (Model Stale)', key: 'model_stale' },
+    { label: 'MC (Model Check)', key: 'model_check' },
   ];
 
   for (const row of diagRows) {
