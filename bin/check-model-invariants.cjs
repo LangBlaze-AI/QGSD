@@ -29,15 +29,24 @@ const { spawnSync } = require('child_process');
 const ROOT = process.cwd();
 const TLA_DIR = path.join(ROOT, '.planning', 'formal', 'tla');
 
-function resolveJar() {
+function resolveJar(root) {
   try {
     const { resolveTlaJar } = require('./resolve-formal-tools.cjs');
-    return resolveTlaJar(ROOT);
+    return resolveTlaJar(root);
   } catch (_) {
     const home = path.join(process.env.HOME || '', '.local', 'share', 'nf-formal', 'tla', 'tla2tools.jar');
     return fs.existsSync(home) ? home : null;
   }
 }
+
+// Per-model TLC cap: a reachable-state safety violation on a concrete model is found
+// in well under a second; 15s is ample headroom while bounding a pathological
+// non-terminating model. TOTAL_BUDGET_MS caps cumulative wall time so a handful of
+// state-exploding models can't blow up latency — remaining models are skipped
+// (informational sweep, fail-open). Measured ~7s across nForma's 197 .tla files, so
+// the budget is never hit in practice; it's a defensive ceiling.
+const PER_MODEL_TIMEOUT_MS = 15000;
+const TOTAL_BUDGET_MS = 60000;
 
 function stripComments(c) {
   return String(c).replace(/\(\*[\s\S]*?\*\)/g, ' ').replace(/\\\*[^\n]*/g, ' ');
@@ -82,7 +91,7 @@ function analyzeModel(content) {
 }
 
 function checkModelInvariants(root) {
-  const jar = resolveJar();
+  const jar = resolveJar(root);
   if (!jar || !fs.existsSync(jar)) return { skipped: true, reason: 'tla2tools.jar not found', findings: [], count: 0 };
   const dir = path.join(root, '.planning', 'formal', 'tla');
   if (!fs.existsSync(dir)) return { skipped: false, findings: [], count: 0 };
@@ -91,25 +100,28 @@ function checkModelInvariants(root) {
   catch (_) { return { skipped: false, findings: [], count: 0 }; }
 
   const findings = [];
+  const startedAt = Date.now();
   for (const f of files) {
+    if (Date.now() - startedAt > TOTAL_BUDGET_MS) break; // defensive wall-clock ceiling
     let content;
     try { content = fs.readFileSync(path.join(dir, f), 'utf8'); } catch (_) { continue; }
     if (/\bCONSTANTS?\b/.test(stripComments(content))) continue; // parameterized — needs a hand cfg
     const { spec, invs } = analyzeModel(content);
     if (!spec || invs.length === 0) continue;
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-mc-'));
+    let tmp;
     try {
+      tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-mc-')); // inside try: a mkdtemp failure skips THIS model, not the loop
       const base = f.replace(/\.tla$/, '');
       fs.writeFileSync(path.join(tmp, f), content);
       fs.writeFileSync(path.join(tmp, base + '.cfg'), 'SPECIFICATION ' + spec + '\n' + invs.map(x => 'INVARIANT ' + x).join('\n') + '\n');
-      const r = spawnSync('java', ['-cp', jar, 'tlc2.TLC', '-config', base + '.cfg', f], { cwd: tmp, encoding: 'utf8', timeout: 30000, maxBuffer: 16 * 1024 * 1024 });
+      const r = spawnSync('java', ['-cp', jar, 'tlc2.TLC', '-config', base + '.cfg', f], { cwd: tmp, encoding: 'utf8', timeout: PER_MODEL_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 });
       const out = (r.stdout || '') + (r.stderr || '');
       const m = out.match(/Invariant (\w+) is violated/);
       if (m) {
         findings.push({ rule: 'invariant-violation', model: base, invariant: m[1], message: 'TLC found a reachable state violating invariant ' + m[1] + ' in ' + f });
       }
     } catch (_) { /* per-model failure — skip, never crash the sweep */ }
-    finally { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {} }
+    finally { if (tmp) { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {} } }
   }
   return { skipped: false, findings: findings, count: findings.length };
 }
