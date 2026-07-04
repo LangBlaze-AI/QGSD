@@ -4321,14 +4321,31 @@ function sweepSast() {
   }
 }
 
+// ── Behavioral formal detection: the FP-safe set is COMPLETE at three detectors ──
+// model_check (safety invariant-violation + liveness) and petri_check (structural
+// unreachable-marking) cover the decidable, false-positive-free behavioral classes:
+// safety, structural-reachability, and temporal. A 4-model quorum (2026-07-04,
+// unanimous) confirmed there is NO fourth decidable, FP-safe behavioral class to add.
+// Deliberately NOT built, because a sound detector is impossible without breaking the
+// 0-baseline invariant (any finding = a real defect) these layers depend on:
+//   - "weak invariant" (benchmark BENCH-188): oracle-dependent — "too weak" only has
+//     meaning vs an intended stronger property; supply it and model_check already
+//     catches the violation, omit it and you need an LLM oracle, not a decidable check.
+//   - code-level concurrency (race/ABA/deadlock in arbitrary JS): undecidable (Rice's
+//     theorem — aliasing + happens-before over a Turing-complete language); any
+//     approximation explodes the FP rate or needs annotations (the oracle again).
+// See .planning/quorum/debates/2026-07-04-behavior-4-formal-detection-boundary.md.
+
 // ── Model-check sweep (diagnostic) ───────────────────────────────────────────
 // Runs TLC on CONCRETE (no-CONSTANTS) TLA models with an auto-generated cfg to find
-// BEHAVIORAL safety defects — reachable invariant violations (e.g. a deadlock state
-// that a NoDeadlock invariant forbids) — that the static formal_lint sweep cannot
-// see because they only manifest during state-space exploration. Same external-
-// analyzer pattern as sweepSast/run-formal-verify. Fail-open: if tla2tools.jar is
-// absent the helper reports skipped, so residual is -1 (NOT a false 0). Baseline is
-// 0 on nForma's own concrete models, so any finding is a real reachable violation.
+// BEHAVIORAL defects — reachable invariant violations (e.g. a deadlock state that a
+// NoDeadlock invariant forbids) AND unsatisfiable liveness properties (a declared
+// temporal PROPERTY that fails under the model's own fairness) — that the static
+// formal_lint sweep cannot see because they only manifest during state-space
+// exploration. Same external-analyzer pattern as sweepSast/run-formal-verify.
+// Fail-open: if tla2tools.jar is absent the helper reports skipped, so residual is
+// -1 (NOT a false 0). Baseline is 0 on nForma's own concrete models, so any finding
+// is a real reachable violation.
 function sweepModelCheck() {
   try {
     // Check the SUT's own bin (SCRIPT_DIR), NOT ROOT — the scanned project may be a
