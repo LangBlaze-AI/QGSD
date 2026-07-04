@@ -34,3 +34,34 @@ nForma already transpiles its own state machines to TLA via `fsm-to-tla` (28 ada
 **DEFERRED to a separate step 2** (do not conflate): liveness/PROPERTY checks on FSMs, `CHECK_DEADLOCK TRUE` (needs a final-states/Termination annotation to avoid terminating-FSM FPs), and making arbitrary concurrency decidable (needs an emitter change to PlusCal `process` composition for interleaved execution — the current emitter is sequential).
 
 **Why it's the highest-leverage improvement:** ~90% of the infrastructure already exists (transpilation done, cfgs emitted, registry + pairing heuristics present); only the "consume the cfg" step is missing. It activates model-checking across nForma's own state machines and lays the groundwork for making FSM-expressible concurrency decidable by construction (sidestepping Rice's theorem via a constrained input language) in step 2.
+
+## Step 2 outcome + deadlock/concurrency boundary (empirical, post-implementation)
+
+Shipped: FSM invariant checking (#309, 62 models) and FSM liveness under the fairness
+dual gate (#310, 21 fairness-carrying models) — both 0-baseline, FP-safe.
+
+**Deadlock detection — NOT shipped (empirically not FP-safe on this corpus):**
+- Naive `CHECK_DEADLOCK TRUE` fires on **26 of 62** models. Triage: these are
+  LEGITIMATE terminal states, not defects (e.g. BugModelLookup reaching `phase="done"`,
+  which even satisfies its own `<>(phase="done")` under `WF_` fairness).
+- The corpus is HETEROGENEOUS: the deadlocking models are handwritten (QGSDEnforcement)
+  or code-scan-derived (`formal-scope-scan.cjs` → BugModelLookup/NFDispatch), NOT
+  fsm-to-tla emitter output — so there is no single emitter to fix, and they carry no
+  machine-readable terminal annotation.
+- No FP-safe heuristic separates "stuck" from "done": splitting on "declares a `<>`
+  goal" gives 14 with / 12 without, but a spec can legitimately terminate without
+  declaring a liveness goal, so the 12 are not reliably defects.
+- Crucially, deadlock is **SUBSUMED by liveness**: for a model that declares a goal
+  `<>Done` under fairness, the shipped liveness check already proves it reaches the
+  goal (a stuck-short-of-goal state fails liveness). So deadlock adds nothing FP-safe.
+- FP-safe deadlock would require per-spec Termination annotations (`Next \/ (isFinal /\
+  UNCHANGED vars)`) across 26 heterogeneous hand/scan-authored specs — high effort,
+  low marginal value, and outside a detector's scope.
+
+**Multi-process concurrency — NOT shipped (needs an emitter research spike):** the
+emitter is sequential single-process; interleaving races (semaphore/lock/shared-state)
+need PlusCal `process` composition, a separate research-grade effort.
+
+**Conclusion:** the FP-safe, decidable half of the FSM→TLA loop (safety + liveness) is
+COMPLETE. The remaining behaviors are either subsumed, FP-unsafe on the current corpus,
+or require an emitter refactor — none is a clean detector addition.

@@ -4335,6 +4335,24 @@ function sweepSast() {
 //     theorem — aliasing + happens-before over a Turing-complete language); any
 //     approximation explodes the FP rate or needs annotations (the oracle again).
 // See .planning/quorum/debates/2026-07-04-behavior-4-formal-detection-boundary.md.
+//
+// fsm_check (below) extends model_check/liveness onto nForma's own transpiled state
+// machines via their sibling cfgs (INVARIANT always; liveness under the fairness dual
+// gate). Two further FSM checks are deliberately NOT built, for empirically-verified
+// reasons (see .planning/quorum/debates/2026-07-04-fsm-tla-loop-closure.md):
+//   - DEADLOCK: naive CHECK_DEADLOCK TRUE fires on 26/62 models, but those are
+//     LEGITIMATE terminal states (e.g. BugModelLookup reaching phase="done"), not
+//     defects — the corpus is heterogeneous (handwritten + code-scan-derived specs
+//     with no machine-readable terminal annotation), so no FP-safe heuristic
+//     separates "stuck" from "done". And it is SUBSUMED: for a model that declares a
+//     goal `<>Done` under fairness, the liveness check already proves it reaches the
+//     goal (a stuck-short-of-goal state fails liveness), so deadlock adds nothing
+//     FP-safe. FP-safe deadlock would require per-spec Termination annotations the
+//     corpus lacks.
+//   - MULTI-PROCESS CONCURRENCY (semaphore/lock/shared-state races): the emitter
+//     produces SEQUENTIAL single-process specs; catching interleaving races needs a
+//     PlusCal `process`-composition emitter change (a research-grade effort), not a
+//     detector tweak.
 
 // ── Model-check sweep (diagnostic) ───────────────────────────────────────────
 // Runs TLC on CONCRETE (no-CONSTANTS) TLA models with an auto-generated cfg to find
