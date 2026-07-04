@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { checkFsmModels, resolveSpec, toInvariantOnlyCfg } = require('./check-fsm-models.cjs');
+const { checkFsmModels, resolveSpec, toInvariantOnlyCfg, toLivenessCfg, specHasFairness } = require('./check-fsm-models.cjs');
 
 function resolveJar() {
   try { return require('./resolve-formal-tools.cjs').resolveTlaJar(process.cwd()); }
@@ -105,6 +105,28 @@ test('toInvariantOnlyCfg: CHECK_DEADLOCK/comment after a PROPERTY block does NOT
   assert.ok(!/CHECK_DEADLOCK TRUE/.test(out) && /CHECK_DEADLOCK FALSE/.test(out));
 });
 
+// ── toLivenessCfg + specHasFairness (behavior-#3 dual gate) ──────────────────
+
+test('toLivenessCfg keeps PROPERTY/CONSTANT/SPEC, drops INVARIANT', () => {
+  const cfg = 'CONSTANT MaxBound = 4\nSPECIFICATION Spec\nINVARIANT TypeOK\nPROPERTY EventuallyDone\n';
+  const out = toLivenessCfg(cfg);
+  assert.ok(/PROPERTY EventuallyDone/.test(out));
+  assert.ok(/CONSTANT MaxBound = 4/.test(out));
+  assert.ok(/SPECIFICATION Spec/.test(out));
+  assert.ok(!/INVARIANT TypeOK/.test(out), 'INVARIANT is stripped to isolate the temporal signal');
+  assert.ok(/CHECK_DEADLOCK FALSE/.test(out));
+});
+
+test('toLivenessCfg returns null when there is no PROPERTY', () => {
+  assert.strictEqual(toLivenessCfg('SPECIFICATION Spec\nINVARIANT TypeOK\n'), null);
+});
+
+test('specHasFairness detects WF_/SF_ and rejects specs without them', () => {
+  assert.strictEqual(specHasFairness('Spec == Init /\\ [][Next]_vars /\\ WF_vars(Next)'), true);
+  assert.strictEqual(specHasFairness('Spec == Init /\\ [][Next]_vars /\\ SF_x(A)'), true);
+  assert.strictEqual(specHasFairness('Spec == Init /\\ [][Next]_vars'), false);
+});
+
 // ── end-to-end ───────────────────────────────────────────────────────────────
 
 function tmpRoot() { return fs.mkdtempSync(path.join(os.tmpdir(), 'nf-fsm-t-')); }
@@ -176,6 +198,64 @@ test('a paired FSM model with a holding INVARIANT is clean (when TLC present)', 
     const r = checkFsmModels(root);
     assert.strictEqual(r.count, 0);
     assert.strictEqual(r.checked, 1, 'the model was actually checked (not skipped)');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('detects an unsatisfiable liveness property on a fairness-carrying FSM (when TLC present)', { skip: !HAVE_TLC }, () => {
+  const root = tmpRoot();
+  try {
+    // WF_ fairness drives x up to 2 and holds; the property claims x eventually-always
+    // returns to 0 — unsatisfiable. The cfg carries both INVARIANT and PROPERTY.
+    writeTla(root, 'FsmLive.tla', [
+      '---- MODULE FsmLive ----',
+      'EXTENDS Naturals',
+      'CONSTANT MaxBound',
+      'VARIABLES x',
+      'Init == x = 0',
+      'Inc == x < MaxBound /\\ x\' = x + 1',
+      'Stay == x = MaxBound /\\ x\' = MaxBound',
+      'Next == Inc \\/ Stay',
+      'Bounded == x <= MaxBound',
+      'BackToZero == <>[](x = 0)',
+      'Spec == Init /\\ [][Next]_<<x>> /\\ WF_x(Inc)',
+      '====',
+    ].join('\n'));
+    writeTla(root, 'MCFsmLive.cfg', [
+      '\\* model for FsmLive.tla',
+      'CONSTANT MaxBound = 2',
+      'SPECIFICATION Spec',
+      'INVARIANT Bounded',
+      'PROPERTY BackToZero',
+    ].join('\n'));
+    const r = checkFsmModels(root);
+    const rules = new Set(r.findings.map(f => f.rule));
+    assert.ok(rules.has('fsm-liveness-violation'), 'the unsatisfiable liveness property is flagged');
+    assert.ok(!rules.has('fsm-invariant-violation'), 'the INVARIANT holds → not flagged');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the liveness dual gate: an unsatisfiable property WITHOUT fairness is NOT flagged (when TLC present)', { skip: !HAVE_TLC }, () => {
+  const root = tmpRoot();
+  try {
+    // Same property, but the Spec drops WF_x(Inc). No fairness → liveness gate closed
+    // → no liveness finding (the stuttering-FP class the Round-1 BLOCK flagged).
+    writeTla(root, 'FsmUnfair.tla', [
+      '---- MODULE FsmUnfair ----',
+      'EXTENDS Naturals',
+      'CONSTANT MaxBound',
+      'VARIABLES x',
+      'Init == x = 0',
+      'Inc == x < MaxBound /\\ x\' = x + 1',
+      'Stay == x = MaxBound /\\ x\' = MaxBound',
+      'Next == Inc \\/ Stay',
+      'Bounded == x <= MaxBound',
+      'BackToZero == <>[](x = 0)',
+      'Spec == Init /\\ [][Next]_<<x>>',
+      '====',
+    ].join('\n'));
+    writeTla(root, 'MCFsmUnfair.cfg', 'CONSTANT MaxBound = 2\nSPECIFICATION Spec\nINVARIANT Bounded\nPROPERTY BackToZero\n');
+    const r = checkFsmModels(root);
+    assert.ok(!r.findings.some(f => f.rule === 'fsm-liveness-violation'), 'no fairness → liveness not checked → no finding');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

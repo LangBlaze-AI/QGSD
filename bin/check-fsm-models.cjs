@@ -9,14 +9,19 @@
 // transpiled state machines were never model-checked. This sweep consumes the
 // emitter's provided cfg and runs TLC on each — activating those dormant models.
 //
-// STEP 1 — INVARIANT-ONLY (quorum-ratified 2026-07-04, see
-// .planning/quorum/debates/2026-07-04-fsm-tla-loop-closure.md):
-//   - Runs only the cfg's INVARIANT (safety) blocks. PROPERTY (liveness) lines are
-//     STRIPPED, and CHECK_DEADLOCK is forced FALSE. Rationale: the emitter produces
-//     SEQUENTIAL (non-interleaved) specs, so liveness/deadlock checks would either
-//     pass vacuously or fire spurious counterexamples — not false-positive-safe.
-//     Liveness/deadlock/concurrency are deferred to a future step 2 (needs a PlusCal
-//     process-composition emitter change).
+// Safety (INVARIANT) runs on every paired model. Liveness (PROPERTY) runs ONLY under
+// the behavior-#3 dual gate — the cfg declares a PROPERTY AND the spec carries
+// fairness (WF_/SF_) — see .planning/quorum/debates/2026-07-04-fsm-tla-loop-closure.md:
+//   - Safety: cfg's INVARIANT blocks, PROPERTY stripped, CHECK_DEADLOCK FALSE. This is
+//     FP-safe on the emitter's SEQUENTIAL specs (a reachable INVARIANT violation is
+//     genuine regardless of interleaving).
+//   - Liveness: cfg's PROPERTY blocks, INVARIANT stripped, CHECK_DEADLOCK FALSE, run
+//     ONLY when the spec declares fairness. Without fairness a `<>P` fails vacuously
+//     via stuttering — the exact false-positive class the FSM-loop Round-1 BLOCK
+//     flagged; the fairness gate eliminates it (verified 0 violations / 21 fair
+//     models). Deadlock-checking and multi-process concurrency remain deferred (they
+//     need an emitter Termination annotation / PlusCal process composition — naive
+//     CHECK_DEADLOCK false-positives on legitimately-terminating FSMs).
 //   - cfg→spec pairing reuses run-tlc.cjs's proven heuristic (header .tla reference,
 //     then MC-strip + NF/QNF/bare/_xstate naming). If pairing is UNRESOLVED it SKIPS
 //     the cfg — it never falls back to a default model (that would model-check the
@@ -105,6 +110,36 @@ function toInvariantOnlyCfg(cfgContent) {
   return kept.join('\n') + '\n';
 }
 
+// Build a LIVENESS cfg: keep SPECIFICATION / CONSTANT(S) / PROPERTY, DROP INVARIANT
+// (isolate the temporal signal), force CHECK_DEADLOCK FALSE. Returns null if the cfg
+// declares no PROPERTY. Only used under the dual gate (spec must also carry fairness).
+function toLivenessCfg(cfgContent) {
+  const lines = String(cfgContent).split('\n');
+  const kept = [];
+  let hasProp = false;
+  let inInvariant = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (CFG_DIRECTIVE.test(t) || t.startsWith('\\*') || t.length === 0) inInvariant = false;
+    if (/^INVARIANTS?\b/.test(t)) { inInvariant = true; continue; } // drop INVARIANT header
+    if (inInvariant) continue; // continuation of a dropped INVARIANT block
+    if (/^CHECK_DEADLOCK\b/.test(t)) continue;
+    if (/^PROPERT(Y|IES)\b/.test(t)) hasProp = true;
+    kept.push(line);
+  }
+  if (!hasProp) return null;
+  kept.push('CHECK_DEADLOCK FALSE');
+  return kept.join('\n') + '\n';
+}
+
+// The liveness dual gate (behavior #3): a temporal PROPERTY is only checkable when the
+// spec declares fairness. Without WF_/SF_ the system may stutter forever, so every
+// `<>P` fails vacuously — not false-positive-safe. This is exactly the restriction
+// that resolved the FSM-loop Round-1 BLOCK (no liveness on unfair sequential specs).
+function specHasFairness(specContent) {
+  return /\bWF_|\bSF_/.test(String(specContent));
+}
+
 function checkFsmModels(root) {
   const jar = resolveJar(root);
   if (!jar || !fs.existsSync(jar)) return { skipped: true, reason: 'tla2tools.jar not found', findings: [], count: 0, checked: 0 };
@@ -126,18 +161,36 @@ function checkFsmModels(root) {
     const spec = resolveSpec(cfg.replace(/\.cfg$/, ''), cfgContent, allTla);
     if (!spec) continue; // unresolved pairing → skip
     const invCfg = toInvariantOnlyCfg(cfgContent);
-    if (!invCfg) continue; // PROPERTY-only cfg → out of step-1 scope
+    // Liveness is dual-gated (behavior #3): cfg has a PROPERTY AND the spec carries
+    // fairness. Both must hold, or we don't emit a liveness check at all.
+    let specContent = null;
+    try { specContent = fs.readFileSync(path.join(dir, spec), 'utf8'); } catch (_) { continue; }
+    const liveCfg = specHasFairness(specContent) ? toLivenessCfg(cfgContent) : null;
+    if (!invCfg && !liveCfg) continue; // nothing checkable in step-1/2 scope
     let tmp;
     try {
       tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-fsm-'));
-      fs.writeFileSync(path.join(tmp, spec), fs.readFileSync(path.join(dir, spec)));
-      const cfgName = cfg.replace(/\.cfg$/, '') + '-inv.cfg';
-      fs.writeFileSync(path.join(tmp, cfgName), invCfg);
-      const r = spawnSync('java', ['-cp', jar, 'tlc2.TLC', '-config', cfgName, spec], { cwd: tmp, encoding: 'utf8', timeout: PER_MODEL_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 });
-      const out = (r.stdout || '') + (r.stderr || '');
-      const m = out.match(/Invariant (\w+) is violated/);
-      if (m) {
-        findings.push({ rule: 'fsm-invariant-violation', source: 'fsm-transpiled', model: spec.replace(/\.tla$/, ''), cfg: cfg, invariant: m[1], message: 'TLC found a reachable state violating invariant ' + m[1] + ' in transpiled state machine ' + spec + ' (cfg ' + cfg + ')' });
+      fs.writeFileSync(path.join(tmp, spec), specContent);
+      const base = cfg.replace(/\.cfg$/, '');
+      if (invCfg) {
+        const cfgName = base + '-inv.cfg';
+        fs.writeFileSync(path.join(tmp, cfgName), invCfg);
+        const r = spawnSync('java', ['-cp', jar, 'tlc2.TLC', '-config', cfgName, spec], { cwd: tmp, encoding: 'utf8', timeout: PER_MODEL_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 });
+        const out = (r.stdout || '') + (r.stderr || '');
+        const m = out.match(/Invariant (\w+) is violated/);
+        if (m) {
+          findings.push({ rule: 'fsm-invariant-violation', source: 'fsm-transpiled', model: spec.replace(/\.tla$/, ''), cfg: cfg, invariant: m[1], message: 'TLC found a reachable state violating invariant ' + m[1] + ' in transpiled state machine ' + spec + ' (cfg ' + cfg + ')' });
+        }
+      }
+      if (liveCfg) {
+        const cfgName = base + '-live.cfg';
+        fs.writeFileSync(path.join(tmp, cfgName), liveCfg);
+        // -workers 1: TLC's older liveness checker has known multi-worker bugs (see run-tlc.cjs).
+        const r = spawnSync('java', ['-cp', jar, 'tlc2.TLC', '-config', cfgName, spec, '-workers', '1'], { cwd: tmp, encoding: 'utf8', timeout: PER_MODEL_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 });
+        const out = (r.stdout || '') + (r.stderr || '');
+        if (/Temporal properties were violated/.test(out)) {
+          findings.push({ rule: 'fsm-liveness-violation', source: 'fsm-transpiled', model: spec.replace(/\.tla$/, ''), cfg: cfg, message: 'TLC found a declared liveness property unsatisfiable under the model\'s own fairness in transpiled state machine ' + spec + ' (cfg ' + cfg + ')' });
+        }
       }
       checked++;
     } catch (_) { /* per-model failure → skip, never crash the sweep */ }
@@ -146,7 +199,7 @@ function checkFsmModels(root) {
   return { skipped: false, findings: findings, count: findings.length, checked: checked };
 }
 
-module.exports = { checkFsmModels: checkFsmModels, resolveSpec: resolveSpec, toInvariantOnlyCfg: toInvariantOnlyCfg };
+module.exports = { checkFsmModels: checkFsmModels, resolveSpec: resolveSpec, toInvariantOnlyCfg: toInvariantOnlyCfg, toLivenessCfg: toLivenessCfg, specHasFairness: specHasFairness };
 
 if (require.main === module) {
   const asJson = process.argv.includes('--json');
