@@ -62,3 +62,12 @@ rules:
             - pattern-not: 'he.encode(...)'
             - pattern-not: "'...'"
             - pattern-not: '"..."'
+  - id: hardcoded-secret
+    languages: [javascript]
+    severity: ERROR
+    message: Hardcoded secret in source — a live API key or private key literal (must
+      come from env / a secrets manager). Matched by KNOWN provider formats
+      (Stripe/AWS/GitHub/Slack/PEM), which never appear in legitimate code, so this is
+      FP-safe by construction (no name/entropy heuristic that flags `tokenType="Bearer"`).
+    patterns:
+      - pattern-regex: '(sk_live_[A-Za-z0-9]{16,}|AKIA[A-Z0-9]{16}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN (?:RSA |EC )?PRIVATE KEY-----)'
