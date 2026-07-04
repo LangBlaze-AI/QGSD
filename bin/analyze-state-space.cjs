@@ -1054,4 +1054,4 @@ if (require.main === module) {
 }
 
 // Export for use as a module
-module.exports = { analyzeModel };
+module.exports = { analyzeModel, CFG_TO_MODULE };
