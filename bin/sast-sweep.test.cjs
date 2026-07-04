@@ -100,6 +100,22 @@ test('the secret rule is FP-safe: env reads and secret-named non-secrets are NOT
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test('detects a hardcoded user-home absolute path, ignores portable path.join (when semgrep present)', { skip: !SEMGREP }, () => {
+  const root = tmpDir();
+  try {
+    writeSrc(root, 'src/paths.js', [
+      "const p = require('path');",
+      "function up(dir, name) { return p.join(dir, name); }",       // portable — clean
+      "const cache = p.join('/Users/ci/uploads', 'x');",            // hardcoded /Users — flagged
+      "module.exports = { up, cache };",
+    ].join('\n'));
+    const r = runSast(root);
+    const rules = new Set(r.findings.map(f => f.rule));
+    assert.ok(rules.has('hardcoded-absolute-path'), '/Users/ absolute path flagged');
+    assert.strictEqual(r.findings.filter(f => f.rule === 'hardcoded-absolute-path').length, 1, 'only the hardcoded path, not the portable join');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('does NOT flag new Function(src) syntax checks or process.stdout.write (when semgrep present)', { skip: !SEMGREP }, () => {
   const root = tmpDir();
   try {
