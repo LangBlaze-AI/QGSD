@@ -83,6 +83,28 @@ test('toInvariantOnlyCfg returns null for a PROPERTY-only cfg (out of step-1 sco
   assert.strictEqual(toInvariantOnlyCfg(cfg), null);
 });
 
+test('toInvariantOnlyCfg: CHECK_DEADLOCK/comment after a PROPERTY block does NOT swallow later directives', () => {
+  // Regression for the inProperty-not-reset bug: a directive/comment after PROPERTY
+  // must end the drop-block so trailing INVARIANT/CONSTANT lines survive.
+  const cfg = [
+    'SPECIFICATION Spec',
+    'INVARIANT TypeOK',
+    'PROPERTIES',
+    '    Liveness',
+    'CHECK_DEADLOCK TRUE',
+    '\\* trailing comment',
+    'CONSTANT Extra = 2',
+    'INVARIANT AlsoHolds',
+  ].join('\n');
+  const out = toInvariantOnlyCfg(cfg);
+  assert.ok(/INVARIANT TypeOK/.test(out));
+  assert.ok(/CONSTANT Extra = 2/.test(out), 'a CONSTANT after CHECK_DEADLOCK must not be dropped');
+  assert.ok(/INVARIANT AlsoHolds/.test(out), 'a trailing INVARIANT must survive');
+  assert.ok(/trailing comment/.test(out), 'a trailing comment must survive');
+  assert.ok(!/Liveness/.test(out), 'the property continuation is still dropped');
+  assert.ok(!/CHECK_DEADLOCK TRUE/.test(out) && /CHECK_DEADLOCK FALSE/.test(out));
+});
+
 // ── end-to-end ───────────────────────────────────────────────────────────────
 
 function tmpRoot() { return fs.mkdtempSync(path.join(os.tmpdir(), 'nf-fsm-t-')); }

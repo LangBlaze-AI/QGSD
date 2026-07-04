@@ -79,6 +79,12 @@ function resolveSpec(cfgName, cfgContent, allTla) {
 // Rewrite the emitted cfg to INVARIANT-ONLY: keep CONSTANT(S)/SPECIFICATION/INVARIANT
 // lines, DROP every PROPERTY line, and force CHECK_DEADLOCK FALSE. Returns null if the
 // cfg declares no INVARIANT (a PROPERTY-only cfg is out of step-1 scope → skip).
+// Any top-level cfg directive (or a comment/blank line) terminates a preceding
+// PROPERTY/PROPERTIES continuation block. Listed exhaustively so a directive that
+// follows a PROPERTY block (e.g. CHECK_DEADLOCK, ALIAS, POSTCONDITION) correctly
+// resets the "dropping" state instead of swallowing subsequent lines.
+const CFG_DIRECTIVE = /^(SPECIFICATION|INVARIANTS?|PROPERT(Y|IES)|CONSTANTS?|INIT|NEXT|SYMMETRY|VIEW|CONSTRAINTS?|ACTION_CONSTRAINT|CHECK_DEADLOCK|ALIAS|POSTCONDITION|TEMPORAL)\b/;
+
 function toInvariantOnlyCfg(cfgContent) {
   const lines = String(cfgContent).split('\n');
   const kept = [];
@@ -86,14 +92,12 @@ function toInvariantOnlyCfg(cfgContent) {
   let inProperty = false;
   for (const line of lines) {
     const t = line.trim();
-    if (/^PROPERT(Y|IES)\b/.test(t)) { inProperty = true; continue; } // drop PROPERTY block header
-    if (/^(SPECIFICATION|INVARIANT|INVARIANTS|CONSTANT|CONSTANTS|INIT|NEXT|SYMMETRY|VIEW|CONSTRAINT|ACTION_CONSTRAINT)\b/.test(t)) {
-      inProperty = false;
-      if (/^INVARIANT/.test(t)) hasInv = true;
-    } else if (inProperty) {
-      continue; // a continuation line of a dropped PROPERTY block
-    }
-    if (/^CHECK_DEADLOCK\b/.test(t)) continue; // we set it explicitly below
+    // A new directive OR a comment/blank line ends any PROPERTY continuation block.
+    if (CFG_DIRECTIVE.test(t) || t.startsWith('\\*') || t.length === 0) inProperty = false;
+    if (/^PROPERT(Y|IES)\b/.test(t)) { inProperty = true; continue; } // drop the PROPERTY header
+    if (inProperty) continue; // an indented continuation line of a dropped PROPERTY block
+    if (/^CHECK_DEADLOCK\b/.test(t)) continue; // stripped — we re-add it explicitly below
+    if (/^INVARIANT/.test(t)) hasInv = true;
     kept.push(line);
   }
   if (!hasInv) return null;

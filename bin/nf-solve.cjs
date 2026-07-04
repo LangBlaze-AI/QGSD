@@ -4999,7 +4999,10 @@ function computeResidual() {
   _timing.petri_check = { duration_ms: Date.now() - _t_petri_check, skipped: !!(petri_check.detail && petri_check.detail.skipped) };
 
   const _t_fsm_check = Date.now();
-  const fsm_check = checkLayerSkip('fsm_check') || sweepFsmModels();
+  // Heavyweight full-TLC pass (dozens of transpiled models) — gate behind fast mode /
+  // deadline like per_model_gates, so --fast and report-only runs (benchmark, smoke)
+  // skip it. It's a real-repo diagnostic, not tied to a --fast benchmark challenge.
+  const fsm_check = checkLayerSkip('fsm_check') || ((effectiveFastMode() || pastDeadline()) ? skipLayer : sweepFsmModels());
   _timing.fsm_check = { duration_ms: Date.now() - _t_fsm_check, skipped: !!(fsm_check.detail && fsm_check.detail.skipped) };
 
   const _t_trace_health = Date.now();
