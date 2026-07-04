@@ -677,13 +677,21 @@ function analyzeCrossModel(registry, models) {
 function buildModuleToCfgMap() {
   const map = {}; // moduleName -> [cfgPath, ...]
 
+  // Derive the tla dir from the CURRENT ROOT, not the module-load-time TLA_DIR const —
+  // analyzeModel() overrides ROOT per call, and the cfg map must follow it (previously
+  // it read the stale dir, so a per-call projectRoot only half-worked).
+  const TLA_DIR = path.join(ROOT, '.planning', 'formal', 'tla');
   if (!fs.existsSync(TLA_DIR)) return map;
 
   const cfgFiles = fs.readdirSync(TLA_DIR).filter(f => f.endsWith('.cfg'));
 
   for (const cfgFile of cfgFiles) {
     const baseName = cfgFile.replace('.cfg', '');
-    const moduleName = CFG_TO_MODULE[baseName];
+    // Static map first; fall back to deriving the module for FSM-transpiled MC* cfgs
+    // (68 exist, only ~13 are hand-listed). Without this the derived cfg is dropped,
+    // its CONSTANTS never link, and 0..MaxN domains read as unbounded → HIGH → the
+    // state-space guard falsely blocks every transpiled model (the 46 "crash" failures).
+    const moduleName = CFG_TO_MODULE[baseName] || deriveModuleFromCfg(path.join(TLA_DIR, cfgFile), baseName);
 
     if (moduleName) {
       if (!map[moduleName]) map[moduleName] = [];
@@ -692,6 +700,29 @@ function buildModuleToCfgMap() {
   }
 
   return map;
+}
+
+/**
+ * Derive the TLA+ module name for a .cfg not in the static CFG_TO_MODULE table.
+ * Mirrors check-fsm-models.cjs resolveSpec: (1) the cfg header's `.tla` reference,
+ * (2) MC-prefix strip, (3) the cfg basename — each gated on the .tla file existing.
+ * Returns null if none resolve (the cfg is then skipped, as before).
+ */
+function deriveModuleFromCfg(cfgPath, baseName) {
+  const TLA_DIR = path.join(ROOT, '.planning', 'formal', 'tla'); // follow current ROOT
+  try {
+    const header = fs.readFileSync(cfgPath, 'utf8').split('\n').slice(0, 12).join('\n');
+    // (a) explicit `Foo.tla` reference in the header
+    const m = header.match(/\b([A-Z]\w+)\.tla\b/);
+    if (m && m[1] !== baseName && fs.existsSync(path.join(TLA_DIR, m[1] + '.tla'))) return m[1];
+    // (b) prose `... for NFConvergenceTest` (module named without the .tla suffix)
+    const f = header.match(/\bfor\s+([A-Z]\w+)/);
+    if (f && f[1] !== baseName && fs.existsSync(path.join(TLA_DIR, f[1] + '.tla'))) return f[1];
+  } catch (_) { /* fall through */ }
+  const stripped = baseName.replace(/^MC/, '');
+  if (stripped && stripped !== baseName && fs.existsSync(path.join(TLA_DIR, stripped + '.tla'))) return stripped;
+  if (fs.existsSync(path.join(TLA_DIR, baseName + '.tla'))) return baseName;
+  return null;
 }
 
 /**
@@ -887,6 +918,16 @@ function analyzeModel(configName, projectRoot) {
         }
       }
     } catch (_) { /* fall through */ }
+
+    // Strategy 3: MC-prefix strip (MCFoo → Foo.tla) — consistent with the cfg-map
+    // derivation, so a transpiled cfg without a header .tla ref resolves its own spec
+    // instead of falling through to the wrong NFQuorum.tla default.
+    if (!specFile) {
+      const stripped = configName.replace(/^MC/, '');
+      if (stripped && stripped !== configName && fs.existsSync(path.join(tlaDir, stripped + '.tla'))) {
+        specFile = stripped + '.tla';
+      }
+    }
 
     // Fallback
     if (!specFile) {
