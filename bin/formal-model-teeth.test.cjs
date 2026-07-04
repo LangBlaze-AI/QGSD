@@ -27,6 +27,12 @@ test('literalInits extracts only literal (=) init conjuncts, not nondeterministi
   assert.strictEqual(inits.find(i => i.name === 'status').value, '"running"');
 });
 
+test('literalInits handles the first conjunct with no leading /\\ (single-line and mixed)', () => {
+  assert.deepStrictEqual(literalInits('Init == x = 0\n\nNext == TRUE').map(i => i.name), ['x'], 'single conjunct, no /\\');
+  const two = literalInits('Init == x = 0 /\\ y = 1\n\nNext == TRUE');
+  assert.deepStrictEqual(two.map(i => i.name).sort(), ['x', 'y'], 'first conjunct without /\\ still frozen');
+});
+
 test('cfgSpecAndConstants pulls the SPECIFICATION name and the CONSTANTS block', () => {
   const cfg = ['\\* header', 'SPECIFICATION Spec', 'CONSTANTS', '    MaxN = 4', '    MaxT = 60', 'INVARIANT TypeOK'].join('\n');
   const { spec, constants } = cfgSpecAndConstants(cfg);

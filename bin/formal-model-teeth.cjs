@@ -78,9 +78,13 @@ function literalInits(tlaContent) {
   const m = s.match(/\bInit\s*==\s*([\s\S]*?)(?=\n\s*\n|\n[A-Za-z]\w*\s*==)/);
   if (!m) return [];
   const out = [];
-  const re = /\/\\\s*([A-Za-z]\w*)\s*=\s*("(?:[^"\\]|\\.)*"|-?\d+|TRUE|FALSE)(?=\s|$)/gm;
-  let x;
-  while ((x = re.exec(m[1]))) out.push({ name: x[1], value: x[2] });
+  // Split on the /\ conjunction so the FIRST term needs no leading /\ — handles
+  // `Init == x = 0`, `Init == x = 0 /\ y = 1`, and the multi-line `/\`-prefixed form.
+  const lit = /^([A-Za-z]\w*)\s*=\s*("(?:[^"\\]|\\.)*"|-?\d+|TRUE|FALSE)$/;
+  for (const piece of m[1].split(/\/\\/)) {
+    const mm = piece.trim().match(lit);
+    if (mm) out.push({ name: mm[1], value: mm[2] });
+  }
   return out;
 }
 
