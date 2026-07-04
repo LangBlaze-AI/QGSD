@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 // bin/check-model-invariants.cjs
-// Model-checking sweep for BEHAVIORAL formal defects (deadlock potential, safety
-// invariant violations) that static lints cannot see — by actually running TLC.
+// Model-checking sweep for BEHAVIORAL formal defects — safety-invariant violations
+// (a reachable state that breaks an INVARIANT) AND liveness violations (a declared
+// temporal PROPERTY that is unsatisfiable under the model's own fairness) — that
+// static lints cannot see, by actually running TLC.
 // This wires up nForma's existing TLC integration (resolve-formal-tools + tla2tools);
 // it is NOT a new model checker.
 //
@@ -52,16 +54,22 @@ function stripComments(c) {
   return String(c).replace(/\(\*[\s\S]*?\*\)/g, ' ').replace(/\\\*[^\n]*/g, ' ');
 }
 
-// Parse the temporal SPECIFICATION def name and the safety-invariant candidate defs.
-// Spec: a def whose OWN body (not spanning other defs) contains a `[][Next]` formula;
-// prefer one literally named Spec. Invariants: nullary boolean state predicates with
-// no primes and no temporal/action operators.
+// Parse the temporal SPECIFICATION def, the safety-invariant candidates, whether the
+// Spec declares fairness, and the temporal (liveness) PROPERTY candidates.
+//   spec: a def whose OWN body (not spanning other defs) contains a `[][Next]`
+//     formula; prefer one literally named Spec.
+//   invs: nullary boolean state predicates — no primes, no temporal/action operators.
+//   fairnessInSpec: the Spec body conjoins `WF_`/`SF_` directly, OR references a
+//     one-hop fairness def whose body contains `WF_`/`SF_` (the `Fairness == WF_..`
+//     idiom). This is the gate that makes a liveness check meaningful — without
+//     fairness, TLC lets the system stutter forever and EVERY `<>P` fails vacuously.
+//   liveness: nullary temporal PROPERTY defs (body contains `<>`), i.e. declared
+//     liveness properties — distinct from safety invariants and from the Spec itself.
 function analyzeModel(content) {
   const c = stripComments(content);
   const lines = c.split('\n');
   const headRe = /^([A-Za-z_]\w*)\s*==(.*)$/;
-  let spec = null;
-  const invs = [];
+  const defs = [];
   let i = 0;
   while (i < lines.length) {
     const h = lines[i].match(headRe);
@@ -71,23 +79,52 @@ function analyzeModel(content) {
     const bodyLines = [h[2]];
     let j = i + 1;
     for (; j < lines.length; j++) { if (headRe.test(lines[j]) || /^====/.test(lines[j])) break; bodyLines.push(lines[j]); }
-    const body = bodyLines.join(' ');
-    if (/\[\]\s*\[/.test(body)) {
-      if (name === 'Spec') spec = 'Spec';
-      else if (!spec) spec = name;
-    } else if (
-      !parenParams &&
-      !['Init', 'Next', 'vars', 'Spec'].includes(name) &&
-      !/'/.test(body) &&
-      !/\[\]|<>|WF_|SF_|ENABLED|UNCHANGED/.test(body) &&
-      !/CHOOSE|LET/.test(body) &&
-      /=|#|\\in|~|=>|\\A|\\E|\\subseteq/.test(body)
-    ) {
-      invs.push(name);
-    }
+    defs.push({ name: name, body: bodyLines.join(' '), parenParams: parenParams });
     i = j;
   }
-  return { spec, invs };
+
+  let spec = null;
+  let specBody = '';
+  for (const d of defs) {
+    if (/\[\]\s*\[/.test(d.body)) {
+      if (d.name === 'Spec') { spec = 'Spec'; specBody = d.body; break; }
+      if (!spec) { spec = d.name; specBody = d.body; }
+    }
+  }
+
+  // Fairness in the Spec closure: directly, or via a one-hop `Fairness == WF_..` def
+  // the Spec conjoins by name (opencode-1's refinement — fairness INSIDE the Spec,
+  // not merely a standalone operator defined elsewhere and never used).
+  let fairnessInSpec = false;
+  if (spec) {
+    if (/WF_|SF_/.test(specBody)) {
+      fairnessInSpec = true;
+    } else {
+      for (const d of defs) {
+        if (d.name !== spec && /WF_|SF_/.test(d.body) && new RegExp('\\b' + d.name + '\\b').test(specBody)) {
+          fairnessInSpec = true;
+          break;
+        }
+      }
+    }
+  }
+
+  const invs = [];
+  const liveness = [];
+  for (const d of defs) {
+    if (d.parenParams || d.name === spec || ['Init', 'Next', 'vars', 'Spec'].includes(d.name)) continue;
+    if (/<>/.test(d.body) && !/WF_|SF_/.test(d.body)) {
+      liveness.push(d.name); // temporal liveness property (eventually)
+    } else if (
+      !/'/.test(d.body) &&
+      !/\[\]|<>|WF_|SF_|ENABLED|UNCHANGED/.test(d.body) &&
+      !/CHOOSE|LET/.test(d.body) &&
+      /=|#|\\in|~|=>|\\A|\\E|\\subseteq/.test(d.body)
+    ) {
+      invs.push(d.name);
+    }
+  }
+  return { spec: spec, invs: invs, fairnessInSpec: fairnessInSpec, liveness: liveness };
 }
 
 function checkModelInvariants(root) {
@@ -106,19 +143,39 @@ function checkModelInvariants(root) {
     let content;
     try { content = fs.readFileSync(path.join(dir, f), 'utf8'); } catch (_) { continue; }
     if (/\bCONSTANTS?\b/.test(stripComments(content))) continue; // parameterized — needs a hand cfg
-    const { spec, invs } = analyzeModel(content);
-    if (!spec || invs.length === 0) continue;
+    const { spec, invs, fairnessInSpec, liveness } = analyzeModel(content);
+    if (!spec) continue;
+    const doSafety = invs.length > 0;
+    // Dual gate (copilot-1's refinement): a liveness PROPERTY is only checked when the
+    // Spec declares fairness AND a temporal property is actually present. Either alone
+    // is unsafe — fairness without a property checks nothing; a property without
+    // fairness fails vacuously via stuttering (the whole stuttering-FP class).
+    const doLiveness = fairnessInSpec && liveness.length > 0;
+    if (!doSafety && !doLiveness) continue;
     let tmp;
     try {
       tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-mc-')); // inside try: a mkdtemp failure skips THIS model, not the loop
       const base = f.replace(/\.tla$/, '');
       fs.writeFileSync(path.join(tmp, f), content);
-      fs.writeFileSync(path.join(tmp, base + '.cfg'), 'SPECIFICATION ' + spec + '\n' + invs.map(x => 'INVARIANT ' + x).join('\n') + '\n');
-      const r = spawnSync('java', ['-cp', jar, 'tlc2.TLC', '-config', base + '.cfg', f], { cwd: tmp, encoding: 'utf8', timeout: PER_MODEL_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 });
-      const out = (r.stdout || '') + (r.stderr || '');
-      const m = out.match(/Invariant (\w+) is violated/);
-      if (m) {
-        findings.push({ rule: 'invariant-violation', model: base, invariant: m[1], message: 'TLC found a reachable state violating invariant ' + m[1] + ' in ' + f });
+      if (doSafety) {
+        fs.writeFileSync(path.join(tmp, base + '.cfg'), 'SPECIFICATION ' + spec + '\n' + invs.map(x => 'INVARIANT ' + x).join('\n') + '\n');
+        const r = spawnSync('java', ['-cp', jar, 'tlc2.TLC', '-config', base + '.cfg', f], { cwd: tmp, encoding: 'utf8', timeout: PER_MODEL_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 });
+        const out = (r.stdout || '') + (r.stderr || '');
+        const m = out.match(/Invariant (\w+) is violated/);
+        if (m) {
+          findings.push({ rule: 'invariant-violation', model: base, invariant: m[1], message: 'TLC found a reachable state violating invariant ' + m[1] + ' in ' + f });
+        }
+      }
+      if (doLiveness) {
+        const lcfg = base + '-liveness.cfg';
+        fs.writeFileSync(path.join(tmp, lcfg), 'SPECIFICATION ' + spec + '\n' + liveness.map(x => 'PROPERTY ' + x).join('\n') + '\n');
+        const r = spawnSync('java', ['-cp', jar, 'tlc2.TLC', '-config', lcfg, f], { cwd: tmp, encoding: 'utf8', timeout: PER_MODEL_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 });
+        const out = (r.stdout || '') + (r.stderr || '');
+        // TLC's temporal-violation message is generic (doesn't name the property), so
+        // report the model + the properties checked under its own fairness assumptions.
+        if (/Temporal properties were violated/.test(out)) {
+          findings.push({ rule: 'liveness-violation', model: base, properties: liveness, message: 'TLC found the liveness propert' + (liveness.length > 1 ? 'ies' : 'y') + ' ' + liveness.join(', ') + ' unsatisfiable under the model\'s own fairness assumptions in ' + f });
+        }
       }
     } catch (_) { /* per-model failure — skip, never crash the sweep */ }
     finally { if (tmp) { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {} } }

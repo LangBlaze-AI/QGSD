@@ -63,6 +63,35 @@ const VIOLATING = [
   '====',
 ].join('\n');
 
+// Fairness (WF_x(Inc)) drives x up to 2 and holds; the property claims x eventually-
+// ALWAYS returns to 0 — contradicted by fairness → unsatisfiable liveness.
+const LIVENESS_BAD = [
+  '---- MODULE BadLive ----',
+  'EXTENDS Naturals',
+  'VARIABLES x',
+  'Init == x = 0',
+  'Inc == x < 2 /\\ x\' = x + 1',
+  'Stay == x = 2 /\\ x\' = 2',
+  'Next == Inc \\/ Stay',
+  'Spec == Init /\\ [][Next]_<<x>> /\\ WF_x(Inc)',
+  'EventuallyReturnsToZero == <>[](x = 0)',
+  '====',
+].join('\n');
+
+// Same fair spec, but a SATISFIABLE property (x eventually reaches 2) → clean.
+const LIVENESS_GOOD = [
+  '---- MODULE GoodLive ----',
+  'EXTENDS Naturals',
+  'VARIABLES x',
+  'Init == x = 0',
+  'Inc == x < 2 /\\ x\' = x + 1',
+  'Stay == x = 2 /\\ x\' = 2',
+  'Next == Inc \\/ Stay',
+  'Spec == Init /\\ [][Next]_<<x>> /\\ WF_x(Inc)',
+  'EventuallyReachesTwo == <>(x = 2)',
+  '====',
+].join('\n');
+
 // ── analyzeModel: pure cfg-generation logic (no jar needed) ──────────────────
 
 test('analyzeModel picks the temporal Spec and only nullary safety invariants', () => {
@@ -95,10 +124,38 @@ test('analyzeModel excludes temporal/liveness properties from invariants', () =>
     'Fair == WF_vars(Next)',          // fairness → not an invariant
     'TypeOK == x \\in Nat',           // nullary safety predicate → IS a candidate
   ].join('\n');
-  const { invs } = analyzeModel(m);
+  const { invs, liveness } = analyzeModel(m);
   assert.ok(invs.includes('TypeOK'));
   assert.ok(!invs.includes('Liveness'));
   assert.ok(!invs.includes('Fair'));
+  assert.ok(liveness.includes('Liveness'), 'a <>-bearing def is a liveness property candidate');
+});
+
+test('analyzeModel detects fairness conjoined directly in the Spec', () => {
+  const { fairnessInSpec, liveness } = analyzeModel(LIVENESS_BAD);
+  assert.strictEqual(fairnessInSpec, true, 'WF_x(Inc) inside the Spec body is fairness');
+  assert.ok(liveness.includes('EventuallyReturnsToZero'));
+});
+
+test('analyzeModel detects fairness via a one-hop Fairness def the Spec conjoins', () => {
+  const m = [
+    'Init == x = 0', 'Inc == x\' = x + 1', 'Next == Inc',
+    'Fairness == WF_x(Inc)',
+    'Spec == Init /\\ [][Next]_<<x>> /\\ Fairness',
+    'Prop == <>(x = 1)',
+  ].join('\n');
+  const { fairnessInSpec } = analyzeModel(m);
+  assert.strictEqual(fairnessInSpec, true, 'Spec conjoins Fairness, whose body has WF_ → fair');
+});
+
+test('analyzeModel: a Spec with NO fairness → fairnessInSpec false (the stuttering-FP gate)', () => {
+  const { fairnessInSpec, liveness } = analyzeModel([
+    'Init == x = 0', 'Next == x\' = x + 1',
+    'Spec == Init /\\ [][Next]_<<x>>',
+    'Prop == <>(x = 5)',
+  ].join('\n'));
+  assert.strictEqual(fairnessInSpec, false);
+  assert.ok(liveness.includes('Prop'), 'property is still parsed — but the gate will skip it');
 });
 
 // ── checkModelInvariants: fail-open + real TLC runs ──────────────────────────
@@ -122,6 +179,39 @@ test('a safe concrete model produces 0 findings (when TLC present)', { skip: !HA
     const r = checkModelInvariants(root);
     assert.strictEqual(r.skipped, false);
     assert.strictEqual(r.count, 0, 'a model whose invariant always holds is clean');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('detects an unsatisfiable liveness property under fairness (when TLC present)', { skip: !HAVE_TLC }, () => {
+  const root = tmpRoot();
+  try {
+    writeModel(root, 'BadLive.tla', LIVENESS_BAD);
+    const r = checkModelInvariants(root);
+    assert.strictEqual(r.count, 1);
+    assert.strictEqual(r.findings[0].rule, 'liveness-violation');
+    assert.deepStrictEqual(r.findings[0].properties, ['EventuallyReturnsToZero']);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a satisfiable liveness property under fairness is clean (when TLC present)', { skip: !HAVE_TLC }, () => {
+  const root = tmpRoot();
+  try {
+    writeModel(root, 'GoodLive.tla', LIVENESS_GOOD);
+    const r = checkModelInvariants(root);
+    assert.strictEqual(r.count, 0, 'a liveness property that holds under fairness is not flagged');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the dual gate: an unsatisfiable liveness property WITHOUT fairness is NOT flagged (stuttering-FP class)', { skip: !HAVE_TLC }, () => {
+  const root = tmpRoot();
+  try {
+    // Same property, but the Spec drops WF_x(Inc). Without fairness the system may
+    // stutter at x=0 forever, so <>[](x=0) would "hold" — but more importantly the
+    // gate refuses to even check liveness on an unfair spec. Either way: 0 findings.
+    const unfair = LIVENESS_BAD.replace(' /\\ WF_x(Inc)', '');
+    writeModel(root, 'Unfair.tla', unfair);
+    const r = checkModelInvariants(root);
+    assert.strictEqual(r.count, 0, 'no fairness → the liveness gate is closed → no finding');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
