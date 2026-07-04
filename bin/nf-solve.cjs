@@ -4405,6 +4405,39 @@ function sweepPetriReachability() {
   }
 }
 
+// ── FSM-model check sweep (diagnostic) ───────────────────────────────────────
+// Closes the FSM→TLA→model-check loop: nForma transpiles its own state machines to
+// TLA+ (bin/fsm-to-tla.cjs, 28 adapters), emitting parameterized models + sibling
+// MC<name>.cfg files that model_check's concrete-only gate skips. This sweep consumes
+// the emitted cfgs (INVARIANT-only — PROPERTY/deadlock deferred to a step-2 emitter
+// change; see the fsm-tla-loop-closure quorum debate) and runs TLC on each, activating
+// those dormant models. Fail-open + 0-baseline (any finding = a real invariant
+// violation in a transpiled state machine). Same external-analyzer pattern as
+// sweepModelCheck/sweepPetriReachability.
+function sweepFsmModels() {
+  try {
+    const scriptPath = path.join(SCRIPT_DIR, 'check-fsm-models.cjs');
+    if (!fs.existsSync(scriptPath)) {
+      return { residual: -1, detail: { skipped: true, reason: 'check-fsm-models.cjs not found' } };
+    }
+    const result = spawnTool('bin/check-fsm-models.cjs', ['--json']);
+    if (!result.stdout) {
+      return { residual: -1, detail: { skipped: true, reason: 'check-fsm-models.cjs produced no output', stderr: (result.stderr || '').slice(0, 500) } };
+    }
+    const data = JSON.parse(result.stdout);
+    if (data.skipped) {
+      return { residual: -1, detail: { skipped: true, reason: data.reason || 'fsm-models skipped' } };
+    }
+    const arr = Array.isArray(data.findings) ? data.findings : [];
+    return {
+      residual: arr.length,
+      detail: { findings_count: arr.length, findings: arr, checked: data.checked },
+    };
+  } catch (err) {
+    return { residual: -1, detail: { error: err.message } };
+  }
+}
+
 // ── Trace Health sweep (diagnostic) ──────────────────────────────────────────
 
 function sweepTraceHealth() {
@@ -4965,6 +4998,10 @@ function computeResidual() {
   const petri_check = checkLayerSkip('petri_check') || sweepPetriReachability();
   _timing.petri_check = { duration_ms: Date.now() - _t_petri_check, skipped: !!(petri_check.detail && petri_check.detail.skipped) };
 
+  const _t_fsm_check = Date.now();
+  const fsm_check = checkLayerSkip('fsm_check') || sweepFsmModels();
+  _timing.fsm_check = { duration_ms: Date.now() - _t_fsm_check, skipped: !!(fsm_check.detail && fsm_check.detail.skipped) };
+
   const _t_trace_health = Date.now();
   const trace_health = checkLayerSkip('trace_health') || sweepTraceHealth();
   _timing.trace_health = { duration_ms: Date.now() - _t_trace_health, skipped: !!(trace_health.detail && trace_health.detail.skipped) };
@@ -5022,6 +5059,7 @@ function computeResidual() {
     (sast.residual >= 0 ? sast.residual : 0) +
     (model_check.residual >= 0 ? model_check.residual : 0) +
     (petri_check.residual >= 0 ? petri_check.residual : 0) +
+    (fsm_check.residual >= 0 ? fsm_check.residual : 0) +
     (trace_health.residual >= 0 ? trace_health.residual : 0) +
     (asset_stale.residual >= 0 ? asset_stale.residual : 0) +
     (arch_constraints.residual >= 0 ? arch_constraints.residual : 0) +
@@ -5058,6 +5096,7 @@ function computeResidual() {
     sast,
     model_check,
     petri_check,
+    fsm_check,
     trace_health,
     asset_stale,
     arch_constraints,
@@ -5759,6 +5798,7 @@ function formatReport(iterations, finalResidual, converged) {
     { label: 'MS (Model Stale)', key: 'model_stale' },
     { label: 'MC (Model Check)', key: 'model_check' },
     { label: 'PC (Petri Check)', key: 'petri_check' },
+    { label: 'FM (FSM Models)', key: 'fsm_check' },
   ];
 
   for (const row of diagRows) {
