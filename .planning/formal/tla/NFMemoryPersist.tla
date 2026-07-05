@@ -63,4 +63,9 @@ Spec == Init /\ [][Next]_vars
 StateValid == state \in {"idle", "running", "done", "error"}
 StepBounded == step >= 0 /\ step <= MaxSteps
 
+
+\* Real safety invariant: idle is only reached via Init/Reset (both step=0), so no
+\* progress can be accumulated while idle. Replaces the tautological StateValid/StepBounded.
+IdleImpliesZeroStep == state = "idle" => step = 0
+
 ====
