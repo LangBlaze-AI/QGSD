@@ -127,9 +127,11 @@ FirstRunRequiresEmpty ==
     \* Note: first run CAN add agents during the flow
 
 \* @requirement WIZ-05
-\* Changes only applied after confirmation
+\* Changes are only applied after confirmation: the `confirmed` flag is set (TRUE) ONLY
+\* on the confirm→done transition, so a confirmed state is reachable only at "done".
+\* (Plain exit menu→done leaves confirmed FALSE — a no-change exit applies nothing.)
 ConfirmBeforeDone ==
-    screen = "done" => confirmed = TRUE \/ screen = "done"
+    confirmed = TRUE => screen = "done"
 
 \* @requirement WIZ-01
 \* Wizard always starts at "start" screen
