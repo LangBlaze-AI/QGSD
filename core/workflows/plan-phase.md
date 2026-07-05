@@ -761,6 +761,17 @@ Display: `Max iterations reached. {N} issues remain:` + issue list
 
 Offer: 1) Force proceed, 2) Provide guidance and retry, 3) Abandon
 
+## 12.5 Requirement Coverage Report (plan:post)
+
+After all PLAN.md files are finalized, emit a non-blocking requirement-coverage report — cross-references every requirement the phase owns against the plan bodies. Advisory only; never blocks phase advancement. Ported from open-gsd/gsd-core's gap-analysis, fused with our formal layer.
+
+```bash
+REQ="${HOME}/.claude/nf-bin/gap-analysis.cjs"; [ -f "$REQ" ] || REQ="./bin/gap-analysis.cjs"
+node "$REQ" --phase "${PHASE}" 2>/dev/null || true
+```
+
+Surface the coverage table (COVERED / MISSING per requirement). **nForma fusion:** a MISSING requirement that also has a formal model (`formal_models` non-empty) is a **HIGH-priority gap** — the spec is formally pinned but no plan satisfies it. If any HIGH gaps appear, recommend planning them or reconciling via `/nf:close-formal-gaps ${PHASE}` before execution. Fail-open: missing requirements.json or plans → empty report, continue.
+
 ## 13. Present Final Status
 
 Route to `<offer_next>` OR `auto_advance` depending on flags/config.
