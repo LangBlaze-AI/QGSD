@@ -58,9 +58,11 @@ pred SameState [s1, s2: InstallState] {
 -- We mirror the InstallIdempotent shape: both states are the post-state of an InstallOp that
 -- targets the full Runtime set at one shared scope `sc`, so they must coincide.
 -- NonUninstalled[sc] guards out the trivial Uninstalled scope (an uninstall, not an install).
--- @requirement INST-02
 pred NonUninstalled [sc: Scope] { sc != Uninstalled }
 
+-- @requirement INST-02
+-- The scope-equivalence requirement is VERIFIED by this assert (NonUninstalled is only a
+-- helper guard), so the traceability annotation belongs here, not on the pred above.
 assert AllEquivalence {
     all pre1, pre2, s1, s2: InstallState, sc: Scope |
         (NonUninstalled[sc]
