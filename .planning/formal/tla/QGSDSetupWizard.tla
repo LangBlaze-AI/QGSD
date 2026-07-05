@@ -121,10 +121,11 @@ Next ==
 \* ── Safety invariants ──────────────────────────────────────────────────────
 
 \* @requirement WIZ-02
-\* First run only entered when no agents exist
+\* First run only ever holds no agents: EnterFirstRun requires agentCount = 0, and every
+\* transition that changes agentCount (AddSlot) leaves the "firstRun" screen — so while
+\* on "firstRun", agentCount is always 0.
 FirstRunRequiresEmpty ==
-    screen = "firstRun" => agentCount = 0 \/ agentCount > 0
-    \* Note: first run CAN add agents during the flow
+    screen = "firstRun" => agentCount = 0
 
 \* @requirement WIZ-05
 \* Changes are only applied after confirmation: the `confirmed` flag is set (TRUE) ONLY
