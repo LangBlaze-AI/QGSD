@@ -3965,14 +3965,17 @@ function sweepFormalLint() {
     try {
       const lfResult = spawnTool('bin/check-liveness-fairness.cjs', []);
       if (lfResult.exitCode !== 0) {
-        // FP-safe: only count ACTUAL parsed violations. A nonzero exit with no
-        // parseable violations (crash / non-JSON output — the tool normally exits 0
-        // with human-readable "inconclusive" text) must add 0, never a phantom residual.
+        // A NONZERO exit from check-liveness-fairness is itself a formal signal — the
+        // tool exits 0 in normal operation (even "inconclusive"), so nonzero means it
+        // errored on the model set (e.g. an orphaned/unresolvable formal model). Count
+        // parsed violations, or fall back to 1 for the failure itself. NOTE: do NOT
+        // "FP-safe" this to 0 — the fixture FIX-orphaned-formal-model relies on this
+        // signal, and on a clean repo the tool exits 0 so no phantom is produced.
         try {
           const lfData = JSON.parse(lfResult.stdout || '{}');
-          lfViolations = (lfData.violations || []).length;
+          lfViolations = (lfData.violations || []).length || 1;
         } catch (_) {
-          lfViolations = 0;
+          lfViolations = 1;
         }
       }
     } catch (_) { /* fail-open */ }
