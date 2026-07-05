@@ -82,6 +82,16 @@ Assemble all results into a grounding summary to flow into analyze_phase:
 - Formal models touching this domain
 - Any artifacts that were "not found"
 
+**5. Scope-drift scan (deterministic — assumption-delta):**
+Pipe the phase description and any scope prose into the deterministic drift scanner. It catches abstraction drift — a phase that now describes something **plural / optional / chosen** that a formal model likely treats as **singular / required / derived** — and pairs each signal with a suggested formal invariant. Fail-open: a missing binary or non-zero exit with no JSON means "no signals" — never block.
+
+```bash
+REQ="${HOME}/.claude/nf-bin/detect-assumption-delta.cjs"; [ -f "$REQ" ] || REQ="./bin/detect-assumption-delta.cjs"
+printf '%s\n' "<phase description + scope prose>" | node "$REQ" --json 2>/dev/null || true
+```
+
+Parse the JSON `signals[]` — each is `{ kind, term, snippet, suggestion: { layer, invariant_sketch } }`. If `detected` is true, carry the signals into present_assumptions for the Scope-Drift subsection; otherwise omit that subsection entirely.
+
 Continue to analyze_phase.
 </step>
 
@@ -168,6 +178,14 @@ Present assumptions in a clear, scannable format:
 **In scope:** [what's included]
 **Out of scope:** [what's excluded]
 **Ambiguous:** [what could go either way]
+
+<!-- Only render this subsection if the step-5 scan returned detected:true. Omit it entirely otherwise. -->
+### Scope-Drift Signals → Formal Invariants
+The deterministic scan flagged abstraction drift in this phase's scope. Each signal is a candidate identity-model change that a formal model may not yet reflect:
+
+[For each signal: **[kind]** "term" — _snippet_ → **formal({layer}):** {invariant_sketch}]
+
+**Route to formal:** if any of these represent a real abstraction change, run `/nf:close-formal-gaps ${PHASE}` to land the suggested invariant(s) as TLA+/Alloy, or note explicitly that the drift is intentional and no invariant is needed.
 
 ### Risk Areas
 [List anticipated challenges — each tagged grounded/inferred]
