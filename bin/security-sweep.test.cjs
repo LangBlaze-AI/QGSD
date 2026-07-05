@@ -82,9 +82,18 @@ test('scanFile detects sensitive console.log', () => {
 });
 
 test('scanFile skips test fixture lines', () => {
-  // Line contains "test" so it should be skipped
+  // "testKey" (camelCase) and "sk-test" (hyphen) are genuine test-indicator tokens → skip
   const findings = scanFile('src/cfg.js', 'const testKey = "sk-test1234567890abcdefghijklmnopqr";\n');
-  assert.equal(findings.length, 0, 'should skip lines containing test indicator words');
+  assert.equal(findings.length, 0, 'should skip lines with a test-indicator token');
+});
+
+test('scanFile does NOT skip a real key just because a word contains "test" as a substring', () => {
+  // Regression: the old whole-line substring skip hid real keys on "latest"/"greatest"
+  // lines. Token-boundary matching must still flag these.
+  assert.equal(scanFile('src/x.js', 'const k = "AKIAROGUEKEY123456XY"; deployTo("latest");\n').length, 1,
+    '"latest" is not a test-indicator token — the AWS key must be flagged');
+  assert.equal(scanFile('src/x.js', 'const t = "ghp_' + 'a'.repeat(36) + '"; // the greatest\n').length, 1,
+    '"greatest" must not suppress a real GitHub token');
 });
 
 test('scanFile returns empty for clean file', () => {
