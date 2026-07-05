@@ -121,15 +121,18 @@ Next ==
 \* ── Safety invariants ──────────────────────────────────────────────────────
 
 \* @requirement WIZ-02
-\* First run only entered when no agents exist
+\* First run only ever holds no agents: EnterFirstRun requires agentCount = 0, and every
+\* transition that changes agentCount (AddSlot) leaves the "firstRun" screen — so while
+\* on "firstRun", agentCount is always 0.
 FirstRunRequiresEmpty ==
-    screen = "firstRun" => agentCount = 0 \/ agentCount > 0
-    \* Note: first run CAN add agents during the flow
+    screen = "firstRun" => agentCount = 0
 
 \* @requirement WIZ-05
-\* Changes only applied after confirmation
+\* Changes are only applied after confirmation: the `confirmed` flag is set (TRUE) ONLY
+\* on the confirm→done transition, so a confirmed state is reachable only at "done".
+\* (Plain exit menu→done leaves confirmed FALSE — a no-change exit applies nothing.)
 ConfirmBeforeDone ==
-    screen = "done" => confirmed = TRUE \/ screen = "done"
+    confirmed = TRUE => screen = "done"
 
 \* @requirement WIZ-01
 \* Wizard always starts at "start" screen
