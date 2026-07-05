@@ -572,6 +572,24 @@ If the signal is absent, the delimiters don't match, or JSON.parse would fail: s
 - **`## CHECKPOINT REACHED`:** Present to user, get response, spawn continuation (step 12)
 - **`## PLANNING INCONCLUSIVE`:** Show attempts, offer: Add context / Retry / Manual
 
+## 9.5 Formal Verification Gate (plan-time hypotheses)
+
+Run formal model-checking on the phase's TLA+ models (`run-formal-verify.cjs --only=tla`) and surface any counterexamples as HYPOTHESES for the plan-checker and quorum. A formal FAIL at plan time is strong evidence the plan has a gap — feeding it in as a hypothesis (rather than discovering it at execute/verify) is the best-of-both-worlds fusion: **formal verification informs the quorum's plan review.**
+
+**Fail-open (PLAN-03):** if TLC is unavailable or the results ledger is missing/empty, produce zero hypotheses and continue — never block planning on formal-tool availability.
+
+```bash
+REQ="${HOME}/.claude/nf-bin/run-formal-verify.cjs"; [ -f "$REQ" ] || REQ="./bin/run-formal-verify.cjs"
+node "$REQ" --only=tla 2>/dev/null || true
+
+FVX="${HOME}/.claude/nf-bin/extract-fv-fails.cjs"; [ -f "$FVX" ] || FVX="./bin/extract-fv-fails.cjs"
+FV_HYPOTHESES=$(node "$FVX" --json 2>/dev/null || echo "[]")
+```
+
+`extract-fv-fails.cjs` reads `.planning/formal/check-results.ndjson` and returns every `result=fail` entry as `{ check_id, property, surface, summary }`. Each failing check becomes a plan-time hypothesis: *"formal check {check_id} failed on {property} — confirm the plan addresses this, or the phase will fail formal verification at gate time."*
+
+If `${FV_HYPOTHESES}` is non-empty, thread it into the plan-checker prompt (Step 10) as a `<formal_hypotheses>` block so the checker — and, on quorum review, every voter — evaluates whether the plan closes each formal gap. Empty → omit the block.
+
 ## 10. Spawn nf-plan-checker Agent
 
 ```bash
@@ -603,6 +621,11 @@ Checker prompt:
 </files_to_read>
 
 **Phase requirement IDs (MUST ALL be covered):** {phase_req_ids}
+
+${FV_HYPOTHESES != "[]" ? `<formal_hypotheses>
+Formal model-checking of this phase's TLA+ models produced these FAILING checks at plan time. Treat each as a hypothesis that the plan may have a gap — for every one, verify the plans explicitly address it, or flag it as an uncovered risk (a blocker):
+${FV_HYPOTHESES}
+</formal_hypotheses>` : ''}
 
 **Project instructions:** Verify plans honor project guidelines from CLAUDE.md context (already loaded)
 **Project skills:** Check .agents/skills/ directory (if exists) — verify plans account for project skill rules
