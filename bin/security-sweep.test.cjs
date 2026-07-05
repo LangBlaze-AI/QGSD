@@ -90,7 +90,7 @@ test('scanFile skips test fixture lines', () => {
 test('scanFile does NOT skip a real key just because a word contains "test" as a substring', () => {
   // Regression: the old whole-line substring skip hid real keys on "latest"/"greatest"
   // lines. Token-boundary matching must still flag these.
-  assert.equal(scanFile('src/x.js', 'const k = "AKIAROGUEKEY123456XY"; deployTo("latest");\n').length, 1,
+  assert.equal(scanFile('src/x.js', 'const k = "AKIAROGUEKEY123456XY"; deployTo("latest");\n').length, 1, // pragma: allowlist secret
     '"latest" is not a test-indicator token — the AWS key must be flagged');
   assert.equal(scanFile('src/x.js', 'const t = "ghp_' + 'a'.repeat(36) + '"; // the greatest\n').length, 1,
     '"greatest" must not suppress a real GitHub token');
