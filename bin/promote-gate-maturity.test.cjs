@@ -148,12 +148,12 @@ describe('checkAllModels', () => {
 // ── Unit tests: inferSourceLayer ────────────────────────────────────────────
 
 describe('inferSourceLayer', () => {
-  it('infers L2 for .tla files', () => {
-    assert.strictEqual(inferSourceLayer('.planning/formal/tla/QGSDQuorum.tla'), 'L2');
+  it('infers L3 for .tla files (formal specs are reasoning-layer by design)', () => {
+    assert.strictEqual(inferSourceLayer('.planning/formal/tla/QGSDQuorum.tla'), 'L3');
   });
 
-  it('infers L2 for .als files', () => {
-    assert.strictEqual(inferSourceLayer('.planning/formal/alloy/quorum-votes.als'), 'L2');
+  it('infers L3 for .als files (formal specs are reasoning-layer by design)', () => {
+    assert.strictEqual(inferSourceLayer('.planning/formal/alloy/quorum-votes.als'), 'L3');
   });
 
   it('infers L1 for evidence paths', () => {
@@ -181,7 +181,9 @@ describe('integration: real model-registry.json', () => {
 
   before(() => {
     originalContent = fs.readFileSync(REGISTRY_PATH, 'utf8');
-    registry = JSON.parse(originalContent);
+    // Registry migrated to a nested { version, last_sync, models: {...} } wrapper; the
+    // check/promote helpers operate on the unwrapped model map (as main() does).
+    registry = JSON.parse(originalContent).models;
   });
 
   afterEach(() => {
@@ -197,14 +199,17 @@ describe('integration: real model-registry.json', () => {
   });
 
   it('promotes a model to SOFT_GATE and verifies registry updated', () => {
-    const modelKeys = getModelKeys(registry);
-    const tlaModel = modelKeys.find(k => k.endsWith('.tla'));
+    // Work on a copy with a controlled starting maturity, so the test doesn't depend on
+    // whatever gate the first real .tla model happens to already sit at.
+    const reg = JSON.parse(JSON.stringify(registry));
+    const tlaModel = getModelKeys(reg).find(k => k.endsWith('.tla'));
     assert.ok(tlaModel, 'Should have at least one TLA model');
+    reg[tlaModel].gate_maturity = 'ADVISORY';
 
-    const result = promoteModel(registry, tlaModel, 'SOFT_GATE', []);
+    const result = promoteModel(reg, tlaModel, 'SOFT_GATE', []);
     assert.strictEqual(result.success, true);
-    assert.strictEqual(registry[tlaModel].gate_maturity, 'SOFT_GATE');
-    assert.ok(registry[tlaModel].source_layer, 'source_layer should be set');
+    assert.strictEqual(reg[tlaModel].gate_maturity, 'SOFT_GATE');
+    assert.ok(reg[tlaModel].source_layer, 'source_layer should be set');
   });
 });
 

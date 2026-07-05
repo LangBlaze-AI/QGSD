@@ -67,12 +67,12 @@ describe('TLA+ annotation parsing', () => {
     assert.deepStrictEqual(safety2.requirement_ids, ['STOP-03']);
   });
 
-  test('NFStopHook.tla returns 7 properties', () => {
+  test('NFStopHook.tla returns 8 properties', () => {
     const result = run('--pretty');
     const data = JSON.parse(result.stdout);
     const stopHook = data['.planning/formal/tla/NFStopHook.tla'];
     assert.ok(stopHook, 'NFStopHook.tla should be in output');
-    assert.strictEqual(stopHook.length, 7, 'Should have 7 properties');
+    assert.strictEqual(stopHook.length, 8, 'Should have 8 properties');
   });
 });
 
@@ -204,7 +204,7 @@ describe('integration', () => {
     const data = JSON.parse(result.stdout);
     const stopHook = data['.planning/formal/tla/NFStopHook.tla'];
     assert.ok(stopHook);
-    assert.strictEqual(stopHook.length, 7);
+    assert.strictEqual(stopHook.length, 8);
 
     const expectedMapping = {
       'TypeOK': ['STOP-01'],
@@ -213,7 +213,8 @@ describe('integration', () => {
       'SafetyInvariant3': ['STOP-04'],
       'LivenessProperty1': ['STOP-05'],
       'LivenessProperty2': ['STOP-06'],
-      'LivenessProperty3': ['STOP-07']
+      'LivenessProperty3': ['STOP-07'],
+      'FloorSafety': ['QUORUM-170']
     };
 
     for (const [prop, expectedIds] of Object.entries(expectedMapping)) {
