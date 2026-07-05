@@ -79,12 +79,10 @@ AddSlot ==
     /\ agentCount' = agentCount + 1
     /\ confirmed'  = FALSE
 
-\* Complete first-run onboarding
-CompleteFirstRun ==
-    /\ screen = "firstRun"
-    /\ agentCount > 0
-    /\ screen'     = "confirm"
-    /\ UNCHANGED <<agentCount, confirmed>>
+\* (Removed: CompleteFirstRun was a DEAD transition — its guard `screen="firstRun" /\
+\*  agentCount>0` is unsatisfiable, since EnterFirstRun only reaches "firstRun" with
+\*  agentCount=0 and AddSlot leaves "firstRun" (see the FirstRunRequiresEmpty invariant).
+\*  Onboarding completes via AddSlot: firstRun → confirm.)
 
 \* Return from edit/composition to menu
 ReturnToMenu ==
@@ -113,7 +111,6 @@ Next ==
     \/ SelectAgent
     \/ EditComposition
     \/ AddSlot
-    \/ CompleteFirstRun
     \/ ReturnToMenu
     \/ ConfirmChanges
     \/ ExitWizard
