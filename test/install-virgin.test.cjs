@@ -69,7 +69,11 @@ function runInstall(tmpDir, runtime) {
     '--config-dir', tmpDir,
   ], {
     stdio: 'pipe',
-    timeout: 30000,
+    // The installer does real filesystem work (~30s locally); slower CI runners
+    // (esp. macOS) exceed a 30s cap → execFileSync ETIMEDOUT → the before-hook fails →
+    // every subtest reports cancelledByParent (a flaky red, not a real failure). The
+    // ci-install job budget is 10min, so 120s per runtime install is safe headroom.
+    timeout: 120000,
     env: {
       ...process.env,
       // Prevent any env var overrides from affecting test
