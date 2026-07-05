@@ -76,3 +76,27 @@ test('genuinely unresolvable cfg stays conservative (no false LOW)', () => {
     assert.strictEqual(a.risk_level, 'HIGH', 'unbounded Nat is genuinely HIGH');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('recognises TypeInvariant (not just TypeOK) and resolves .tla-defined set domains', () => {
+  const tla = [
+    '---- MODULE Foo ----',
+    'VARIABLES color',
+    '',
+    'Colors == {"red", "green", "blue"}',
+    '',
+    'TypeInvariant ==',
+    '    /\\ color \\in Colors',
+    '',
+    'Init == color = "red"',
+    'Next == color\' = "green"',
+    'Spec == Init /\\ [][Next]_color',
+    '====',
+  ].join('\n');
+  const cfg = ['\\* TLC model for Foo.tla', 'SPECIFICATION Spec', 'INVARIANT TypeInvariant'].join('\n');
+  const root = tmpProject('Foo.tla', tla, 'MCFooTI.cfg', cfg);
+  try {
+    const a = analyzeModel('MCFooTI', root);
+    assert.notStrictEqual(a.risk_level, 'HIGH', 'a .tla-defined set domain must not read as unbounded');
+    assert.strictEqual(a.estimated_states, 3, 'Colors has 3 members');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
