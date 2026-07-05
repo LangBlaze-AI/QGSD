@@ -304,6 +304,12 @@ This task is mandatory — the phase CANNOT pass verification without it. Build/
 
 **If not detected:** skip silently; `${SCHEMA_PUSH_REQUIREMENT}` is empty.
 
+## 7.7 Map Patterns (code-consistency, optional)
+
+For a phase that creates new source files, spawn `nf-pattern-mapper` (read-only) to answer "what existing code should each new file copy from?" → writes `${PHASE_DIR}/PATTERNS.md`, which the planner reads (added to its files_to_read above).
+
+Use the Task tool with `subagent_type="nf-pattern-mapper"`. Skip for docs-only / formal-only phases, or when the phase creates no new files. **nForma fusion:** the mapper also annotates any file whose requirement has a `formal_models` entry with the invariant(s) that code must uphold — so the planner writes code that satisfies the proven contract, not just code that resembles its neighbours. Fail-open: if the mapper is skipped or fails, planning proceeds without PATTERNS.md.
+
 ## 8. Spawn nf-planner Agent
 
 ```bash
@@ -335,6 +341,7 @@ Planner prompt:
 - {research_path} (Technical Research)
 - {verification_path} (Verification Gaps - if --gaps)
 - {uat_path} (UAT Gaps - if --gaps)
+- {PHASE_DIR}/PATTERNS.md (Copy-from analogs + formal contracts per new file — if pattern-mapper ran)
 ${FORMAL_SPEC_CONTEXT.length > 0 ? FORMAL_SPEC_CONTEXT.map(f => `- ${f.path} (Formal invariants for module: ${f.module})`).join('\n') : ''}
 </files_to_read>
 
