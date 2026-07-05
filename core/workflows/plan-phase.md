@@ -269,6 +269,41 @@ UAT_PATH=$(echo "$INIT" | jq -r '.uat_path // empty')
 CONTEXT_PATH=$(echo "$INIT" | jq -r '.context_path // empty')
 ```
 
+## 7.5 Schema Push Detection Gate (plan:pre)
+
+Detect ORM schema-relevant files in the phase scope and, if found, inject a mandatory `[BLOCKING]` schema-push task into the planner prompt. Closes a concrete false-verify hole: build/type checks pass even when the live DB was never migrated (TypeScript types come from config, not the database). Ported from open-gsd/gsd-core's schema-gate.
+
+```bash
+PHASE_SECTION=$(node ~/.claude/nf/bin/nf-tools.cjs roadmap get-phase "${PHASE}" | jq -r '.section // empty')
+```
+
+Scan `PHASE_SECTION`, the loaded CONTEXT.md, and RESEARCH.md (if present) — plus any existing PLAN.md `files_modified` — for file paths matching these ORM patterns:
+
+| ORM | File patterns | Push command | Non-TTY workaround |
+|-----|---------------|--------------|--------------------|
+| Prisma | `prisma/schema.prisma`, `prisma/schema/*.prisma` | `npx prisma db push` | `npx prisma db push --accept-data-loss` (destructive) |
+| Drizzle | `drizzle/schema.ts`, `src/db/schema.ts`, `drizzle/*.ts` | `npx drizzle-kit push` | — |
+| Payload CMS | `src/collections/**/*.ts`, `src/globals/**/*.ts` | `npx payload migrate` | `CI=true PAYLOAD_MIGRATING=true npx payload migrate` |
+| Supabase | `supabase/migrations/*.sql` | `supabase db push` | set `SUPABASE_ACCESS_TOKEN` |
+| TypeORM | `src/entities/**/*.ts`, `src/migrations/**/*.ts` | `npx typeorm migration:run` | `npx typeorm migration:run -d src/data-source.ts` |
+
+**If detected:** set `SCHEMA_ORM={orm}` and build `${SCHEMA_PUSH_REQUIREMENT}` (the block injected into the planner prompt in Step 8). Display: `Schema files detected ({SCHEMA_ORM}) — [BLOCKING] push task will be injected into plans`.
+
+```markdown
+<schema_push_requirement>
+**[BLOCKING] Schema Push Required**
+
+This phase modifies schema-relevant files ({detected_files}). The plan MUST include a `[BLOCKING]` task that runs the DB schema push command AFTER all schema-file modifications and BEFORE verification.
+- ORM: {SCHEMA_ORM} · Push: {push_command} · Non-TTY: {env_hint}
+- If the push needs interactive prompts that cannot be suppressed, mark the task `autonomous: false`.
+This task is mandatory — the phase CANNOT pass verification without it. Build/type checks pass without the push (types come from config, not the live database) → a false-positive verify state.
+</schema_push_requirement>
+```
+
+**nForma fusion:** a schema change is a data-model change. If a formal model covers this data, flag a matching invariant update via `/nf:close-formal-gaps ${PHASE}` after the push lands — the DB migration and the formal model must not drift.
+
+**If not detected:** skip silently; `${SCHEMA_PUSH_REQUIREMENT}` is empty.
+
 ## 8. Spawn nf-planner Agent
 
 ```bash
@@ -311,6 +346,8 @@ ${FORMAL_SPEC_CONTEXT.length > 0 ? FORMAL_SPEC_CONTEXT.map(f => `- ${f.path} (Fo
 <state_machine_bias>
 When the phase involves implementing logic with 3+ distinct states and conditional transitions, prefer a state machine library over ad-hoc if/else chains. Match complexity to the problem: flat FSMs get lightweight libraries (javascript-state-machine, transitions, looplab/fsm), complex workflows get statechart libraries (XState, sismic, Spring Statemachine). State machines can be auto-transpiled to TLA+ via bin/fsm-to-tla.cjs (28 frameworks across 13 languages). See .claude/rules/state-machine-bias.md for the full framework selection table. If the plan introduces state-transition logic, include a task to define the state machine and a follow-up task to run bin/fsm-to-tla.cjs for formal verification.
 </state_machine_bias>
+
+${SCHEMA_PUSH_REQUIREMENT}
 
 <formal_context>
 ${FORMAL_SPEC_CONTEXT.length > 0 ?
