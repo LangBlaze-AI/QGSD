@@ -272,8 +272,10 @@ function extractVariables(tlaContent) {
  * @returns {Object[]} — array of { name, domain, cardinality, bounded }
  */
 function parseTypeOK(tlaContent, varNames, constants) {
-  // Extract TypeOK block
-  const typeOKMatch = tlaContent.match(/TypeOK\s*==\s*\n?([\s\S]*?)(?=\n\s*\n\s*\\?\*|^\s*\n\s*[A-Z])/m);
+  // Extract the type-invariant block. Some models name it TypeInvariant /
+  // TypeInvariantHolds instead of TypeOK (e.g. NFMCPEnv) — recognise those too, else
+  // every variable reads as "unknown" domain → a false HIGH.
+  const typeOKMatch = tlaContent.match(/(?:TypeOK|TypeInvariant(?:Holds)?)\s*==\s*\n?([\s\S]*?)(?=\n\s*\n\s*\\?\*|^\s*\n\s*[A-Z])/m);
   if (!typeOKMatch) {
     // No TypeOK — return unknowns for all variables
     return varNames.map(name => ({
@@ -288,6 +290,17 @@ function parseTypeOK(tlaContent, varNames, constants) {
   for (const c of constants) {
     if (c.type === 'integer') constMap[c.name] = c.value;
     if (c.type === 'set') constMap[c.name] = c.cardinality;
+  }
+
+  // Augment with .tla-defined domain sets/ranges (e.g. `SlotStatuses == {"A","B"}`,
+  // `Slots == 1..NumSlots`) so function/set domains referencing them resolve instead of
+  // reading as "unknown" → a false HIGH (e.g. NFMCPEnv's [Slots -> SlotStatuses]). Done
+  // after cfg constants are in the map so a range like `1..NumSlots` can resolve.
+  const strippedTla = tlaContent.replace(/\\\*.*$/gm, '');
+  for (const m of strippedTla.matchAll(/^([A-Z]\w*)\s*==\s*(\{[^}]*\}|-?\w+\s*\.\.\s*-?\w+)\s*$/gm)) {
+    if (constMap[m[1]] !== undefined) continue;
+    const card = resolveCardinality(m[2].trim(), constMap);
+    if (card !== null) constMap[m[1]] = card;
   }
 
   const results = [];
