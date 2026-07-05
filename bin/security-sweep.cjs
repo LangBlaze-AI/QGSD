@@ -34,6 +34,12 @@ const SECRET_PATTERNS = [
 
 // Words that indicate a line is a test fixture / not a real secret
 const TEST_INDICATOR_WORDS = ['test', 'mock', 'fake', 'example', 'dummy', 'fixture', 'placeholder', 'todo'];
+// A test-indicator counts only as a real TOKEN: bounded by non-lowercase chars on both
+// sides. This skips genuine fixtures (`testKey`, `sk-test1234`, `MOCK_SECRET`) but NOT a
+// real key on a line like "latest"/"greatest"/"attestation"/"contest" — the substring
+// skip's security false negative. Case-insensitive word, case-sensitive boundaries.
+const TEST_INDICATOR_RES = TEST_INDICATOR_WORDS.map(w =>
+  new RegExp('(?<![a-z])' + w.split('').map(c => '[' + c + c.toUpperCase() + ']').join('') + '(?![a-z])'));
 
 // File patterns to exclude from scanning
 const EXCLUDE_PATTERNS = [
@@ -69,8 +75,8 @@ function scanFile(filePath, content) {
     const line = lines[i];
     const lineLower = line.toLowerCase();
 
-    // Skip lines containing test indicator words
-    if (TEST_INDICATOR_WORDS.some(w => lineLower.includes(w))) continue;
+    // Skip genuine test-fixture lines (token-boundary match — see TEST_INDICATOR_RES).
+    if (TEST_INDICATOR_RES.some(re => re.test(line))) continue;
 
     for (const pat of SECRET_PATTERNS) {
       const m = pat.pattern.exec(line);

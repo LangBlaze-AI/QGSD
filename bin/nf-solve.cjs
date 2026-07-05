@@ -3965,12 +3965,14 @@ function sweepFormalLint() {
     try {
       const lfResult = spawnTool('bin/check-liveness-fairness.cjs', []);
       if (lfResult.exitCode !== 0) {
-        // Try to parse count from stdout
+        // FP-safe: only count ACTUAL parsed violations. A nonzero exit with no
+        // parseable violations (crash / non-JSON output — the tool normally exits 0
+        // with human-readable "inconclusive" text) must add 0, never a phantom residual.
         try {
           const lfData = JSON.parse(lfResult.stdout || '{}');
-          lfViolations = (lfData.violations || []).length || 1;
+          lfViolations = (lfData.violations || []).length;
         } catch (_) {
-          lfViolations = 1;
+          lfViolations = 0;
         }
       }
     } catch (_) { /* fail-open */ }
