@@ -15,7 +15,7 @@ const path = require('path');
 
 // Runtime .mjs files that must be copied into nf-bin/ (the copy loop's primary
 // filter is the generic `*.cjs` match; these are the non-.cjs runtime files).
-const NF_BIN_RUNTIME_MJS = new Set(['unified-mcp-server.mjs']);
+const NF_BIN_RUNTIME_MJS = new Set(['unified-mcp-server.mjs', 'proximity-embed.mjs']);
 
 // Bundled non-code DATA files a runtime script loads by path relative to itself
 // (e.g. sast-sweep.cjs resolves sast-rules.yaml via __dirname). Without this they
