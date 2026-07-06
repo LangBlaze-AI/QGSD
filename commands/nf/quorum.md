@@ -70,6 +70,15 @@ These three rules govern ALL consensus determination in both Mode A and Mode B. 
   2. Surface the degraded-roster state to the user for an explicit waiver via `--force-quorum`
 - Below-floor consensus is BLOCKED by `nf-stop.js` with a clear error — it does not silently pass.
 
+**RULE CE-5: Full Convergence (thoroughness)**
+- Unanimity (CE-3) is NECESSARY but NOT SUFFICIENT to terminate the deliberation loop. The loop converges — and only then stops — when a single round satisfies ALL of:
+  1. **Unanimous** — every valid (non-UNAVAIL) external voter APPROVES, no BLOCK (CE-2 + CE-3).
+  2. **No new improvements** — no valid voter proposes an improvement that was not already circulated for review in a prior round (`improvements:` empty for every voter, or every proposal is a semantic duplicate of an already-reviewed one).
+  3. **All improvements reviewed by all** — every improvement proposed in ANY round has been surfaced to, and evaluated by, every valid voter in a subsequent round.
+- A round that is unanimous but still surfaces a NEW improvement does NOT terminate the loop. The new improvement(s) are injected into the next round's review context so every voter evaluates them (accept / reject-with-reason / refine) and may propose further refinements. The loop continues until the improvement stream is dry under unanimity — i.e. "consensus" means *the team has nothing left to add*, not merely *nobody objects*.
+- Governed by `quorum.full_convergence` (default: **true**). When false, the loop reverts to CE-3 behavior (stop at first unanimity). The `max rounds` cap (R3.3) still bounds the loop; if convergence is not reached within it, escalate and surface the still-open improvements.
+- A voter may BLOCK a proposed improvement it considers wrong — that BLOCK is absolute per CE-2 and reopens deliberation. Bad improvements are thus filtered by the same unanimity bar, not merged in.
+
 ---
 
 <mode_detection>
@@ -448,9 +457,16 @@ Populate `citations:` from the `citations:` field in each model's result file. I
 
 Workers are dispatched as **parallel sibling Tasks** per round. Between rounds (Bash scoreboard calls, set-availability) remain sequential.
 
-Stop deliberation **immediately** upon CONSENSUS (all valid external voters agree per CE-3). Claude's advisory position is NOT counted in this check. A single BLOCK from any external voter means consensus has NOT been reached (CE-2) — continue deliberation.
+**Termination — full convergence (CE-5).** Read `quorum.full_convergence` from config (default: true). When true, `--request-improvements` is ON for **every** round (so each round collects `improvements:`), and after each round apply this check (Claude's advisory position is never counted):
 
-After 10 total rounds with no consensus → **Escalate**.
+1. **Any BLOCK** from a valid external voter → consensus NOT reached (CE-2). Continue deliberation.
+2. **Unanimous** (all valid external voters APPROVE, CE-3) → collect the `improvements:` field from every valid voter this round. Maintain a running `REVIEWED_IMPROVEMENTS` set (improvements circulated in a prior round) and compute `NEW_IMPROVEMENTS` = this round's proposals not already in that set (de-duplicated semantically, not just by string).
+   - **Unanimous AND `NEW_IMPROVEMENTS` empty → CONVERGED. Stop.** The team agrees and has nothing left to add.
+   - **Unanimous but `NEW_IMPROVEMENTS` non-empty → NOT converged.** Add every new improvement to `REVIEWED_IMPROVEMENTS`, then run another round with those improvements injected into `--review-context` under a heading like *"Proposed improvements to evaluate — for each: accept, reject with reason, or refine. BLOCK if an improvement makes the answer wrong."* Every voter thereby reviews every improvement. Continue.
+
+When `quorum.full_convergence` is false, stop **immediately** at the first unanimous round (step 2's first check only — legacy CE-3 behavior), regardless of open improvements.
+
+After 10 total rounds without convergence → **Escalate**, surfacing the unanimous verdict (if one was reached) plus the still-open improvements that had not yet dried up.
 
 ### Consensus output
 
@@ -511,7 +527,9 @@ Run one command per model per round. Each call is atomic and idempotent — if r
 
 **Post-consensus improvements extraction (Mode A, when `request_improvements: true`):**
 
-1. Collect `improvements:` fields from worker result blocks of the **final consensus round** (the last round where all available models agreed — NOT aggregated across all rounds). Filter to blocks where `verdict` is not UNAVAIL and `improvements:` is present and non-empty.
+1. Collect the improvements to emit:
+   - **Full-convergence mode (CE-5, `quorum.full_convergence` true):** emit the `REVIEWED_IMPROVEMENTS` set — every improvement that was proposed AND circulated for all-member review across the deliberation, and that survived to convergence (i.e. was not BLOCKed away). By construction the final round proposes nothing new, so the vetted set — not the empty final round — is the meaningful output. Each of these was seen and accepted (no BLOCK) by every valid voter.
+   - **Legacy mode (`quorum.full_convergence` false):** collect `improvements:` from the **final consensus round** only (the last round where all available models agreed — NOT aggregated across all rounds). Filter to blocks where `verdict` is not UNAVAIL and `improvements:` is present and non-empty.
 
 2. De-duplicate: if multiple models propose the same improvement (same suggestion text or semantically equivalent), keep only the first occurrence.
 

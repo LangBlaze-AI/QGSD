@@ -73,6 +73,20 @@ test('A1: partial quorum {maxSize} → min_live_voters restored to default after
   );
 });
 
+// CE-5 full_convergence — same partial-merge gap: a `quorum: { maxSize }` override must
+// not silently drop the default so the deliberation loop keeps its thoroughness setting.
+test('A1b: partial quorum {maxSize} → full_convergence restored to default (true)', () => {
+  const config = quiet(() => validateConfig(merged({ quorum: { maxSize: 5 } })));
+  assert.equal(config.quorum.full_convergence, DEFAULT_CONFIG.quorum.full_convergence,
+    '🔴 quorum.full_convergence dropped after partial-object shallow merge (CE-5 loop reverts silently)');
+  assert.equal(DEFAULT_CONFIG.quorum.full_convergence, true, 'default full_convergence is true');
+});
+
+test('A1c: explicit full_convergence:false is honored (opt out of CE-5)', () => {
+  const config = quiet(() => validateConfig(merged({ quorum: { full_convergence: false } })));
+  assert.equal(config.quorum.full_convergence, false, 'explicit false preserved');
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GAP 2: wrong-TYPE quorum (an array) is not coerced back to the default object.
 // agent_config (~417) guards Array.isArray; quorum (~399) does NOT — `typeof []`
