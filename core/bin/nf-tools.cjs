@@ -2185,6 +2185,10 @@ function cmdSummaryExtract(cwd, summaryPath, fields, raw) {
     tech_added: (fm['tech-stack'] && fm['tech-stack'].added) || [],
     patterns: fm['patterns-established'] || [],
     decisions: parseDecisions(fm['key-decisions']),
+    // requirements-completed: REQ-IDs this phase closed (audit-milestone's SUMMARY-frontmatter
+    // cross-check reads this — it was requesting a field summary-extract never emitted, so
+    // that arm of the 3-source status matrix always went null).
+    requirements_completed: fm['requirements-completed'] || fm['requirements_completed'] || [],
   };
 
   // If fields specified, filter to only those fields
