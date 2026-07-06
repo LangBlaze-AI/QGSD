@@ -142,6 +142,7 @@ const DEFAULT_CONFIG = {
     maxSize: 4,
     preferSub: false,
     min_live_voters: 2,  // minimum live voters for valid consensus (issue #170)
+    full_convergence: true,  // CE-5: loop until unanimous AND no new improvements (all reviewed by all)
   },
   // agent_config: per-slot metadata.
   //   auth_type: "sub" (subscription, flat-fee) | "api" (pay-per-token)
@@ -429,6 +430,11 @@ function validateConfig(config) {
     // defensively precisely because of this gap).
     if (!Number.isInteger(config.quorum.min_live_voters) || config.quorum.min_live_voters < 1) {
       config.quorum.min_live_voters = DEFAULT_CONFIG.quorum.min_live_voters;
+    }
+    // Same partial-merge gap for CE-5: a `quorum: { maxSize: N }` override drops
+    // full_convergence → undefined. Default it back to true unless explicitly a boolean.
+    if (typeof config.quorum.full_convergence !== 'boolean') {
+      config.quorum.full_convergence = DEFAULT_CONFIG.quorum.full_convergence;
     }
   }
 

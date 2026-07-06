@@ -61,7 +61,7 @@ function writeNfJson(dir, content) {
 test('B1: fully-valid custom config round-trips unchanged (no over-coercion regression)', () => {
   const valid = {
     ...clone(DEFAULT_CONFIG),
-    quorum: { maxSize: 6, preferSub: true, min_live_voters: 3 },
+    quorum: { maxSize: 6, preferSub: true, min_live_voters: 3, full_convergence: false },
     circuit_breaker: {
       oscillation_depth: 4,
       commit_window: 8,
