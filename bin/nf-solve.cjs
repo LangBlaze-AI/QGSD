@@ -4920,6 +4920,15 @@ function computeResidual() {
     (d_to_c.residual >= 0 ? d_to_c.residual : 0) +
     (p_to_f.residual >= 0 ? p_to_f.residual : 0);
 
+  // Degraded-convergence guard (found by the CE-5 quorum dogfood). The sum above coerces a
+  // skipped layer's residual (-1) to 0, so `total === 0` cannot distinguish "genuinely
+  // clean" from "measuring layers were skipped" — a false-convergence hole. Surface which
+  // forward layers were unmeasured so a clean total is never read as a proven convergence
+  // when layers did not run. Residual numbers are UNCHANGED (benchmark-neutral) — this only
+  // adds a qualifier.
+  const unmeasured_layers = computeUnmeasuredLayers({ r_to_f, f_to_t, c_to_f, t_to_c, f_to_c, r_to_d, d_to_c, p_to_f });
+  const degraded = unmeasured_layers.length > 0;
+
   const reverse_discovery_total =
     (c_to_r.residual >= 0 ? c_to_r.residual : 0) +
     (t_to_r.residual >= 0 ? t_to_r.residual : 0) +
@@ -5131,6 +5140,8 @@ function computeResidual() {
     model_stale,
     assembled_candidates,
     total,
+    degraded,
+    unmeasured_layers,
     automatable,
     manual,
     informational,
@@ -7249,11 +7260,25 @@ function persistSessionSummary(reportText, jsonText, converged, iterations, sess
   }
 }
 
+// Degraded-convergence guard (CE-5 quorum dogfood finding): the aggregate `total` sums
+// each layer as `(residual >= 0 ? residual : 0)`, so a SKIPPED layer (residual -1) is
+// coerced to 0 and a `total === 0` cannot tell "genuinely clean" from "layers didn't run".
+// Return the names of layers that were not measured (residual not a number >= 0), so a
+// clean total is never read as a proven convergence when a layer was skipped.
+function computeUnmeasuredLayers(layers) {
+  if (!layers || typeof layers !== 'object') return [];
+  return Object.keys(layers).filter((k) => {
+    const r = layers[k] && layers[k].residual;
+    return !(typeof r === 'number' && r >= 0);
+  });
+}
+
 // ── Exports (for testing) ────────────────────────────────────────────────────
 
 module.exports = {
   sweep: computeResidual,
   computeResidual,
+  computeUnmeasuredLayers,
   autoClose,
   formatReport,
   formatJSON,
