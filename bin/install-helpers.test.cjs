@@ -1380,3 +1380,10 @@ test('DP-19: reconstruction branch must not spread a non-object preset.env (stri
       'inherited vanilla env keys must survive a non-object preset.env reconstruction');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// Dogfood: proximity-embed.mjs must ship to nf-bin, else /nf:proximity's embedding step
+// (and nf-solve Phase 0) silently no-ops in every installed user project.
+test('DOGFOOD: proximity-embed.mjs is copied to nf-bin (runtime .mjs allowlist)', () => {
+  assert.strictEqual(shouldCopyToNfBin('proximity-embed.mjs'), true);
+  assert.strictEqual(shouldCopyToNfBin('unified-mcp-server.mjs'), true);
+});

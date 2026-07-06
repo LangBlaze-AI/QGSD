@@ -43,9 +43,12 @@ describe('mcpArgsNeedMigration — repo-tree → nf-bin args migration (issue #2
 });
 
 describe('shouldCopyToNfBin — nf-bin copy filter (issue #200)', () => {
-  it('selects unified-mcp-server.mjs (the bug: .mjs was skipped)', () => {
+  it('selects runtime .mjs on the allowlist (the bug: .mjs was skipped)', () => {
     assert.equal(shouldCopyToNfBin('unified-mcp-server.mjs'), true);
     assert.ok(NF_BIN_RUNTIME_MJS.has('unified-mcp-server.mjs'));
+    // proximity-embed.mjs must ship too (dogfood: /nf:proximity + nf-solve Phase 0 need it)
+    assert.equal(shouldCopyToNfBin('proximity-embed.mjs'), true);
+    assert.ok(NF_BIN_RUNTIME_MJS.has('proximity-embed.mjs'));
   });
 
   it('still selects .cjs dispatch scripts', () => {
@@ -58,7 +61,7 @@ describe('shouldCopyToNfBin — nf-bin copy filter (issue #200)', () => {
   });
 
   it('does not select unrelated .mjs / other files', () => {
-    assert.equal(shouldCopyToNfBin('proximity-embed.mjs'), false);
+    assert.equal(shouldCopyToNfBin('some-random-tool.mjs'), false); // not on the allowlist
     assert.equal(shouldCopyToNfBin('README.md'), false);
     assert.equal(shouldCopyToNfBin('something.test.js'), false);
   });

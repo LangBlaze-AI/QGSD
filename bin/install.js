@@ -3078,6 +3078,32 @@ function install(isGlobal, runtime = 'claude') {
         // Unexpected error — skip silently (fail-open)
       }
     }
+
+    // Vendor `xstate` to nf-bin (fail-open). validate-traces.cjs / state-candidates.cjs
+    // `require('xstate')` at runtime; from the repo it resolves via the repo's node_modules,
+    // but an installed copy in ~/.claude/nf-bin/ has no complete xstate — a stale partial
+    // copy (dist + LICENSE, NO package.json) made `require('xstate')` fail, so those tools
+    // silently died in every user project. Guard on package.json (not just the dir) so this
+    // repairs the partial copy, not just a fresh install.
+    {
+      const { spawnSync: _spawnXs } = require('child_process');
+      try {
+        const nfBinRoot = path.join(os.homedir(), '.claude', 'nf-bin');
+        const xstatePkg = path.join(nfBinRoot, 'node_modules', 'xstate', 'package.json');
+        if (!fs.existsSync(xstatePkg)) {
+          console.log(`  ${cyan}↓${reset} Vendoring xstate to nf-bin...`);
+          const xsInstall = _spawnXs('npm', ['install', '--prefix', nfBinRoot, 'xstate'], { timeout: 120000 });
+          if (xsInstall.status === 0) {
+            console.log(`  ${green}✓${reset} xstate vendored`);
+          } else {
+            const errOut = xsInstall.stderr ? xsInstall.stderr.toString().slice(0, 120) : '';
+            console.log(`  ${yellow}⚠${reset} xstate vendoring skipped: npm returned non-zero${errOut ? ' (' + errOut + ')' : ''}`);
+          }
+        }
+      } catch (e) {
+        // fail-open
+      }
+    }
   } // end NF_INSTALL_SKIP_OPTIONAL guard
 
   // Validate hook path references point to real targets

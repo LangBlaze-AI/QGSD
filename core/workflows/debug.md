@@ -59,7 +59,7 @@ Pack Repowise intelligence context for the debug session. This injects hotspot r
 ```bash
 REPOWISE_CONTEXT=""
 if command -v node >/dev/null 2>&1; then
-  REPOWISE_CONTEXT=$(node ~/.claude/nf-bin/context-packer.cjs --hotspot --cochange --focus "$ARGUMENTS" --project-root="$(pwd)" 2>/dev/null || node bin/repowise/context-packer.cjs --hotspot --cochange --project-root="$(pwd)" 2>/dev/null || echo "")
+  REPOWISE_CONTEXT=$(node ~/.claude/nf-bin/repowise/context-packer.cjs --hotspot --cochange --focus "$ARGUMENTS" --project-root="$(pwd)" 2>/dev/null || node bin/repowise/context-packer.cjs --hotspot --cochange --project-root="$(pwd)" 2>/dev/null || echo "")
 fi
 ```
 

@@ -3,6 +3,18 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+
+// Resolve the baseline-requirements defaults dir portably. From the repo this is
+// ../core/defaults/... relative to bin/; but when this script is installed to
+// ~/.claude/nf-bin/, that repo-relative path points at the non-existent
+// ~/.claude/core/defaults/ — the installer places the defaults at ~/.claude/nf/defaults/.
+// Try the repo-local path, then fall back to the installed location.
+function resolveDefaultsBase() {
+  const repoLocal = path.resolve(__dirname, '../core/defaults/baseline-requirements');
+  if (fs.existsSync(repoLocal)) return repoLocal;
+  return path.join(os.homedir(), '.claude', 'nf', 'defaults', 'baseline-requirements');
+}
 
 /**
  * Load baseline requirements filtered by project profile.
@@ -12,7 +24,7 @@ const path = require('path');
  * @returns {Object} { profile, label, description, categories: [...], total }
  */
 function loadBaselineRequirements(profile, basePath) {
-  const defaultBasePath = path.resolve(__dirname, '../core/defaults/baseline-requirements');
+  const defaultBasePath = resolveDefaultsBase();
   const basePathToUse = basePath || defaultBasePath;
 
   // Read index.json
@@ -105,7 +117,7 @@ function loadBaselineRequirements(profile, basePath) {
  * @returns {Object} { profile, label, intent, categories, packs_applied, total }
  */
 function loadBaselineRequirementsFromIntent(intent, basePath) {
-  const defaultBasePath = path.resolve(__dirname, '../core/defaults/baseline-requirements');
+  const defaultBasePath = resolveDefaultsBase();
   const basePathToUse = basePath || defaultBasePath;
 
   // Validate base_profile

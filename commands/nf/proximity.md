@@ -35,7 +35,11 @@ Store parsed flags for use in downstream steps.
 
 ## Step 2: Build proximity graph
 
-Run: `node bin/formal-proximity.cjs`
+Run (portable — installed nf-bin primary, repo CWD fallback):
+```bash
+NFBIN="$HOME/.claude/nf-bin"; [ -f "$NFBIN/formal-proximity.cjs" ] || NFBIN="./bin"
+node "$NFBIN/formal-proximity.cjs"
+```
 
 - **If graph exists and `--rebuild` NOT set:** Skip build, report cached graph stats: "Graph cached (N nodes, E edges, U orphans)"
 - **If `--rebuild` is set:** Delete `.planning/formal/proximity-index.json` first, then run builder
@@ -54,7 +58,11 @@ node -e "require('@huggingface/transformers')" 2>/dev/null
 
 - **If dependency is NOT installed:** Skip silently (embeddings are optional).
 - **If dependency IS installed but `.planning/formal/embedding-cache.json` is missing or `--rebuild` is set:**
-  - Run: `node bin/proximity-embed.mjs --cache-only`
+  - Run (portable):
+    ```bash
+    NFBIN="$HOME/.claude/nf-bin"; [ -f "$NFBIN/proximity-embed.mjs" ] || NFBIN="./bin"
+    node "$NFBIN/proximity-embed.mjs" --cache-only
+    ```
   - Display: "Building embedding cache (local CPU, ~30s)..."
   - On completion: report vector count from output
 - **If cache exists and `--rebuild` NOT set:** Skip, report: "Embedding cache loaded (N vectors)"
@@ -65,7 +73,11 @@ Progress line: `[1.5/6] Checking embeddings...`
 
 ## Step 3: Discover candidates
 
-Run: `node bin/candidate-discovery.cjs --min-score <val> --max-hops <val> --top <val> --non-neighbor-top <val> --json`
+Run (portable):
+```bash
+NFBIN="$HOME/.claude/nf-bin"; [ -f "$NFBIN/candidate-discovery.cjs" ] || NFBIN="./bin"
+node "$NFBIN/candidate-discovery.cjs" --min-score <val> --max-hops <val> --top <val> --non-neighbor-top <val> --json
+```
 
 - Pass `--min-score` and `--max-hops` from parsed arguments
 - If `--top` not specified by user, pass `--top 0` (no limit — ensemble naturally caps at ~100 candidates)
@@ -85,7 +97,11 @@ If `--skip-eval` is set:
 Otherwise, attempt the script first:
 
 **4a. Try script:**
-- Run: `node bin/haiku-semantic-eval.cjs` via Bash
+- Run (portable) via Bash:
+```bash
+NFBIN="$HOME/.claude/nf-bin"; [ -f "$NFBIN/haiku-semantic-eval.cjs" ] || NFBIN="./bin"
+node "$NFBIN/haiku-semantic-eval.cjs"
+```
 - If exit code is 0: display verdict distribution from stderr output ("Evaluation complete (via: script). yes: X, no: Y, maybe: Z") and continue to Step 5. Done.
 - If exit code is non-zero: log the error, then proceed to 4b (sub-agent fallback).
 
@@ -116,7 +132,11 @@ Progress line: `[3/6] Running semantic evaluation (Haiku)...`
 
 ## Step 5: Compute semantic scores
 
-Run: `node bin/compute-semantic-scores.cjs --json`
+Run (portable):
+```bash
+NFBIN="$HOME/.claude/nf-bin"; [ -f "$NFBIN/compute-semantic-scores.cjs" ] || NFBIN="./bin"
+node "$NFBIN/compute-semantic-scores.cjs" --json
+```
 
 - Display per-gate score summary (A, B, C scores)
 - Show median, min, max for each gate
@@ -126,7 +146,11 @@ Progress line: `[4/6] Computing semantic scores...`
 
 ## Step 6: Generate pairings
 
-Run: `node bin/candidate-pairings.cjs --json`
+Run (portable):
+```bash
+NFBIN="$HOME/.claude/nf-bin"; [ -f "$NFBIN/candidate-pairings.cjs" ] || NFBIN="./bin"
+node "$NFBIN/candidate-pairings.cjs" --json
+```
 
 - Display pairing status summary:
   - Total pairings
