@@ -3,6 +3,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+// Suppress the live diagnostic probes (categories 6–14, 17) for the whole file.
+// Those categories spawnSync installed scripts that hit the network / MCP fleet
+// and each carry a 15–30s timeout, so without this the suite hangs (>100s) and
+// is non-deterministic (a genuinely-unhealthy fleet would inject unrelated
+// issues). This flag leaves the fast file-scan categories — including the
+// stubbed Category 15 health path exercised below — fully intact. Node runs each
+// test file in its own child process, so this env cannot leak to other suites.
+process.env.NF_OBSERVE_SKIP_LIVE_PROBES = '1';
+
 const { handleInternal, formatAgeFromMtime } = require('./observe-handler-internal.cjs');
 
 /**
@@ -472,6 +481,40 @@ describe('Fail-open behavior', () => {
       assert.equal(result.status, 'ok');
       assert.equal(result.issues.length, 0);
     } finally {
+      rmrf(tmpDir);
+    }
+  });
+});
+
+// ── Live-probe suppression (skipLiveProbes) ──
+// The file sets NF_OBSERVE_SKIP_LIVE_PROBES=1 globally; these tests additionally
+// pin the opts-flag channel and prove the suppression is scoped to the
+// resolveScript-based categories (6–14, 17) and does NOT swallow Category 15,
+// whose health script resolves via a separate project-local path.
+
+describe('Live-probe suppression (skipLiveProbes)', () => {
+  it('opts.skipLiveProbes works with env cleared, yet Category 15 health still fires', () => {
+    const tmpDir = makeTmpDir();
+    const savedEnv = process.env.NF_OBSERVE_SKIP_LIVE_PROBES;
+    try {
+      // Prove the opts channel independently of the file-level env flag.
+      delete process.env.NF_OBSERVE_SKIP_LIVE_PROBES;
+
+      // Category 15 uses projectRoot/core/bin/nf-tools.cjs (NOT resolveScript),
+      // so it must survive skipLiveProbes. Stub it to emit one warning.
+      const mockScript = `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({ status: 'degraded', warnings: [{ code: 'W1', message: 'stub', fix: 'x', repairable: false }] }));`;
+      createFile(tmpDir, 'core/bin/nf-tools.cjs', mockScript);
+      fs.chmodSync(path.join(tmpDir, 'core/bin/nf-tools.cjs'), 0o755);
+
+      const result = handleInternal({ }, { projectRoot: tmpDir, skipLiveProbes: true });
+      assert.equal(result.status, 'ok');
+      const health = result.issues.filter(i => i.id.startsWith('internal-health-'));
+      assert.equal(health.length, 1, 'Category 15 health must still run under skipLiveProbes');
+      assert.equal(health[0].id, 'internal-health-W1');
+    } finally {
+      if (savedEnv === undefined) delete process.env.NF_OBSERVE_SKIP_LIVE_PROBES;
+      else process.env.NF_OBSERVE_SKIP_LIVE_PROBES = savedEnv;
       rmrf(tmpDir);
     }
   });

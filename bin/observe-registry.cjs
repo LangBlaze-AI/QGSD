@@ -65,14 +65,14 @@ async function dispatchSource(sourceConfig, options, timeoutSeconds) {
     };
   }
 
+  let timer;
   try {
     const handlerPromise = handlerFn(cfg, options || {});
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout after ${timeout}s`)), timeout * 1000)
-    );
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Timeout after ${timeout}s`)), timeout * 1000);
+    });
 
-    const result = await Promise.race([handlerPromise, timeoutPromise]);
-    return result;
+    return await Promise.race([handlerPromise, timeoutPromise]);
   } catch (err) {
     return {
       source_label: label,
@@ -81,6 +81,12 @@ async function dispatchSource(sourceConfig, options, timeoutSeconds) {
       error: err.message || 'Unknown error',
       issues: []
     };
+  } finally {
+    // Clear the race timer whether the handler won or threw. Without this the
+    // pending setTimeout (up to `timeout`s) leaks and keeps the event loop alive
+    // long after dispatch resolves — delaying process exit and leaking one timer
+    // per source dispatched.
+    clearTimeout(timer);
   }
 }
 
