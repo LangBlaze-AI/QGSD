@@ -1,0 +1,66 @@
+name: Benchmark — external fixtures vs PR SUT
+
+# Runs the nf-benchmark EXTERNAL-PROJECT fixture corpus against THIS PR's own
+# nf-solve — not the pinned npm release. This is the piece that makes the
+# benchmark part of nForma's own CI: a change that regresses (or improves)
+# defect detection on external projects is caught before merge, using the code
+# under review as the System Under Test.
+#
+# Deterministic and API-key-free by design: fixtures score by residual detection
+# / reproduce-mode, and the precision gate asserts the FP-safe detectors emit
+# zero findings on clean code. No LLM/quorum call, so it is safe as a required,
+# blocking gate. The heavier live-repair (LLM) track stays out of PR CI.
+#
+# nf-benchmark (nForma-AI/nf-benchmark) is public, so it is checked out with no
+# token. The corpus tracks its own default branch so new fixtures apply here
+# automatically.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: benchmark-fixtures-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fixtures-vs-pr-sut:
+    name: Fixture corpus + precision (PR's nf-solve)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout nForma (PR code = SUT)
+        uses: actions/checkout@v4
+        with:
+          path: nforma
+
+      - name: Checkout nf-benchmark (public, no token)
+        uses: actions/checkout@v4
+        with:
+          repository: nForma-AI/nf-benchmark
+          path: nf-benchmark
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install nForma deps + build artifacts
+        working-directory: nforma
+        run: |
+          npm ci --ignore-scripts || npm install --ignore-scripts
+          npm run build:hooks && npm run build:machines
+
+      - name: Install nf-benchmark deps
+        working-directory: nf-benchmark
+        run: npm ci || npm install
+
+      - name: Fixture corpus vs PR SUT (deterministic detection)
+        working-directory: nf-benchmark
+        run: node bin/run-fixtures.cjs --sut "$GITHUB_WORKSPACE/nforma/bin/nf-solve.cjs"
+
+      - name: Precision gate — 0 false positives on clean code (PR SUT)
+        working-directory: nf-benchmark
+        run: node bin/precision-harness.cjs --sut-bin "$GITHUB_WORKSPACE/nforma/bin" --clean-root fixtures/clean-corpus
