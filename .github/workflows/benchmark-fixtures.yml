@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: nForma-AI/nf-benchmark
-          ref: f376eaa4459905da469252329c6b476dceb3cf0e
+          ref: f376eaa4459905da469252329c6b476dceb3cf0e  # pragma: allowlist secret — git commit SHA, not a credential
           path: nf-benchmark
           persist-credentials: false
 
