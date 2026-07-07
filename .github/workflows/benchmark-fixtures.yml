@@ -25,22 +25,36 @@ concurrency:
   group: benchmark-fixtures-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: this job only reads code and runs deterministic checks — it
+# never writes back to any repo. Constrain the GITHUB_TOKEN accordingly.
+permissions:
+  contents: read
+
 jobs:
   fixtures-vs-pr-sut:
     name: Fixture corpus + precision (PR's nf-solve)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # persist-credentials: false — the job runs JS from both the PR and an
+      # external repo but never pushes, so the GITHUB_TOKEN must not be written
+      # to .git/config where an install/run step could read it (zizmor artipacked).
       - name: Checkout nForma (PR code = SUT)
         uses: actions/checkout@v4
         with:
           path: nforma
+          persist-credentials: false
 
-      - name: Checkout nf-benchmark (public, no token)
+      # nf-benchmark is pinned to an explicit commit so an upstream change can't
+      # silently alter (or break) this required PR gate and reruns stay
+      # reproducible. Bump this SHA intentionally when adopting new fixtures.
+      - name: Checkout nf-benchmark (public, pinned)
         uses: actions/checkout@v4
         with:
           repository: nForma-AI/nf-benchmark
+          ref: f376eaa4459905da469252329c6b476dceb3cf0e
           path: nf-benchmark
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -53,9 +67,12 @@ jobs:
           npm ci --ignore-scripts || npm install --ignore-scripts
           npm run build:hooks && npm run build:machines
 
+      # --ignore-scripts: nf-benchmark has no lifecycle scripts, so this changes
+      # nothing functionally but closes the supply-chain hole of an external
+      # repo running arbitrary install scripts in this gate.
       - name: Install nf-benchmark deps
         working-directory: nf-benchmark
-        run: npm ci || npm install
+        run: npm ci --ignore-scripts || npm install --ignore-scripts
 
       - name: Fixture corpus vs PR SUT (deterministic detection)
         working-directory: nf-benchmark
