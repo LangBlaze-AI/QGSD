@@ -12,8 +12,8 @@ name: Benchmark — external fixtures vs PR SUT
 # blocking gate. The heavier live-repair (LLM) track stays out of PR CI.
 #
 # nf-benchmark (nForma-AI/nf-benchmark) is public, so it is checked out with no
-# token. The corpus tracks its own default branch so new fixtures apply here
-# automatically.
+# token. The corpus is pinned to an explicit commit (see the ref below) so this
+# required gate is reproducible; bump that SHA to adopt new fixtures.
 
 on:
   pull_request:
@@ -38,7 +38,8 @@ jobs:
     steps:
       # persist-credentials: false — the job runs JS from both the PR and an
       # external repo but never pushes, so the GITHUB_TOKEN must not be written
-      # to .git/config where an install/run step could read it (zizmor artipacked).
+      # to .git/config where an install/run step could read it (flagged by
+      # zizmor's `artipacked` rule).
       - name: Checkout nForma (PR code = SUT)
         uses: actions/checkout@v4
         with:
