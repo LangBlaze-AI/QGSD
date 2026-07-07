@@ -49,6 +49,18 @@ function handleInternal(sourceConfig, options) {
   const projectRoot = opts.projectRoot || process.cwd();
   const issues = [];
 
+  // Categories 6–14 and 17 shell out (via resolveScript, below) to installed
+  // diagnostic scripts that probe the network / telemetry / MCP fleet and take
+  // real wall-clock time (each spawnSync carries a 15–30s timeout, and because
+  // this handler is synchronous the dispatch-layer race timeout cannot preempt
+  // them). A caller running in a unit/CI context — or simply offline — can
+  // suppress those live probes with opts.skipLiveProbes or the
+  // NF_OBSERVE_SKIP_LIVE_PROBES=1 env var. The fast, deterministic file-scan
+  // categories (1–5, 15, 16) are unaffected: they resolve project-local paths
+  // directly rather than through resolveScript.
+  const skipLiveProbes = opts.skipLiveProbes === true
+    || process.env.NF_OBSERVE_SKIP_LIVE_PROBES === '1';
+
   try {
     // Category 1: Unfinished quick tasks
     try {
@@ -288,6 +300,9 @@ function handleInternal(sourceConfig, options) {
 
     // ── Helper: resolve script path (installed location first, then repo-local) ──
     function resolveScript(scriptName) {
+      // Live-probe suppression: returning null makes every resolveScript-based
+      // category (6–14, 17) no-op cleanly, without touching the file-scan ones.
+      if (skipLiveProbes) return null;
       const installed = path.join(os.homedir(), '.claude', 'nf-bin', scriptName);
       if (fs.existsSync(installed)) return installed;
       const local = path.join(projectRoot, 'bin', scriptName);
@@ -921,4 +936,6 @@ function handleInternal(sourceConfig, options) {
   }
 }
 
-module.exports = { handleInternal };
+// Re-export formatAgeFromMtime (imported from observe-utils above) so callers and
+// tests can reach it through the handler surface, as the internal test expects.
+module.exports = { handleInternal, formatAgeFromMtime };
