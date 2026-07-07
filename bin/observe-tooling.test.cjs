@@ -208,6 +208,15 @@ describe('runCli (autodetection script)', () => {
     assert.deepEqual(detect.lastOpts, { sourceTypes: ['grafana'] });
   });
 
+  it('--source does not swallow a following flag as its value', () => {
+    const detect = detectStub([unhealthy]);
+    // `--source --strict`: --strict must NOT be consumed as a source value,
+    // so no sourceTypes filter is applied AND --strict still takes effect.
+    const { code } = runCli(['--source', '--strict'], { detect });
+    assert.equal(detect.lastOpts && detect.lastOpts.sourceTypes, undefined, '--strict must not become a source filter');
+    assert.equal(code, 1, '--strict must still be honored (unhealthy → exit 1)');
+  });
+
   it('empty status set (filter matches nothing) prints a friendly note, exit 0', () => {
     const { output, code } = runCli(['--source', 'github'], { detect: detectStub([]) });
     assert.equal(code, 0);

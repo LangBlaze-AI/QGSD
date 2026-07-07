@@ -225,7 +225,9 @@ function runCli(argv, opts = {}) {
   // Collect source-type filters: `--source <type>` pairs and bare positionals.
   const sourceTypes = [];
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--source' && args[i + 1]) { sourceTypes.push(args[++i]); }
+    // Only consume the next token as the value if it isn't itself a flag —
+    // otherwise `--source --strict` would swallow --strict as a filter value.
+    if (args[i] === '--source' && args[i + 1] && !args[i + 1].startsWith('-')) { sourceTypes.push(args[++i]); }
     else if (!args[i].startsWith('-')) { sourceTypes.push(args[i]); }
   }
   const statuses = detect(sourceTypes.length ? { sourceTypes } : {});
