@@ -96,6 +96,31 @@ Display dispatch header:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
+## Step 3b: Tooling preflight (CLI-backed sources)
+
+Some sources are backed by an external CLI rather than a plain HTTP endpoint:
+the Sentry sources (`sentry`, `sentry-feedback`) lean on `sentry-cli`, and the
+Grafana source on `gcx` (the Grafana Cloud CLI). Detect whether those CLIs are
+installed and authenticated **before** dispatch, so that when one of those
+sources errors we can tell "this is real drift" apart from "the CLI is missing
+or you never logged in".
+
+```javascript
+const { detectObserveTooling, renderToolingStatus } = require(_nfBin('observe-tooling.cjs'));
+
+// Pass the configured source types so the helper only PROBES the CLIs that back
+// them — an internal-only or single-backend run never shells out to a sentry-cli
+// / gcx check it can't use, keeping the common no-op path fast.
+const configuredTypes = new Set(config.sources.map(s => s.type));
+const toolingStatus = detectObserveTooling({ sourceTypes: configuredTypes }); // fail-open; empty when no CLI-backed source configured
+if (toolingStatus.length > 0) display(renderToolingStatus(toolingStatus));
+```
+
+`detectObserveTooling()` returns one status per tool:
+`{ name, installed, authed, healthy, version, sources, hint }`. It never throws —
+a missing binary, a crashed probe, or an odd exit code all degrade to
+`installed:false` / `healthy:false`. Keep `toolingStatus` in scope for Step 4c.
+
 ## Step 4: Dispatch parallel fetch
 
 Call `dispatchAll()` from `bin/observe-registry.cjs` — this dispatches ALL sources uniformly through the registry with per-source timeout. No special-casing per source type at this stage.
@@ -138,6 +163,23 @@ After `dispatchAll` returns, iterate over results. For any result with `status: 
    ```
 
 **Key principle:** This pattern keeps handlers as pure testable CJS functions while the observe command (running in Claude context) handles MCP execution. The registry's `dispatchAll` works uniformly — the MCP bridge is a post-processing step.
+
+## Step 4c: Attribute errored sources to missing/unauthed tooling
+
+Before rendering, annotate any errored result whose source type is backed by an
+unhealthy CLI (from Step 3b). This turns an opaque grafana/sentry fetch error
+into an actionable "likely tooling, not drift" hint instead of surfacing it as
+noise.
+
+```javascript
+const { annotateResultsWithTooling } = require(_nfBin('observe-tooling.cjs'));
+annotateResultsWithTooling(results, toolingStatus); // mutates results in place; only touches status:'error' rows
+```
+
+For any result that now carries a `tooling_hint`, display it under the error
+section (e.g. `⚠ grafana: gcx not installed — this error is likely tooling, not
+drift. Fix: brew install grafana/grafana/gcx`). A result whose backing CLI is
+healthy is left untouched — its error is treated as real.
 
 ## Step 5: Collect and render
 

@@ -3,6 +3,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+// Suppress the live diagnostic probes (categories 6–14, 17) for the whole file.
+// Those categories spawnSync installed scripts that hit the network / MCP fleet
+// and each carry a 15–30s timeout, so without this the suite hangs (>100s) and
+// is non-deterministic (a genuinely-unhealthy fleet would inject unrelated
+// issues). This flag leaves the fast file-scan categories — including the
+// stubbed Category 15 health path exercised below — fully intact. Node runs each
+// test file in its own child process, so this env cannot leak to other suites.
+process.env.NF_OBSERVE_SKIP_LIVE_PROBES = '1';
+
 const { handleInternal, formatAgeFromMtime } = require('./observe-handler-internal.cjs');
 
 /**
@@ -473,6 +482,77 @@ describe('Fail-open behavior', () => {
       assert.equal(result.issues.length, 0);
     } finally {
       rmrf(tmpDir);
+    }
+  });
+});
+
+// ── Live-probe suppression (skipLiveProbes) ──
+// The file sets NF_OBSERVE_SKIP_LIVE_PROBES=1 globally; these tests additionally
+// pin the opts-flag channel and prove the suppression is scoped to the
+// resolveScript-based categories (6–14, 17) and does NOT swallow Category 15,
+// whose health script resolves via a separate project-local path.
+
+describe('Live-probe suppression (skipLiveProbes)', () => {
+  it('opts.skipLiveProbes works with env cleared, yet Category 15 health still fires', () => {
+    const tmpDir = makeTmpDir();
+    const savedEnv = process.env.NF_OBSERVE_SKIP_LIVE_PROBES;
+    try {
+      // Prove the opts channel independently of the file-level env flag.
+      delete process.env.NF_OBSERVE_SKIP_LIVE_PROBES;
+
+      // Category 15 uses projectRoot/core/bin/nf-tools.cjs (NOT resolveScript),
+      // so it must survive skipLiveProbes. Stub it to emit one warning.
+      const mockScript = `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({ status: 'degraded', warnings: [{ code: 'W1', message: 'stub', fix: 'x', repairable: false }] }));`;
+      createFile(tmpDir, 'core/bin/nf-tools.cjs', mockScript);
+      fs.chmodSync(path.join(tmpDir, 'core/bin/nf-tools.cjs'), 0o755);
+
+      const result = handleInternal({ }, { projectRoot: tmpDir, skipLiveProbes: true });
+      assert.equal(result.status, 'ok');
+      const health = result.issues.filter(i => i.id.startsWith('internal-health-'));
+      assert.equal(health.length, 1, 'Category 15 health must still run under skipLiveProbes');
+      assert.equal(health[0].id, 'internal-health-W1');
+    } finally {
+      if (savedEnv === undefined) delete process.env.NF_OBSERVE_SKIP_LIVE_PROBES;
+      else process.env.NF_OBSERVE_SKIP_LIVE_PROBES = savedEnv;
+      rmrf(tmpDir);
+    }
+  });
+
+  it('negative path: a resolveScript-backed probe is invoked WITHOUT the flag but SUPPRESSED with it', () => {
+    // Positively prove the resolveScript short-circuit rather than only that
+    // Category 15 survives. resolveScript looks in $HOME/.claude/nf-bin first, so
+    // point HOME at a temp dir holding a stub `security-sweep.cjs` (Category 13)
+    // that writes a sentinel file when actually executed. If skipLiveProbes truly
+    // short-circuits resolveScript, the stub never runs and no sentinel appears.
+    const tmpDir = makeTmpDir();
+    const fakeHome = makeTmpDir();
+    const savedHome = process.env.HOME;
+    const savedEnv = process.env.NF_OBSERVE_SKIP_LIVE_PROBES;
+    const sentinel = path.join(fakeHome, 'security-sweep.ran');
+    try {
+      // os.homedir() honors $HOME on POSIX (CI is ubuntu, dev is macOS).
+      process.env.HOME = fakeHome;
+      delete process.env.NF_OBSERVE_SKIP_LIVE_PROBES; // control the flag via opts only
+
+      const stub = `#!/usr/bin/env node
+require('fs').writeFileSync(${JSON.stringify(sentinel)}, '1');
+process.stdout.write('{}');`;
+      createFile(fakeHome, '.claude/nf-bin/security-sweep.cjs', stub);
+
+      // Control: flag OFF → resolveScript finds the stub → it executes → sentinel.
+      handleInternal({}, { projectRoot: tmpDir, skipLiveProbes: false });
+      assert.ok(fs.existsSync(sentinel), 'without skipLiveProbes the resolveScript-backed probe must actually run');
+
+      // Now the real assertion: flag ON → resolveScript returns null → no run.
+      fs.rmSync(sentinel, { force: true });
+      handleInternal({}, { projectRoot: tmpDir, skipLiveProbes: true });
+      assert.ok(!fs.existsSync(sentinel), 'skipLiveProbes must short-circuit resolveScript so the probe never runs');
+    } finally {
+      if (savedHome === undefined) delete process.env.HOME; else process.env.HOME = savedHome;
+      if (savedEnv === undefined) delete process.env.NF_OBSERVE_SKIP_LIVE_PROBES;
+      else process.env.NF_OBSERVE_SKIP_LIVE_PROBES = savedEnv;
+      rmrf(tmpDir); rmrf(fakeHome);
     }
   });
 });
