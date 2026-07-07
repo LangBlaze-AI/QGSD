@@ -82,13 +82,32 @@ describe('compareWithModel', () => {
 });
 
 describe('per-session replay captures multi-step transitions', () => {
-  it('per-session mode has more unique transitions than per-event mode', () => {
-    const fsmPath = path.join(ROOT, '.planning', 'formal', 'semantics', 'observed-fsm.json');
-    if (!fs.existsSync(fsmPath)) return;
-    const fsm = JSON.parse(fs.readFileSync(fsmPath, 'utf8'));
-    // Per-session should capture more transitions (non-IDLE starting states)
-    assert.ok(fsm.replay_modes.per_session_transitions >= fsm.replay_modes.per_event_transitions,
-      `per_session (${fsm.replay_modes.per_session_transitions}) should >= per_event (${fsm.replay_modes.per_event_transitions})`);
+  it('per-session mode captures >= per-event transitions on a multi-step session (hermetic)', () => {
+    // Build from a synthetic single-session trace rather than reading the
+    // checked-in observed-fsm.json. That artifact is generated from whatever
+    // trace data exists at generation time, so on a fresh checkout it
+    // legitimately has sessions_replayed=0 / per_session=0 — asserting
+    // per_session >= per_event against it fails as 0 >= N (the bug that slipped
+    // through until this file was gated). Here we replay a known multi-step
+    // session so the invariant is tested against the ALGORITHM, deterministically.
+    const events = [
+      { action: 'quorum_start',    ts: '2025-01-01T00:00:01Z', slots_available: 3 },
+      { action: 'quorum_complete', ts: '2025-01-01T00:00:02Z', vote_result: 3 },
+      { action: 'quorum_block',    ts: '2025-01-01T00:00:03Z' },
+    ];
+    const traceStats = { sessions: [{ start: '2025-01-01T00:00:00Z', end: '2025-01-01T00:01:00Z' }] };
+    const fsm = buildObservedFSM(events, traceStats);
+    const rm = fsm.replay_modes;
+
+    assert.strictEqual(rm.sessions_replayed, 1, 'the single session should be replayed');
+    assert.ok(rm.per_session_transitions >= rm.per_event_transitions,
+      `per_session (${rm.per_session_transitions}) should be >= per_event (${rm.per_event_transitions})`);
+    // Per-session runs one actor through the whole sequence, so it must capture
+    // at least one transition OUT OF a non-IDLE state — something per-event
+    // isolation (fresh IDLE actor per event) structurally cannot do.
+    const fromStates = Object.keys(fsm.observed_transitions || {});
+    assert.ok(fromStates.some(s => s !== 'IDLE'),
+      `expected a non-IDLE source state from per-session replay, got ${JSON.stringify(fromStates)}`);
   });
 });
 
