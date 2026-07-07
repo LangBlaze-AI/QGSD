@@ -11,9 +11,11 @@ name: Benchmark — external fixtures vs PR SUT
 # zero findings on clean code. No LLM/quorum call, so it is safe as a required,
 # blocking gate. The heavier live-repair (LLM) track stays out of PR CI.
 #
-# nf-benchmark (nForma-AI/nf-benchmark) is public, so it is checked out with no
-# token. The corpus is pinned to an explicit commit (see the ref below) so this
-# required gate is reproducible; bump that SHA to adopt new fixtures.
+# nf-benchmark (nForma-AI/nf-benchmark) is public, so no PAT/secret is needed —
+# the default GITHUB_TOKEN suffices for the checkout and, with
+# persist-credentials:false below, is not retained on disk. The corpus is pinned
+# to an explicit commit (see the ref below) so this required gate is
+# reproducible; bump that SHA to adopt new fixtures.
 
 on:
   pull_request:
