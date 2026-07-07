@@ -6,9 +6,10 @@ See: .planning/PROJECT.md
 
 ## Position
 
-**Milestone:** v0.41 milestone
-**Current phase:** (determining...)
-**Status:** Resuming
+**Milestone:** v0.44 (package.json 0.44.0-rc.1; unreleased — npm still serves 0.43.1 on both dist-tags, publish blocked on NPM_TOKEN)
+**Current phase:** Observability + benchmark-CI hardening
+**Status:** Active
+**Recent (2026-07-07):** observe CLI-tooling detection (sentry-cli/gcx) + standalone autodetection script (#348, #350); observe test CI-safety 2/17→17/17 gated (#348); deterministic external-fixture benchmark gate `benchmark-fixtures.yml` (#349); retired broken `benchmark-sync.yml`; wired `degraded` into the nf-solve convergence decision (#44).
 
 ## Quick Tasks Completed
 
@@ -68,4 +69,6 @@ See: .planning/PROJECT.md
 - 2026-04-10 - Completed quick task 388: Sync baseline requirements and audit solver-generated formal models and test stubs
 - 2026-04-11 - Completed quick task 389: Fix shell-prompt-quorum-dedup.als Alloy assertion failure
 
-Last activity: 2026-05-01 - Completed quick task 407: Cleanup manifest-driven CLI detection (issue 149)
+- 2026-07-07 - Observe tooling detection + autodetection script (#348, #350), observe test CI-safety 2/17→17/17 (#348), deterministic benchmark-fixtures gate (#349), retired broken benchmark-sync.yml, wired degraded into nf-solve convergence decision (#44)
+
+Last activity: 2026-07-07 - Quorum-ratified priorities: retire benchmark-sync, wire degraded-convergence (#44), unblock release (waiting on NPM_TOKEN)
