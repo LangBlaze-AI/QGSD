@@ -455,9 +455,15 @@ function buildCoverageReport(formalAnnotations, testAnnotations, requirements) {
     stats: {
       total: totalReqs,
       formal_covered: formalCovered,
+      // `test_covered` = requirements with a test carrying an explicit
+      // `// @requirement <ID>` annotation. This is requirement→test TRACEABILITY,
+      // NOT behavioral coverage — a low value means untagged tests, not untested
+      // behavior. `metric` is emitted so downstream consumers can't misread it.
       test_covered: testCovered,
       both_covered: bothCovered,
       gap_count: gapCount,
+      metric: 'requirement_to_test_traceability',
+      metric_note: 'test_covered/gap_count measure @requirement-annotation traceability, NOT behavioral test coverage',
     },
   };
 }
@@ -885,6 +891,15 @@ function writeSidecar(coverageReport) {
 
   const sidecar = {
     generated_at: new Date().toISOString(),
+    // Self-documenting metric label so this file is never misread as behavioral
+    // test coverage. `covered` here means ONLY that some test carries an explicit
+    // `// @requirement <ID>` annotation linking it to this requirement — it is
+    // requirement→test TRACEABILITY, not "is the behavior tested". An unannotated
+    // test still exercises the behavior; a low percentage here does NOT mean the
+    // code is untested (the suite has thousands of passing behavioral tests that
+    // simply aren't @requirement-tagged).
+    metric: 'requirement_to_test_traceability',
+    metric_note: 'covered = a test carries an explicit `// @requirement <ID>` annotation for this requirement. ANNOTATION-BASED TRACEABILITY, NOT behavioral test coverage. Do not read a low percentage as "the code is untested".',
     requirements,
   };
 
@@ -898,10 +913,11 @@ function printSummary(coverageReport, constantsValidation, stubs) {
   const TAG_SUMMARY = '[formal-test-sync]';
 
   process.stdout.write(TAG_SUMMARY + ' Generated formal-test-sync report\n');
-  process.stdout.write(TAG_SUMMARY + '   Coverage gaps: ' + coverageReport.stats.gap_count + ' requirements with formal but no test\n');
-  process.stdout.write(TAG_SUMMARY + '   Both covered: ' + coverageReport.stats.both_covered + ' requirements with formal AND test\n');
-  process.stdout.write(TAG_SUMMARY + '   Formal covered: ' + coverageReport.stats.formal_covered + ' / ' + coverageReport.stats.total + '\n');
-  process.stdout.write(TAG_SUMMARY + '   Test covered: ' + coverageReport.stats.test_covered + ' / ' + coverageReport.stats.total + '\n');
+  process.stdout.write(TAG_SUMMARY + '   Metric: requirement→test TRACEABILITY (@requirement-tagged tests) — NOT behavioral test coverage\n');
+  process.stdout.write(TAG_SUMMARY + '   Traceability gaps: ' + coverageReport.stats.gap_count + ' requirements formally modeled but with no @requirement-tagged test\n');
+  process.stdout.write(TAG_SUMMARY + '   Both linked: ' + coverageReport.stats.both_covered + ' requirements with formal model AND @requirement-tagged test\n');
+  process.stdout.write(TAG_SUMMARY + '   Formal-modeled: ' + coverageReport.stats.formal_covered + ' property-links / ' + coverageReport.stats.total + ' requirements\n');
+  process.stdout.write(TAG_SUMMARY + '   @requirement-tagged tests: ' + coverageReport.stats.test_covered + ' / ' + coverageReport.stats.total + ' requirements (a low number means untagged tests, not untested behavior)\n');
 
   // Constants validation summary
   const mismatches = constantsValidation.filter(c => !c.match && c.config_path !== null);

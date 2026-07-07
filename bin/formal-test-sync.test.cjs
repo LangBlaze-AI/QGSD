@@ -611,6 +611,7 @@ test('TC-INT-2: Full script with --report-only exits 0 with human-readable summa
   });
 
   assert.equal(result.status, 0, 'script should exit 0');
-  assert.match(result.stdout, /Coverage gaps/, 'output should mention coverage gaps');
+  assert.match(result.stdout, /Traceability gaps/, 'output should mention traceability gaps');
+  assert.match(result.stdout, /TRACEABILITY .* NOT behavioral test coverage/, 'summary must label the metric so it is not misread as behavioral coverage');
   assert.match(result.stdout, /Constants mismatches/, 'output should mention constants');
 });
