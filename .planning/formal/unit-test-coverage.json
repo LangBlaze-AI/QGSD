@@ -1,5 +1,7 @@
 {
   "generated_at": "2026-06-30T12:35:17.345Z",
+  "metric": "requirement_to_test_traceability",
+  "metric_note": "covered = a test carries an explicit // @requirement <ID> annotation for this requirement. ANNOTATION-BASED TRACEABILITY, NOT behavioral test coverage. Do not read a low percentage as \"the code is untested\" — the suite has thousands of passing behavioral tests that are simply not @requirement-tagged.",
   "requirements": {
     "CONF-01": {
       "covered": true,
