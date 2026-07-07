@@ -98,12 +98,24 @@ function interpretTool(tool, versionResult, authResult) {
  * @param {Function} [opts.spawnFn] - spawnSync-compatible (cmd, args, options)
  * @param {number}   [opts.timeoutMs] - per-probe timeout (default 5000)
  * @param {object[]} [opts.tools] - override tool list (tests)
+ * @param {string[]|Set<string>} [opts.sourceTypes] - if given, only probe tools
+ *   that back at least one of these observe source types. Lets callers skip the
+ *   sentry-cli/gcx subprocess probes entirely on internal-only or single-backend
+ *   runs, keeping the common no-op path fast.
  * @returns {object[]} array of interpretTool status objects
  */
 function detectObserveTooling(opts = {}) {
   const spawnFn = (opts && opts.spawnFn) || spawnSync;
   const timeout = (opts && opts.timeoutMs) || 5000;
-  const tools = (opts && opts.tools) || OBSERVE_TOOLS;
+  let tools = (opts && opts.tools) || OBSERVE_TOOLS;
+  if (opts && opts.sourceTypes) {
+    const wanted = opts.sourceTypes instanceof Set
+      ? opts.sourceTypes
+      : new Set(Array.isArray(opts.sourceTypes) ? opts.sourceTypes : []);
+    // Only probe a CLI whose backed sources intersect the configured types —
+    // no shelling out for a tool this run can't possibly need.
+    tools = tools.filter((t) => t.sources.some((s) => wanted.has(s)));
+  }
   const run = (bin, args) => {
     try {
       return spawnFn(bin, args, { encoding: 'utf8', timeout });

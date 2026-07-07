@@ -518,6 +518,43 @@ process.stdout.write(JSON.stringify({ status: 'degraded', warnings: [{ code: 'W1
       rmrf(tmpDir);
     }
   });
+
+  it('negative path: a resolveScript-backed probe is invoked WITHOUT the flag but SUPPRESSED with it', () => {
+    // Positively prove the resolveScript short-circuit rather than only that
+    // Category 15 survives. resolveScript looks in $HOME/.claude/nf-bin first, so
+    // point HOME at a temp dir holding a stub `security-sweep.cjs` (Category 13)
+    // that writes a sentinel file when actually executed. If skipLiveProbes truly
+    // short-circuits resolveScript, the stub never runs and no sentinel appears.
+    const tmpDir = makeTmpDir();
+    const fakeHome = makeTmpDir();
+    const savedHome = process.env.HOME;
+    const savedEnv = process.env.NF_OBSERVE_SKIP_LIVE_PROBES;
+    const sentinel = path.join(fakeHome, 'security-sweep.ran');
+    try {
+      // os.homedir() honors $HOME on POSIX (CI is ubuntu, dev is macOS).
+      process.env.HOME = fakeHome;
+      delete process.env.NF_OBSERVE_SKIP_LIVE_PROBES; // control the flag via opts only
+
+      const stub = `#!/usr/bin/env node
+require('fs').writeFileSync(${JSON.stringify(sentinel)}, '1');
+process.stdout.write('{}');`;
+      createFile(fakeHome, '.claude/nf-bin/security-sweep.cjs', stub);
+
+      // Control: flag OFF → resolveScript finds the stub → it executes → sentinel.
+      handleInternal({}, { projectRoot: tmpDir, skipLiveProbes: false });
+      assert.ok(fs.existsSync(sentinel), 'without skipLiveProbes the resolveScript-backed probe must actually run');
+
+      // Now the real assertion: flag ON → resolveScript returns null → no run.
+      fs.rmSync(sentinel, { force: true });
+      handleInternal({}, { projectRoot: tmpDir, skipLiveProbes: true });
+      assert.ok(!fs.existsSync(sentinel), 'skipLiveProbes must short-circuit resolveScript so the probe never runs');
+    } finally {
+      if (savedHome === undefined) delete process.env.HOME; else process.env.HOME = savedHome;
+      if (savedEnv === undefined) delete process.env.NF_OBSERVE_SKIP_LIVE_PROBES;
+      else process.env.NF_OBSERVE_SKIP_LIVE_PROBES = savedEnv;
+      rmrf(tmpDir); rmrf(fakeHome);
+    }
+  });
 });
 
 // ── Adversarial: entry-point arg guards ──

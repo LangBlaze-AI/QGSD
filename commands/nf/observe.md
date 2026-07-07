@@ -107,13 +107,13 @@ or you never logged in".
 
 ```javascript
 const { detectObserveTooling, renderToolingStatus } = require(_nfBin('observe-tooling.cjs'));
-const toolingStatus = detectObserveTooling(); // shells out to `<cli> --version` + an auth probe; fail-open
 
-// Only surface tools that back at least one configured source (avoid noise when,
-// e.g., no grafana source is configured). configuredTypes = set of source.type values.
+// Pass the configured source types so the helper only PROBES the CLIs that back
+// them — an internal-only or single-backend run never shells out to a sentry-cli
+// / gcx check it can't use, keeping the common no-op path fast.
 const configuredTypes = new Set(config.sources.map(s => s.type));
-const relevant = toolingStatus.filter(s => s.sources.some(t => configuredTypes.has(t)));
-if (relevant.length > 0) display(renderToolingStatus(relevant));
+const toolingStatus = detectObserveTooling({ sourceTypes: configuredTypes }); // fail-open; empty when no CLI-backed source configured
+if (toolingStatus.length > 0) display(renderToolingStatus(toolingStatus));
 ```
 
 `detectObserveTooling()` returns one status per tool:

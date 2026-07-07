@@ -108,6 +108,23 @@ describe('detectObserveTooling', () => {
     const statuses = detectObserveTooling({ spawnFn });
     assert.ok(statuses.every((s) => s.installed === false && s.healthy === false));
   });
+
+  it('sourceTypes allowlist: only probes CLIs backing a configured source type', () => {
+    const calls = [];
+    const spawnFn = (bin, args) => { calls.push(bin); return ok(bin === 'gcx' ? GCX_VERSION : SENTRY_VERSION); };
+    // Only a grafana source is configured → gcx probed, sentry-cli NOT.
+    const statuses = detectObserveTooling({ spawnFn, sourceTypes: ['grafana'] });
+    assert.deepEqual(statuses.map((s) => s.name), ['gcx'], 'only gcx probed');
+    assert.ok(!calls.includes('sentry-cli'), 'sentry-cli must not be shelled out for a grafana-only run');
+  });
+
+  it('sourceTypes allowlist: internal-only run probes NOTHING (fast no-op path)', () => {
+    const calls = [];
+    const spawnFn = (bin) => { calls.push(bin); return ok(''); };
+    const statuses = detectObserveTooling({ spawnFn, sourceTypes: new Set(['internal', 'github']) });
+    assert.deepEqual(statuses, [], 'no CLI-backed source configured → no tools');
+    assert.equal(calls.length, 0, 'no subprocess probes at all');
+  });
 });
 
 describe('renderToolingStatus', () => {
