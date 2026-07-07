@@ -6356,6 +6356,21 @@ function formatJSON(iterations, finalResidual, converged) {
     }
   } catch (_e) { /* fail-open */ }
 
+  // Degraded-convergence decision signal (#44). The residual `total` coerces a skipped
+  // forward layer's residual (-1) to 0, so `converged` / `has_residual:false` cannot by
+  // themselves distinguish "genuinely clean" from "some layers never ran". Surface which
+  // forward layers were unmeasured and, crucially, `degraded_convergence` — true when a
+  // convergence/clean claim is made WHILE layers were skipped. Consumers (benchmark, CI,
+  // humans) should gate trust on `!degraded_convergence` rather than `has_residual:false`
+  // alone. Benchmark-neutral: adds fields only; no residual number changes.
+  const _forwardLayers = {
+    r_to_f: finalResidual.r_to_f, f_to_t: finalResidual.f_to_t, c_to_f: finalResidual.c_to_f,
+    t_to_c: finalResidual.t_to_c, f_to_c: finalResidual.f_to_c, r_to_d: finalResidual.r_to_d,
+    d_to_c: finalResidual.d_to_c, p_to_f: finalResidual.p_to_f,
+  };
+  const _unmeasuredLayers = computeUnmeasuredLayers(_forwardLayers);
+  const _degraded = _unmeasuredLayers.length > 0;
+
   return {
     solver_version: '1.2',
     generated_at: new Date().toISOString(),
@@ -6364,6 +6379,9 @@ function formatJSON(iterations, finalResidual, converged) {
     max_iterations: maxIterations,
     converged: converged,
     has_residual: truncatedResidual.total > 0,
+    degraded: _degraded,
+    unmeasured_layers: _unmeasuredLayers,
+    degraded_convergence: computeDegradedConvergence(converged, truncatedResidual.total, _unmeasuredLayers),
     residual_vector: truncatedResidual,
     real_impact: computeRealImpact(),
     iterations: iterations.map((it) => ({
@@ -7273,9 +7291,21 @@ function computeUnmeasuredLayers(layers) {
   });
 }
 
+// Wire `degraded` into the convergence DECISION (#44). A solve output claims "clean"
+// when `converged === true` OR the residual `total === 0`. That claim is UNTRUSTWORTHY
+// when forward layers were skipped (`unmeasuredLayers` non-empty), because the total
+// coerced their -1 residual to 0. `degraded_convergence` is true exactly in that case —
+// consumers gate trust on `!degraded_convergence` instead of a bare `has_residual:false`.
+function computeDegradedConvergence(converged, total, unmeasuredLayers) {
+  const degraded = Array.isArray(unmeasuredLayers) && unmeasuredLayers.length > 0;
+  const claimsClean = converged === true || total === 0;
+  return claimsClean && degraded;
+}
+
 // ── Exports (for testing) ────────────────────────────────────────────────────
 
 module.exports = {
+  computeDegradedConvergence,
   sweep: computeResidual,
   computeResidual,
   computeUnmeasuredLayers,

@@ -43,3 +43,36 @@ test('bad input degrades to [] without throwing', () => {
   assert.deepStrictEqual(computeUnmeasuredLayers(null), []);
   assert.deepStrictEqual(computeUnmeasuredLayers(undefined), []);
 });
+
+// ── computeDegradedConvergence (#44): wire `degraded` into the DECISION output ──
+// The old aggregate could report converged/clean while layers were skipped. This helper
+// is the exported decision seam formatJSON emits as `degraded_convergence`.
+const { computeDegradedConvergence } = require('./nf-solve.cjs');
+
+test('THE BUG: converged claimed while a layer was skipped → degraded_convergence true', () => {
+  // total===0 (all measured layers clean) but f_to_t was skipped (unmeasured).
+  assert.strictEqual(computeDegradedConvergence(true, 0, ['f_to_t']), true);
+});
+
+test('clean total (0) with a skipped layer is degraded even if converged flag is false', () => {
+  assert.strictEqual(computeDegradedConvergence(false, 0, ['f_to_t']), true);
+});
+
+test('genuinely clean: converged/total 0 with NO unmeasured layers → NOT degraded', () => {
+  assert.strictEqual(computeDegradedConvergence(true, 0, []), false);
+  assert.strictEqual(computeDegradedConvergence(false, 0, []), false);
+});
+
+test('real residual present (total > 0) is never a "degraded convergence" — nothing was falsely claimed clean', () => {
+  // Even with unmeasured layers, a non-zero total is not claiming clean, so not degraded_convergence.
+  assert.strictEqual(computeDegradedConvergence(false, 5, ['f_to_t']), false);
+});
+
+test('converged with unmeasured layers but non-zero total → still flagged (claim made via converged flag)', () => {
+  assert.strictEqual(computeDegradedConvergence(true, 5, ['f_to_t']), true);
+});
+
+test('non-array unmeasuredLayers degrades to false without throwing', () => {
+  assert.strictEqual(computeDegradedConvergence(true, 0, null), false);
+  assert.strictEqual(computeDegradedConvergence(true, 0, undefined), false);
+});
