@@ -121,6 +121,16 @@ if (toolingStatus.length > 0) display(renderToolingStatus(toolingStatus));
 a missing binary, a crashed probe, or an odd exit code all degrade to
 `installed:false` / `healthy:false`. Keep `toolingStatus` in scope for Step 4c.
 
+The same detection is runnable standalone as an autodetection script — handy for
+setup/diagnostics without invoking observe:
+
+```bash
+node "$HOME/.claude/nf-bin/observe-tooling.cjs"                  # human report (or ./bin/… in-repo)
+node "$HOME/.claude/nf-bin/observe-tooling.cjs" --json           # machine-readable { tools, all_healthy }
+node "$HOME/.claude/nf-bin/observe-tooling.cjs" --source grafana # only the CLI(s) backing grafana
+node "$HOME/.claude/nf-bin/observe-tooling.cjs" --strict         # exit 1 if any probed CLI is missing/unauthenticated
+```
+
 ## Step 4: Dispatch parallel fetch
 
 Call `dispatchAll()` from `bin/observe-registry.cjs` — this dispatches ALL sources uniformly through the registry with per-source timeout. No special-casing per source type at this stage.

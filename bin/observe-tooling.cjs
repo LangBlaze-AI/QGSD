@@ -187,6 +187,62 @@ function annotateResultsWithTooling(results, statuses) {
   return results;
 }
 
+/**
+ * PURE-ish CLI core (detect fn injectable for tests). Parses argv, runs
+ * detection, and returns { output, code } without touching process/stdout —
+ * so the entrypoint below stays a thin shell.
+ *
+ *   node bin/observe-tooling.cjs                 # probe all known CLIs, human report
+ *   node bin/observe-tooling.cjs --json          # machine-readable
+ *   node bin/observe-tooling.cjs --source grafana# only the CLI(s) backing grafana (gcx)
+ *   node bin/observe-tooling.cjs --strict        # exit 1 if any probed CLI is unhealthy
+ *
+ * @param {string[]} argv - args after the script name
+ * @param {object} [opts] - { detect } injectable detector for tests
+ * @returns {{ output: string, code: number }}
+ */
+function runCli(argv, opts = {}) {
+  const detect = (opts && opts.detect) || detectObserveTooling;
+  const args = Array.isArray(argv) ? argv : [];
+  if (args.includes('--help') || args.includes('-h')) {
+    return {
+      output: [
+        'Usage: node bin/observe-tooling.cjs [--json] [--strict] [--source <type> ...]',
+        '',
+        'Detects whether the CLIs backing observe sources are installed AND authenticated:',
+        '  sentry-cli  → sentry, sentry-feedback',
+        '  gcx         → grafana',
+        '',
+        '  --json           machine-readable output',
+        '  --strict         exit 1 if any probed CLI is missing/unauthenticated',
+        '  --source <type>  only probe CLIs backing this source type (repeatable)',
+      ].join('\n'),
+      code: 0,
+    };
+  }
+  const json = args.includes('--json');
+  const strict = args.includes('--strict');
+  // Collect source-type filters: `--source <type>` pairs and bare positionals.
+  const sourceTypes = [];
+  for (let i = 0; i < args.length; i++) {
+    // Only consume the next token as the value if it isn't itself a flag —
+    // otherwise `--source --strict` would swallow --strict as a filter value.
+    if (args[i] === '--source' && args[i + 1] && !args[i + 1].startsWith('-')) { sourceTypes.push(args[++i]); }
+    else if (!args[i].startsWith('-')) { sourceTypes.push(args[i]); }
+  }
+  const statuses = detect(sourceTypes.length ? { sourceTypes } : {});
+  const anyUnhealthy = statuses.some((s) => !s.healthy);
+  let output;
+  if (json) {
+    output = JSON.stringify({ tools: statuses, all_healthy: !anyUnhealthy }, null, 2);
+  } else if (statuses.length === 0) {
+    output = ' nForma > OBSERVE: no CLI-backed tools match the given --source filter';
+  } else {
+    output = renderToolingStatus(statuses);
+  }
+  return { output, code: strict && anyUnhealthy ? 1 : 0 };
+}
+
 module.exports = {
   OBSERVE_TOOLS,
   parseVersion,
@@ -194,4 +250,11 @@ module.exports = {
   detectObserveTooling,
   renderToolingStatus,
   annotateResultsWithTooling,
+  runCli,
 };
+
+if (require.main === module) {
+  const { output, code } = runCli(process.argv.slice(2));
+  process.stdout.write(output + '\n');
+  process.exit(code);
+}

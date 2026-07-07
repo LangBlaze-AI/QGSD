@@ -10,6 +10,7 @@ const {
   detectObserveTooling,
   renderToolingStatus,
   annotateResultsWithTooling,
+  runCli,
 } = require('./observe-tooling.cjs');
 
 // Real fixtures captured from the live CLIs.
@@ -172,5 +173,62 @@ describe('annotateResultsWithTooling', () => {
 
   it('is a no-op on non-array results', () => {
     assert.equal(annotateResultsWithTooling(null, []), null);
+  });
+});
+
+describe('runCli (autodetection script)', () => {
+  const healthy = { name: 'gcx', installed: true, authed: true, healthy: true, version: '0.4.2', sources: ['grafana'], hint: null };
+  const unhealthy = { name: 'sentry-cli', installed: false, authed: false, healthy: false, version: null, sources: ['sentry', 'sentry-feedback'], hint: 'brew install ...' };
+  const detectStub = (statuses) => { const fn = (opts) => { fn.lastOpts = opts; return statuses; }; return fn; };
+
+  it('human output renders the status table and exits 0 by default (even when unhealthy)', () => {
+    const { output, code } = runCli([], { detect: detectStub([healthy, unhealthy]) });
+    assert.equal(code, 0, 'a plain report never fails the process');
+    assert.match(output, /tooling preflight/);
+    assert.match(output, /✓ gcx/);
+    assert.match(output, /✗ sentry-cli/);
+  });
+
+  it('--json emits machine-readable status with all_healthy flag', () => {
+    const { output } = runCli(['--json'], { detect: detectStub([healthy, unhealthy]) });
+    const parsed = JSON.parse(output);
+    assert.equal(parsed.all_healthy, false);
+    assert.equal(parsed.tools.length, 2);
+    assert.equal(parsed.tools[0].name, 'gcx');
+  });
+
+  it('--strict exits 1 when any probed CLI is unhealthy, 0 when all healthy', () => {
+    assert.equal(runCli(['--strict'], { detect: detectStub([healthy, unhealthy]) }).code, 1);
+    assert.equal(runCli(['--strict'], { detect: detectStub([healthy]) }).code, 0);
+  });
+
+  it('--source filters detection to the backing CLI(s) via sourceTypes', () => {
+    const detect = detectStub([healthy]);
+    runCli(['--source', 'grafana'], { detect });
+    assert.deepEqual(detect.lastOpts, { sourceTypes: ['grafana'] });
+  });
+
+  it('--source does not swallow a following flag as its value', () => {
+    const detect = detectStub([unhealthy]);
+    // `--source --strict`: --strict must NOT be consumed as a source value,
+    // so no sourceTypes filter is applied AND --strict still takes effect.
+    const { code } = runCli(['--source', '--strict'], { detect });
+    assert.equal(detect.lastOpts && detect.lastOpts.sourceTypes, undefined, '--strict must not become a source filter');
+    assert.equal(code, 1, '--strict must still be honored (unhealthy → exit 1)');
+  });
+
+  it('empty status set (filter matches nothing) prints a friendly note, exit 0', () => {
+    const { output, code } = runCli(['--source', 'github'], { detect: detectStub([]) });
+    assert.equal(code, 0);
+    assert.match(output, /no CLI-backed tools match/);
+  });
+
+  it('--help prints usage and exits 0 without probing', () => {
+    let probed = false;
+    const { output, code } = runCli(['--help'], { detect: () => { probed = true; return []; } });
+    assert.equal(code, 0);
+    assert.equal(probed, false, 'help must not shell out');
+    assert.match(output, /Usage:/);
+    assert.match(output, /sentry-cli/);
   });
 });
