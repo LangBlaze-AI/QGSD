@@ -10,7 +10,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { validateSlotResult } = require('./quorum-slot-dispatch.cjs');
 
-const NONCE = 'a1b2c3d4e5f60718293a4b5c6d7e8f90'; // 32 hex
+const NONCE = 'a1b2c3d4e5f60718293a4b5c6d7e8f90'; // 32 hex — pragma: allowlist secret (fake test nonce)
 
 test('genuine: script-written nonce + a completed verdict', () => {
   const r = validateSlotResult(`slot: codex-1\nround: 1\nverdict: APPROVE\ndispatch_nonce: ${NONCE}\nreasoning: ok`);
@@ -57,7 +57,7 @@ test('INCOMPLETE: no verdict line at all (nonce only) → not genuine', () => {
 });
 
 test('nonce match is anchored to its own line and case-normalized', () => {
-  const upper = 'A1B2C3D4E5F60718293A4B5C6D7E8F90';
+  const upper = 'A1B2C3D4E5F60718293A4B5C6D7E8F90'; // pragma: allowlist secret (fake test nonce)
   const r = validateSlotResult(`verdict: BLOCK\ndispatch_nonce: ${upper}`);
   assert.equal(r.genuine, true);
   assert.equal(r.nonce, upper.toLowerCase());
