@@ -125,9 +125,9 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           scope: '@nforma.ai'
       - name: Update npm (>= 11.5.1 for trusted publishing)
-        # Pin to the 11.x line: satisfies the >= 11.5.1 requirement without an
-        # unattended jump to a new npm major that could break publishing.
-        run: npm install -g "npm@^11"
+        # ^11.5.1 = latest 11.x AND guaranteed >= 11.5.1 (the trusted-publishing
+        # minimum), with no unattended jump to a new npm major.
+        run: npm install -g "npm@^11.5.1"
       - run: npm ci || npm install
       - run: npm run build:hooks
       - name: Stamp version from tag (prerelease only)
