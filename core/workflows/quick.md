@@ -17,6 +17,7 @@ Parse `$ARGUMENTS` for:
 - `--force-quorum` flag → store as `$FORCE_QUORUM` (default: false). Forces medium-or-higher quorum fan-out regardless of risk classifier output.
 - `--delegate {slot-name}` flag → store as `$DELEGATE_SLOT` (string or null). The value is the next token after `--delegate`.
 - `--audit {slot-name}` flag → store as `$AUDIT_SLOT` (string or null). The value is the next token after `--audit`. Opt-in worker+auditor loop for delegate mode (see Step 5D).
+- `--max-revisions {n}` flag → store as `$MAX_REVISIONS` (integer or null). Max REVISE rounds in audited mode (default 2). Ignored unless `--audit` is set.
 - Remaining text → use as `$DESCRIPTION` if non-empty
 
 **Delegate flag validation:**
@@ -444,6 +445,7 @@ DELEGATE_RESULT=$(node bin/coding-task-router.cjs \
   --task "${DESCRIPTION}. Approach: ${APPROACH_BLOCK.approach}. You are a full Claude Code instance with nForma installed. Execute this task completely: implement, test, and commit. Return your result in the structured format." \
   --cwd "$(pwd)" \
   ${AUDIT_SLOT:+--audit "${AUDIT_SLOT}"} \
+  ${MAX_REVISIONS:+--max-revisions "${MAX_REVISIONS}"} \
   --timeout 300000 2>&1)
 DELEGATE_EXIT=$?
 ```

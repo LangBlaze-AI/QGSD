@@ -1,7 +1,7 @@
 ---
 name: nf:quick
 description: Execute a quick task with NF guarantees (atomic commits, state tracking) but skip optional agents
-argument-hint: "[--full] [--delegate {slot}] [--audit {slot}] [--force-quorum]"
+argument-hint: "[--full] [--delegate {slot}] [--audit {slot}] [--max-revisions {n}] [--force-quorum]"
 allowed-tools:
   - Read
   - Write

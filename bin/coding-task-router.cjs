@@ -79,7 +79,9 @@ async function routeCodingTaskAudited(o = {}) {
     workerFamily,
     auditorFamily,
     cwd: o.repoDir || process.cwd(),
-    maxRevisions: typeof o.maxRevisions === 'number' ? o.maxRevisions : 2,
+    // Number.isFinite rejects NaN (typeof NaN === 'number' would otherwise slip
+    // through, and `revisions >= NaN` is never true → an infinite REVISE loop).
+    maxRevisions: (Number.isFinite(o.maxRevisions) && o.maxRevisions >= 0) ? o.maxRevisions : 2,
     taskContext: o.taskContext,
     workerTimeout: o.timeout,
     auditTimeout: o.timeout,
