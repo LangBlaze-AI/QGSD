@@ -177,3 +177,6 @@ nf-benchmark/baseline.json
 
 # Generated petri net files (PNML)
 .planning/formal/petri/*.pnml
+
+# Ephemeral per-machine worker session ids (delegate loop)
+.planning/delegate-sessions.json
