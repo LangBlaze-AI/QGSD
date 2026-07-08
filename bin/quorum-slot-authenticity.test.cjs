@@ -10,7 +10,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { validateSlotResult } = require('./quorum-slot-dispatch.cjs');
 
-const NONCE = 'a1b2c3d4e5f60718293a4b5c6d7e8f90'; // 32 hex — pragma: allowlist secret (fake test nonce)
+const NONCE = 'a1b2c3d4e5f60718293a4b5c6d7e8f90'; // pragma: allowlist secret (fake 32-hex test nonce)
 
 test('genuine: script-written nonce + a completed verdict', () => {
   const r = validateSlotResult(`slot: codex-1\nround: 1\nverdict: APPROVE\ndispatch_nonce: ${NONCE}\nreasoning: ok`);
