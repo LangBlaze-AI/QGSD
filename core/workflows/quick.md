@@ -25,7 +25,7 @@ Parse `$ARGUMENTS` for:
 - If `--delegate` and `--full` are both present: error: "Error: --delegate and --full cannot be used together. --delegate performs full delegation to the external agent."
 - If `--audit` is present without `--delegate`: error: "Error: --audit requires --delegate (the auditor reviews the delegated worker's work)."
 - If `--audit` is present without a value (next token missing or starts with `--`): error: "Error: --audit requires a slot name (e.g., --audit claude-1)."
-- If `--audit` equals `--delegate`'s slot: warn "⚠ --audit slot equals the worker slot — the audit is not independent; prefer a different model family (e.g. worker codex-1, auditor claude-1)."
+- If `--audit`'s **model family** equals `--delegate`'s family (the token before the first `-`, e.g. `codex-1` and `codex-2` are both `codex`): warn "⚠ --audit is the same model family as the worker (`${FAMILY}`) — the audit is not independent; prefer a different family (e.g. worker codex-1, auditor claude-1)." Independence is what makes the auditor valuable, so this compares families, not exact slot strings.
 
 If `$DESCRIPTION` is empty after parsing, prompt user interactively:
 
