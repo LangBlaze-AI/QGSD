@@ -29,14 +29,15 @@ const WORKER_FAMILIES = {
     bin: 'codex',
     supportsSession: true,
     // codex exec --json emits JSONL; first event is {type:'thread.started',thread_id}.
-    // Sandbox is set via `-c sandbox_mode=workspace-write` (a config override valid on
-    // BOTH `exec` and `exec resume` — the `--sandbox`/`-C` FLAGS are rejected by the
-    // resume subcommand). The working root comes from the spawn cwd, not `-C`.
-    freshArgs: ({ prompt }) => [
-      'exec', '--json', '--skip-git-repo-check', '-c', 'sandbox_mode=workspace-write', prompt,
+    // Sandbox is set via `-c sandbox_mode=<mode>` (a config override valid on BOTH
+    // `exec` and `exec resume` — the `--sandbox`/`-C` FLAGS are rejected by the resume
+    // subcommand). Default 'workspace-write' for a WORKER; an auditor passes 'read-only'.
+    // The working root comes from the spawn cwd, not `-C`.
+    freshArgs: ({ prompt, sandbox }) => [
+      'exec', '--json', '--skip-git-repo-check', '-c', `sandbox_mode=${sandbox || 'workspace-write'}`, prompt,
     ],
-    resumeArgs: ({ prompt, sessionId }) => [
-      'exec', 'resume', sessionId, '--json', '--skip-git-repo-check', '-c', 'sandbox_mode=workspace-write', prompt,
+    resumeArgs: ({ prompt, sessionId, sandbox }) => [
+      'exec', 'resume', sessionId, '--json', '--skip-git-repo-check', '-c', `sandbox_mode=${sandbox || 'workspace-write'}`, prompt,
     ],
     parse: parseCodexJsonl,
   },
@@ -130,11 +131,11 @@ function parseWorkerResult(family, stdout) {
  * @returns {Promise<{ session_id: string|null, text: string, status: 'ok'|'error', code: number|null, resumed: boolean, error?: string }>}
  */
 function runWorkerStep(opts = {}) {
-  const { family, prompt, cwd, sessionId, timeout = 600000 } = opts;
+  const { family, prompt, cwd, sessionId, sandbox, timeout = 600000 } = opts;
   const spawnFn = opts.spawnFn || spawn;
   let built;
   try {
-    built = buildWorkerArgs(family, { prompt, cwd, sessionId });
+    built = buildWorkerArgs(family, { prompt, cwd, sessionId, sandbox });
   } catch (err) {
     return Promise.resolve({ session_id: null, text: '', status: 'error', code: null, resumed: false, error: err.message });
   }
