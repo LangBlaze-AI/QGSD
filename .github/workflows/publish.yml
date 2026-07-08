@@ -139,6 +139,16 @@ jobs:
           if [ "$CURRENT" != "${{ needs.context.outputs.version }}" ]; then
             npm version "${{ needs.context.outputs.version }}" --no-git-tag-version
           fi
+      - name: OIDC preflight diagnostics
+        run: |
+          echo "node: $(node --version)"
+          echo "npm : $(npm --version)   (need >= 11.5.1 for trusted publishing)"
+          echo "which npm: $(which npm)"
+          echo "registry: $(npm config get registry)"
+          echo "OIDC token URL present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}${ACTIONS_ID_TOKEN_REQUEST_URL:-NO}"
+          echo "--- effective .npmrc (auth redacted) ---"
+          npm config get userconfig
+          cat "$(npm config get userconfig)" 2>/dev/null | sed 's/\(_authToken=\).*/\1<redacted>/' || echo "(no userconfig .npmrc)"
       # No NODE_AUTH_TOKEN and no --provenance: OIDC is auto-detected and provenance
       # is attached automatically when publishing via a trusted publisher.
       - name: Publish via OIDC trusted publisher
