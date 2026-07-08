@@ -16,11 +16,16 @@ Parse `$ARGUMENTS` for:
 - `--no-branch` flag → store as `$NO_BRANCH` (default: false)
 - `--force-quorum` flag → store as `$FORCE_QUORUM` (default: false). Forces medium-or-higher quorum fan-out regardless of risk classifier output.
 - `--delegate {slot-name}` flag → store as `$DELEGATE_SLOT` (string or null). The value is the next token after `--delegate`.
+- `--audit {slot-name}` flag → store as `$AUDIT_SLOT` (string or null). The value is the next token after `--audit`. Opt-in worker+auditor loop for delegate mode (see Step 5D).
+- `--max-revisions {n}` flag → store as `$MAX_REVISIONS` (integer or null). Max REVISE rounds in audited mode (default 2). Ignored unless `--audit` is set.
 - Remaining text → use as `$DESCRIPTION` if non-empty
 
 **Delegate flag validation:**
 - If `--delegate` is present without a value (next token is missing or starts with `--`): error: "Error: --delegate requires a slot name (e.g., --delegate codex-1)"
 - If `--delegate` and `--full` are both present: error: "Error: --delegate and --full cannot be used together. --delegate performs full delegation to the external agent."
+- If `--audit` is present without `--delegate`: error: "Error: --audit requires --delegate (the auditor reviews the delegated worker's work)."
+- If `--audit` is present without a value (next token missing or starts with `--`): error: "Error: --audit requires a slot name (e.g., --audit claude-1)."
+- If `--audit`'s **model family** equals `--delegate`'s family (the token before the first `-`, e.g. `codex-1` and `codex-2` are both `codex`): warn "⚠ --audit is the same model family as the worker (`${FAMILY}`) — the audit is not independent; prefer a different family (e.g. worker codex-1, auditor claude-1)." Independence is what makes the auditor valuable, so this compares families, not exact slot strings.
 
 If `$DESCRIPTION` is empty after parsing, prompt user interactively:
 
@@ -432,17 +437,20 @@ Build the delegation prompt using the `buildCodingPrompt` format from `bin/codin
 - The derived approach from `$APPROACH_BLOCK.approach`
 - Instruction: "You are a full Claude Code instance with nForma installed. Execute this task completely: implement, test, and commit. Return your result in the structured format."
 
-Dispatch via CLI:
+Dispatch via CLI. When `$AUDIT_SLOT` is set (from `--audit {slot}`), pass `--audit "${AUDIT_SLOT}"` so the task runs through the **worker+auditor loop** (`bin/delegate-loop.cjs`): the worker keeps a resumable session across revisions, and an INDEPENDENT auditor (the `--audit` slot, a different model family) reviews each diff — APPROVE ends the step, REVISE sends the issues back to the same worker session (up to `--max-revisions`, default 2), BLOCK stops. Both slots must be session-capable families (`codex`, `claude`); otherwise the loop degrades to the one-shot path automatically.
+
 ```bash
 DELEGATE_RESULT=$(node bin/coding-task-router.cjs \
   --slot "${VALIDATED_DELEGATE_SLOT}" \
   --task "${DESCRIPTION}. Approach: ${APPROACH_BLOCK.approach}. You are a full Claude Code instance with nForma installed. Execute this task completely: implement, test, and commit. Return your result in the structured format." \
   --cwd "$(pwd)" \
+  ${AUDIT_SLOT:+--audit "${AUDIT_SLOT}"} \
+  ${MAX_REVISIONS:+--max-revisions "${MAX_REVISIONS}"} \
   --timeout 300000 2>&1)
 DELEGATE_EXIT=$?
 ```
 
-Parse the JSON result. Extract: `status`, `filesModified`, `summary`, `latencyMs`.
+Parse the JSON result. Extract: `status`, `filesModified`, `summary`, `latencyMs`. In audited mode the result also carries `audit_verdict`, `audit_issues`, `revisions`, and `worker_session` — surface `audit_verdict` + `revisions` in the banner and record them in Step 6D.
 
 **Route on status:**
 

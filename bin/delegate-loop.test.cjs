@@ -77,6 +77,18 @@ describe('runDelegatedStep (injected)', () => {
     assert.equal(r.history.length, 3, 'initial + 2 revisions audited');
   });
 
+  it('NaN maxRevisions is sanitized to the default (does NOT loop forever)', async () => {
+    let calls = 0;
+    const workerFn = async () => { calls++; return { status: 'ok', session_id: 'W', text: 'DONE' }; };
+    const r = await runDelegatedStep({
+      taskKey: 'nan', stepGoal: 'g', storeApi: makeStore(), maxRevisions: NaN,
+      workerFn, auditFn: constAudit('REVISE', ['x']), diffFn: () => 'd', now: () => 'NOW',
+    });
+    assert.equal(r.decision, 'exhausted', 'must terminate, not spin');
+    assert.equal(r.revisions, 2, 'falls back to default max of 2');
+    assert.equal(calls, 3, 'initial + 2 revisions, then stop');
+  });
+
   it('auditor BLOCK → blocked immediately', async () => {
     const r = await runDelegatedStep({
       taskKey: 't4', stepGoal: 'g', storeApi: makeStore(),

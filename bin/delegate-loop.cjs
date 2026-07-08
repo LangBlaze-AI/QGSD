@@ -82,11 +82,15 @@ async function runDelegatedStep(opts = {}) {
     taskKey, stepGoal,
     workerFamily = 'codex', auditorFamily = 'claude',
     cwd = process.cwd(), storePath = sessionStore.DEFAULT_STORE_PATH,
-    maxRevisions = 2, taskContext,
+    maxRevisions: maxRevisionsRaw = 2, taskContext,
     workerFn = runWorkerStep, auditFn = runAudit, diffFn = gitDiff,
     storeApi = sessionStore, now = () => new Date().toISOString(),
     workerTimeout, auditTimeout,
   } = opts;
+
+  // Defense-in-depth: a non-finite maxRevisions (e.g. NaN from a bad --max-revisions)
+  // would make `revisions >= maxRevisions` never true → an infinite REVISE loop.
+  const maxRevisions = (Number.isFinite(maxRevisionsRaw) && maxRevisionsRaw >= 0) ? maxRevisionsRaw : 2;
 
   if (auditorFamily === workerFamily) {
     // Not fatal, but the auditor's value comes from independence — surface it.

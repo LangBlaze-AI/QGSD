@@ -1,7 +1,7 @@
 ---
 name: nf:quick
 description: Execute a quick task with NF guarantees (atomic commits, state tracking) but skip optional agents
-argument-hint: "[--full] [--delegate {slot}] [--force-quorum]"
+argument-hint: "[--full] [--delegate {slot}] [--audit {slot}] [--max-revisions {n}] [--force-quorum]"
 allowed-tools:
   - Read
   - Write
@@ -33,6 +33,8 @@ Quick mode is the same system with a shorter path:
 Use when you want quality guarantees with formal correctness properties, without full milestone ceremony.
 
 **`--delegate {slot}` flag:** Delegates the entire task to a specific quorum slot (e.g., `codex-1`, `gemini-1`). The slot name is passed as a routing hint to PresetPolicy, which will prefer that slot if it is eligible (subprocess with file access). If the slot is ineligible, falls back to default routing.
+
+**`--audit {slot}` flag:** (requires `--delegate`) Runs the delegated task through the **worker+auditor loop** (`bin/delegate-loop.cjs`): the `--delegate` slot is the worker (it keeps a resumable session across revisions), and the `--audit` slot is an INDEPENDENT auditor of a *different* model family that reviews each diff — APPROVE ends the step, REVISE sends the issues back to the same worker session (up to `--max-revisions`, default 2), BLOCK stops. Both must be session-capable families (`codex`, `claude`); otherwise it degrades to one-shot delegation. Example: `/nf:quick --delegate codex-1 --audit claude-1 "fix the off-by-one in paginate()"`.
 
 **`--force-quorum` flag:** Forces quorum review even in non-full mode.
 </objective>
