@@ -23,6 +23,11 @@ describe('buildWorkerArgs — codex', () => {
     assert.ok(!buildWorkerArgs('codex', { prompt: 'p', cwd: '/repo' }).args.includes('-C'));
     assert.ok(!buildWorkerArgs('codex', { prompt: 'p', cwd: '/repo', sessionId: 'x' }).args.includes('-C'));
   });
+  it('sandbox option maps to `-c sandbox_mode=<mode>` (worker default vs read-only auditor)', () => {
+    assert.ok(buildWorkerArgs('codex', { prompt: 'p' }).args.includes('sandbox_mode=workspace-write'), 'default is workspace-write');
+    assert.ok(buildWorkerArgs('codex', { prompt: 'p', sandbox: 'read-only' }).args.includes('sandbox_mode=read-only'), 'auditor gets read-only');
+    assert.ok(buildWorkerArgs('codex', { prompt: 'p', sessionId: 'x', sandbox: 'read-only' }).args.includes('sandbox_mode=read-only'), 'resume honors read-only');
+  });
 });
 
 describe('buildWorkerArgs — claude', () => {
