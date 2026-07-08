@@ -948,6 +948,44 @@ function buildModeBPrompt({ round, repoDir, question, traces, artifactPath, arti
 // ─── Output parsing functions ─────────────────────────────────────────────────
 
 /**
+ * validateSlotResult — CODE-enforced authenticity check for a slot RESULT FILE.
+ *
+ * The relay agent (Haiku) returns chat text but cannot write `--output-file` — only this
+ * Node script does. So the trusted result is the FILE, and it must carry BOTH:
+ *   1. a `dispatch_nonce` (32-hex) written by this script — a chat-only hallucination
+ *      leaves no file / no nonce, and
+ *   2. a REAL verdict — not the early `PENDING` sentinel this script writes BEFORE the
+ *      CLI answers (a still-PENDING file means the dispatch never completed).
+ *
+ * This deterministically rejects the realistic failure modes (no file, no/malformed
+ * nonce, PENDING-only) so a fabricated or incomplete result is treated as UNAVAIL. It is
+ * NOT a cryptographic guarantee against a shell-capable relay forging a well-formed nonce
+ * (the relay sees the whole command — no scheme can prevent that); it hardens the check
+ * from "a nonce string appears somewhere" to "a script-written nonce AND a completed
+ * verdict are present". It deliberately does NOT require a specific verdict keyword —
+ * Mode A verdicts are free-form prose, so keyword-matching would false-reject genuine work.
+ *
+ * @param {string} fileContent - raw content of `<slot>-round-<N>.txt` (or '' / null)
+ * @returns {{ genuine: boolean, verdict: string|null, nonce: string|null, reason: string }}
+ */
+function validateSlotResult(fileContent) {
+  const raw = String(fileContent || '');
+  if (!raw.trim()) {
+    return { genuine: false, verdict: null, nonce: null, reason: 'empty/missing result file (relay produced no dispatch)' };
+  }
+  const nonce = (raw.match(/^dispatch_nonce:\s*([0-9a-f]{32})\s*$/im) || [])[1];
+  const verdictLine = (raw.match(/^verdict:\s*(.+)$/im) || [])[1];
+  const verdict = verdictLine ? verdictLine.trim() : null;
+  if (!nonce) {
+    return { genuine: false, verdict, nonce: null, reason: 'no valid 32-hex dispatch_nonce (not written by the dispatch script)' };
+  }
+  if (!verdict || /^PENDING\b/i.test(verdict)) {
+    return { genuine: false, verdict, nonce: nonce.toLowerCase(), reason: 'verdict is PENDING/absent (dispatch started but the CLI never answered)' };
+  }
+  return { genuine: true, verdict, nonce: nonce.toLowerCase(), reason: 'genuine: script-written nonce + completed verdict' };
+}
+
+/**
  * parseVerdict — extracts verdict from raw CLI output.
  *
  * Mode A: first 500 chars of rawOutput (free-form position summary)
@@ -2049,6 +2087,7 @@ module.exports = {
     buildModeBPrompt,
     buildModeCPrompt,
     formatDiagnosticForPrompt,
+    validateSlotResult,
     parseVerdict,
     parseReasoning,
     parseCitations,
