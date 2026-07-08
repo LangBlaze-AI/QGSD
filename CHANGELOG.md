@@ -20,6 +20,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(quorum): empirical score-delta calibration — consensus scoring thresholds are derived from observed score distributions rather than fixed constants (#175)
 - feat(install): auto-install `uv` when missing, gated by an availability pre-check, before the River ML install step (#155)
 
+### Changed
+- fix(quorum): replace the fragile HTML-comment `FALLBACK_CHECKPOINT` transcript marker with a schema-validated structured checkpoint file (`.planning/quorum/checkpoints/round-<N>.json`). `/nf:quorum` now runs `quorum-checkpoint.cjs` to write the checkpoint; `nf-stop.js` reads and JSON-schema-validates that file instead of regex-parsing the transcript, so LLM stylistic variation in the comment can no longer bypass or trigger the FALLBACK-01 gate. The human-readable HTML comment is still emitted for the transcript but is no longer the gating mechanism. (#188)
+- fix: consolidate `providers.json` onto the canonical `~/.claude/nf-bin/` path — installer, MCP server, and quorum dispatch now all read the same location, ending divergence between the legacy `nf/bin/` and `nf-bin/` copies (#186, closes #167)
+
 ### Removed
 - ci(benchmark): **retire `benchmark-sync.yml`** (quorum-ratified) — the "auto-advance baseline" job invoked a hardcoded local path (`$HOME/code/nf-benchmark`) that never exists on GitHub runners, so it **failed on every push to main**, and its metric was noise (nf-solve is non-idempotent, stability 0/15). It is superseded by the deterministic, API-key-free `benchmark-fixtures.yml` gate (external fixture corpus + precision, run against the PR's own SUT). Removed the workflow and its two sync-only helpers (`scripts/benchmark-compare.py`, `scripts/benchmark-secrets-sync.py`); kept `benchmarks/solve-baseline.json` (still read by `benchmark-gate.yml`).
 - chore(quorum): remove dead CCR code paths after the `ccr-*` fleet retirement (#177)
@@ -84,10 +88,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - fix(mcp-status): read the quorum scoreboard from the correct path (#166)
 - fix(autopilot): trust GitHub server merge state over the `gh` CLI exit code when deciding whether a merge succeeded (#185)
 - fix(statusline): River status cyan now means "has visits" (reward data exists), not merely "has arms" (#155)
-
-### Changed
-- fix(quorum): replace the fragile HTML-comment `FALLBACK_CHECKPOINT` transcript marker with a schema-validated structured checkpoint file (`.planning/quorum/checkpoints/round-<N>.json`). `/nf:quorum` now runs `quorum-checkpoint.cjs` to write the checkpoint; `nf-stop.js` reads and JSON-schema-validates that file instead of regex-parsing the transcript, so LLM stylistic variation in the comment can no longer bypass or trigger the FALLBACK-01 gate. The human-readable HTML comment is still emitted for the transcript but is no longer the gating mechanism. (#188)
-- fix: consolidate `providers.json` onto the canonical `~/.claude/nf-bin/` path — installer, MCP server, and quorum dispatch now all read the same location, ending divergence between the legacy `nf/bin/` and `nf-bin/` copies (#186, closes #167)
 
 ## [0.43.1] - 2026-05-03
 
