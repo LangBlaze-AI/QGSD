@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.44.0] - 2026-07-08 — Observability, OIDC publishing, cross-LLM delegation, and quorum hardening
+## [0.44.1] - 2026-07-08 — Observability, OIDC publishing, cross-LLM delegation, and quorum hardening
 
 ### Added
 - feat(skill): **`/nf:ultra-hard` — quorum-verified adversarial hardening to convergence.** A review panel fans out across security/correctness **dimensions** (`correctness,security,leak,recoverability,failure,input` by default, `--dimensions` to override), a **multi-model quorum verifies every candidate finding** (refute-by-default, majority-`real` to survive — so false positives are dropped, not fixed), and each **confirmed** finding is fixed **failing-test-first** — looping until two consecutive rounds surface zero new confirmed findings (convergence) or `--rounds N` is hit. It is `nf:harden` with independent eyes and a verification quorum, for set-once / high-stakes code (money, keys, migrations, auth) where one sequential reviewer demonstrably misses defects. Fixers run under hard constraints (never weaken/delete an existing guard or test to go green, never leak a secret, independently cross-check any money/crypto/identity result against an external reference), and the full suite must stay green after every fix. Flags: `--area <path>`, `--voters <N>`, `--test-cmd "<cmd>"`, `--commit`. New `commands/nf/ultra-hard.md` + `core/workflows/ultra-hard.md`; verified against the four skill lints (eval/state-parse/mcp/command-correctness). Proven on a real custodial-wallet key ceremony: a first quorum pass confirmed 38 findings (3/3-voted) on top of 17 manual, each fixed with a regression test.
