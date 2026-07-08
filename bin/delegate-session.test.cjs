@@ -125,4 +125,12 @@ describe('runWorkerStep (injected spawn)', () => {
     assert.equal(r.status, 'error');
     assert.match(r.error, /unknown worker family/);
   });
+
+  it('a synchronously-throwing spawnFn returns an error result (no ReferenceError from the TDZ)', async () => {
+    const spawnFn = () => { throw new Error('ENOENT'); };
+    const r = await runWorkerStep({ family: 'codex', prompt: 'p', spawnFn });
+    assert.equal(r.status, 'error');
+    assert.match(r.error, /spawn: ENOENT/);
+    assert.equal(r.session_id, null);
+  });
 });

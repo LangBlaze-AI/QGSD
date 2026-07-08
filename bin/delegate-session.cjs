@@ -139,14 +139,17 @@ function runWorkerStep(opts = {}) {
     return Promise.resolve({ session_id: null, text: '', status: 'error', code: null, resumed: false, error: err.message });
   }
   return new Promise((resolve) => {
-    let child, done = false;
+    // `timer` MUST be declared before `finish` — a synchronous spawnFn throw calls
+    // finish() from the catch below, and clearTimeout(timer) would otherwise hit the
+    // const's temporal dead zone (ReferenceError instead of the intended error result).
+    let child, timer, done = false;
     const finish = (v) => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
     try {
       child = spawnFn(built.bin, built.args, { cwd: cwd || process.cwd(), stdio: ['ignore', 'pipe', 'pipe'] });
     } catch (err) {
       return finish({ session_id: null, text: '', status: 'error', code: null, resumed: built.resumed, error: `spawn: ${err.message}` });
     }
-    const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (_) {} finish({ session_id: sessionId || null, text: '', status: 'error', code: null, resumed: built.resumed, error: `timeout after ${timeout}ms` }); }, timeout);
+    timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (_) {} finish({ session_id: sessionId || null, text: '', status: 'error', code: null, resumed: built.resumed, error: `timeout after ${timeout}ms` }); }, timeout);
     let out = '', err = '';
     child.stdout.on('data', (d) => { out += d.toString(); });
     child.stderr.on('data', (d) => { err += d.toString().slice(0, 8192); });
