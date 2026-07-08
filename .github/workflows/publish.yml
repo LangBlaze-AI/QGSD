@@ -1,0 +1,200 @@
+name: Publish
+
+# SINGLE publishing workflow — the npm OIDC trusted-publisher target.
+#
+# npm allows only ONE trusted publisher per package (exact workflow-filename match),
+# so BOTH release channels live here:
+#   • Stable  → @latest : push to main whose package.json version has NO prerelease suffix
+#   • Prerelease → @next : push of a v*-rc* / v*-next* tag
+#
+# Auth is GitHub OIDC — there is NO NPM_TOKEN. `id-token: write` on the publish job lets
+# the npm CLI mint a short-lived, workflow-scoped token and emit provenance automatically.
+# OIDC trusted publishing requires Node >= 22.14.0 and npm >= 11.5.1 (npm i -g npm@latest).
+#
+# npm trusted-publisher config to match this file:
+#   Publisher = GitHub Actions | Org = nForma-AI | Repo = nForma
+#   Workflow filename = publish.yml | Environment = npm-publish | Allowed = npm publish
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*-rc*'
+      - 'v*-next*'
+
+jobs:
+  # ── Decide what (if anything) to publish ──
+  context:
+    name: Determine publish context
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.ctx.outputs.mode }}                 # stable | prerelease | none
+      version: ${{ steps.ctx.outputs.version }}
+      dist_tag: ${{ steps.ctx.outputs.dist_tag }}         # latest | next
+      tag_name: ${{ steps.ctx.outputs.tag_name }}
+      should_publish: ${{ steps.ctx.outputs.should_publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - id: ctx
+        run: |
+          set -e
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            # ── Prerelease path (rc/next tag) → @next ──
+            TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+            BASE_VERSION="${TAG_VERSION%%-*}"
+            # Fixed-string match (grep -F) so dots in the version aren't regex wildcards.
+            if ! grep -qF -e "## [${BASE_VERSION}]" -e "## [${TAG_VERSION}]" CHANGELOG.md; then
+              echo "ERROR: No CHANGELOG entry for ${TAG_VERSION} or ${BASE_VERSION}"; exit 1
+            fi
+            echo "mode=prerelease"        >> "$GITHUB_OUTPUT"
+            echo "version=$TAG_VERSION"   >> "$GITHUB_OUTPUT"
+            echo "dist_tag=next"          >> "$GITHUB_OUTPUT"
+            echo "tag_name=v$TAG_VERSION" >> "$GITHUB_OUTPUT"
+            echo "should_publish=true"    >> "$GITHUB_OUTPUT"
+          else
+            # ── Stable path (main push) → @latest ──
+            VERSION=$(node -p "require('./package.json').version")
+            TAG_NAME="v${VERSION}"
+            echo "version=$VERSION"   >> "$GITHUB_OUTPUT"
+            echo "dist_tag=latest"    >> "$GITHUB_OUTPUT"
+            echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+            # A prerelease version staged on main publishes only via its rc tag, not here.
+            if echo "$VERSION" | grep -qE '\-'; then
+              echo "Skipping: prerelease version $VERSION on main (publishes via rc tag)"
+              echo "mode=none" >> "$GITHUB_OUTPUT"; echo "should_publish=false" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+            # Fixed-string match (grep -F) so dots in the version aren't regex wildcards.
+            if ! grep -qF "## [${VERSION}]" CHANGELOG.md; then
+              echo "ERROR: No CHANGELOG entry for ${VERSION}"; exit 1
+            fi
+            NPM_VERSION=$(npm view "@nforma.ai/nforma@${VERSION}" version 2>/dev/null || echo "")
+            if [[ -n "$NPM_VERSION" ]]; then
+              echo "Skipping: $VERSION already on npm"
+              echo "mode=none" >> "$GITHUB_OUTPUT"; echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "mode=stable" >> "$GITHUB_OUTPUT"; echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+  # ── Pre-publish tests (both channels) ──
+  test:
+    name: Pre-publish tests
+    needs: context
+    if: needs.context.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci --ignore-scripts || npm install --ignore-scripts
+      - run: npm run build:hooks && npm run build:machines
+      - run: npm run check:assets
+      - run: npm run lint:isolation
+      - run: npm run test:ci
+      - run: npm run test:tui
+      - run: npm run test:install   # install/virgin smoke gate (parity with the old stable release job)
+      - name: Verify no test files in package
+        run: |
+          count=$(npm pack --dry-run 2>&1 | grep -c '\.test\.' || true)
+          if [ "$count" -gt 0 ]; then echo "ERROR: $count test files in package"; exit 1; fi
+          echo "OK: 0 test files in package"
+
+  # ── Publish via OIDC — NO NPM_TOKEN ──
+  publish:
+    name: Publish to npm (${{ needs.context.outputs.dist_tag }})
+    needs: [context, test]
+    if: needs.context.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write   # required for OIDC trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'   # setup-node resolves to the latest 22.x, always >= 22.14.0 (the OIDC trusted-publishing minimum)
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@nforma.ai'
+      - name: Update npm (>= 11.5.1 for trusted publishing)
+        # ^11.5.1 = latest 11.x AND guaranteed >= 11.5.1 (the trusted-publishing
+        # minimum), with no unattended jump to a new npm major.
+        run: npm install -g "npm@^11.5.1"
+      - run: npm ci || npm install
+      - run: npm run build:hooks
+      - name: Stamp version from tag (prerelease only)
+        if: needs.context.outputs.mode == 'prerelease'
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          if [ "$CURRENT" != "${{ needs.context.outputs.version }}" ]; then
+            npm version "${{ needs.context.outputs.version }}" --no-git-tag-version
+          fi
+      # No NODE_AUTH_TOKEN and no --provenance: OIDC is auto-detected and provenance
+      # is attached automatically when publishing via a trusted publisher.
+      - name: Publish via OIDC trusted publisher
+        run: npm publish --access public --tag "${{ needs.context.outputs.dist_tag }}"
+      - name: Align @next with @latest (stable only — next must never fall behind latest)
+        if: needs.context.outputs.mode == 'stable'
+        # Best-effort: OIDC trusted publishing authorizes `npm publish`, not necessarily
+        # `npm dist-tag add`. If the minted token can't move a dist-tag, do NOT fail the
+        # release (the publish already succeeded) — warn so it can be aligned manually
+        # (`npm dist-tag add @nforma.ai/nforma@<version> next`). The next prerelease will
+        # also re-advance @next.
+        run: |
+          if npm dist-tag add "@nforma.ai/nforma@${{ needs.context.outputs.version }}" next; then
+            echo "Aligned @next → ${{ needs.context.outputs.version }}"
+          else
+            echo "::warning::Could not align @next via OIDC (dist-tag may not be authorized by trusted publishing). Run: npm dist-tag add @nforma.ai/nforma@${{ needs.context.outputs.version }} next"
+          fi
+      - name: Show dist-tags
+        run: npm dist-tag ls @nforma.ai/nforma || true
+
+  # ── Git tag + GitHub Release (stable only, after a successful publish) ──
+  # Recovery note: if publish succeeds but this job fails transiently, a re-run finds
+  # the version already on npm → mode=none → this job is skipped and won't re-create
+  # the tag/release. Recover manually (both steps below are idempotent):
+  #   git tag -a vX.Y.Z -m "Release X.Y.Z" && git push origin vX.Y.Z
+  #   gh release create vX.Y.Z --title vX.Y.Z --generate-notes
+  release:
+    name: Tag + GitHub Release
+    needs: [context, test, publish]
+    if: needs.context.outputs.mode == 'stable'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create and push tag
+        env:
+          TAG_NAME: ${{ needs.context.outputs.tag_name }}
+          VERSION: ${{ needs.context.outputs.version }}
+        run: |
+          # Exact match — `grep -q` would let v0.41.1 match an existing v0.41.10.
+          if git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
+            echo "Tag $TAG_NAME already exists — skipping"
+          else
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git config user.name "github-actions[bot]"
+            git tag -a "$TAG_NAME" -m "Release ${VERSION}"
+            git push origin "$TAG_NAME"
+          fi
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.context.outputs.tag_name }}
+        run: |
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Release $TAG_NAME already exists — skipping"
+          else
+            gh release create "$TAG_NAME" --title "$TAG_NAME" --generate-notes
+          fi

@@ -13,7 +13,7 @@ Dist-tag mapping:
 - `next` — prereleases (0.40.2-rc.1)
 
 **Invariant: `next` must never fall behind `latest`.**
-When a stable version publishes to `@latest`, the `next` dist-tag must also be updated to point to the same version. This is automated in `release.yml` and `publish.sh`, but verify after every release:
+When a stable version publishes to `@latest`, the `next` dist-tag must also be updated to point to the same version. This is automated in `publish.yml` (the single OIDC publish workflow), but verify after every release:
 ```bash
 npm view @nforma.ai/nforma dist-tags --json
 # Both latest and next should be >= the version you just published
@@ -113,4 +113,16 @@ Quick check: `node -p "require('./package-lock.json').version"` should match `no
 
 - `bash scripts/prepare-release.sh {VERSION}` — prepare stable release via PR (recommended)
 - `bash scripts/release.sh` — tag + push prerelease (direct push flow)
-- `bash scripts/publish.sh` — manual npm publish (reads NPM_TOKEN from .env)
+- `bash scripts/publish.sh` — manual npm publish (reads NPM_TOKEN from .env). **Legacy/token-based** — CI publishing moved to OIDC (`publish.yml`), so this only works if the npm package still allows token publishing (i.e. NOT with the "disallow tokens" setting).
+
+## Publishing (npm OIDC trusted publisher)
+
+The single `publish.yml` workflow publishes both channels via **GitHub OIDC — there is no `NPM_TOKEN` secret**:
+- **@latest** — push to main with a non-prerelease `package.json` version (runs tests → publish → tag → GitHub Release → align `@next`).
+- **@next** — push of a `v*-rc*` / `v*-next*` tag.
+
+npm's trusted publisher (npmjs.com → package Settings) must match this file exactly:
+`Org=nForma-AI · Repo=nForma · Workflow filename=publish.yml · Environment=npm-publish · Allowed=npm publish`.
+Requirements baked into the workflow: Node ≥ 22.14.0 and npm ≥ 11.5.1 (`npm i -g npm@latest`), `permissions: id-token: write`, **no** `NODE_AUTH_TOKEN` (its presence forces the token path and defeats OIDC).
+
+**Caveat — dist-tag under OIDC:** trusted publishing authorizes `npm publish`, not necessarily `npm dist-tag add`. The stable job's `@next` alignment is therefore best-effort (non-fatal): if it can't move the tag under OIDC, the publish still succeeds and CI emits a warning — align manually with `npm dist-tag add @nforma.ai/nforma@{VERSION} next` (or the next prerelease re-advances `@next`). Always verify the invariant after a stable release: `npm view @nforma.ai/nforma dist-tags`.
