@@ -80,7 +80,7 @@
     <path d="M100.8,143.0 H96.6 V132.0" stroke="#7dcfff" stroke-width="1.5" stroke-linecap="square" fill="none"/>
     <line x1="100.8" y1="143.0" x2="109.2" y2="143.0" stroke="#7dcfff" stroke-width="1.5" stroke-linecap="square" fill="none"/>
     <path d="M109.2,143.0 H113.4 V132.0" stroke="#7dcfff" stroke-width="1.5" stroke-linecap="square" fill="none"/>
-    <text font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace" font-size="14" y="198" xml:space="preserve"><tspan fill="#c0caf5">  nForma </tspan><tspan fill="#c0caf5">— Consensus before code. Proof before production. </tspan><tspan fill="#565f89">v0.44.0-rc.1</tspan></text>
+    <text font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace" font-size="14" y="198" xml:space="preserve"><tspan fill="#c0caf5">  nForma </tspan><tspan fill="#c0caf5">— Consensus before code. Proof before production. </tspan><tspan fill="#565f89">v0.44.0</tspan></text>
     <text font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace" font-size="14" y="220" xml:space="preserve"><tspan fill="#565f89">  Built on GSD-CC by TÂCHES.</tspan></text>
     <text font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace" font-size="14" y="264" xml:space="preserve"><tspan fill="#7dcfff">  The task of leadership is to create an alignment of strengths</tspan></text>
     <text font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace" font-size="14" y="286" xml:space="preserve"><tspan fill="#7dcfff">   so strong that it makes the system’s weaknesses irrelevant.</tspan></text>
