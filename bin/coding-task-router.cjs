@@ -35,6 +35,73 @@ try {
   classifyDispatchError = () => 'UNKNOWN';
 }
 
+// ─── Import the worker+auditor loop for --audit mode (fail-open) ────────────
+let runDelegatedStep;
+try {
+  runDelegatedStep = require(path.join(__dirname, 'delegate-loop.cjs')).runDelegatedStep;
+} catch (_) {
+  runDelegatedStep = null;
+}
+
+// Session-capable worker/auditor families (delegate-session.WORKER_FAMILIES). The
+// audited loop needs both the worker and the auditor to be one of these.
+const LOOP_FAMILIES = new Set(['codex', 'claude']);
+
+/**
+ * PURE — map a quorum slot name to its CLI family (the binary). e.g. codex-1 → codex,
+ * claude-minimax → claude, gemini-1 → gemini. Family is the token before the first '-'.
+ */
+function slotToFamily(slot) {
+  return String(slot || '').split('-')[0] || '';
+}
+
+/**
+ * IMPURE — delegate a task through the worker+auditor LOOP (opt-in via --audit).
+ * Worker = the delegate slot's family; auditor = a DIFFERENT session-capable slot's
+ * family. Returns the same result shape as routeCodingTask (status SUCCESS|PARTIAL|
+ * FAILED|UNAVAIL) plus audit fields. Degrades to a null result (caller falls back to
+ * one-shot) when the loop is unavailable or a family isn't session-capable.
+ *
+ * @param {object} o { task, slot, auditSlot, repoDir, maxRevisions?, taskContext?, runFn? }
+ * @returns {Promise<object|null>} result, or null to signal "fall back to one-shot"
+ */
+async function routeCodingTaskAudited(o = {}) {
+  const runFn = o.runFn || runDelegatedStep;
+  const workerFamily = slotToFamily(o.slot);
+  const auditorFamily = slotToFamily(o.auditSlot);
+  if (!runFn || !LOOP_FAMILIES.has(workerFamily) || !LOOP_FAMILIES.has(auditorFamily)) {
+    return null; // not audit-capable → let the caller run the one-shot path
+  }
+  const startMs = Date.now();
+  const r = await runFn({
+    taskKey: o.taskKey || `delegate-${workerFamily}`,
+    stepGoal: o.task,
+    workerFamily,
+    auditorFamily,
+    cwd: o.repoDir || process.cwd(),
+    maxRevisions: typeof o.maxRevisions === 'number' ? o.maxRevisions : 2,
+    taskContext: o.taskContext,
+    workerTimeout: o.timeout,
+    auditTimeout: o.timeout,
+  });
+  const DECISION_STATUS = { accepted: 'SUCCESS', exhausted: 'PARTIAL', blocked: 'FAILED', worker_error: 'UNAVAIL' };
+  return {
+    slot: o.slot,
+    auditor: o.auditSlot,
+    status: DECISION_STATUS[r.decision] || 'PARTIAL',
+    decision: r.decision,
+    audit_verdict: r.verdict || (r.audit && r.audit.verdict) || null,
+    audit_issues: (r.audit && r.audit.issues) || [],
+    revisions: r.revisions,
+    worker_session: r.session_id,
+    filesModified: [],
+    summary: (r.audit && r.audit.summary) || r.worker_error || '',
+    diffPreview: (r.diff || '').slice(0, 2000),
+    latencyMs: Date.now() - startMs,
+    rawOutput: JSON.stringify({ decision: r.decision, history: r.history }),
+  };
+}
+
 // ─── buildCodingPrompt ──────────────────────────────────────────────────────
 /**
  * Constructs a structured coding task prompt for an external agent CLI.
@@ -305,21 +372,25 @@ if (require.main === module) {
   const filesArg = getArg('--files');
   const timeout = getArg('--timeout');
   const cwd     = getArg('--cwd') || process.cwd();
+  const auditSlot = getArg('--audit');            // opt-in worker+auditor loop
+  const maxRev  = getArg('--max-revisions');
 
   if (!slot || !task) {
-    process.stderr.write('Usage: node coding-task-router.cjs --slot <name> --task <text> [--files <comma-separated>] [--timeout <ms>] [--cwd <dir>]\n');
+    process.stderr.write('Usage: node coding-task-router.cjs --slot <name> --task <text> [--files <csv>] [--timeout <ms>] [--cwd <dir>] [--audit <auditor-slot>] [--max-revisions <n>]\n');
     process.exit(1);
   }
 
   const files = filesArg ? filesArg.split(',').map(f => f.trim()).filter(Boolean) : [];
+  const oneShot = () => routeCodingTask({ task, slot, repoDir: cwd, files, timeout: timeout ? parseInt(timeout, 10) : undefined });
 
-  routeCodingTask({
-    task,
-    slot,
-    repoDir: cwd,
-    files,
-    timeout: timeout ? parseInt(timeout, 10) : undefined,
-  }).then(result => {
+  const run = auditSlot
+    // --audit given: try the worker+auditor loop; null result means the families
+    // aren't loop-capable → fall back to the one-shot path.
+    ? routeCodingTaskAudited({ task, slot, auditSlot, repoDir: cwd, timeout: timeout ? parseInt(timeout, 10) : undefined, maxRevisions: maxRev ? parseInt(maxRev, 10) : undefined })
+        .then(r => r || (process.stderr.write(`[coding-task-router] --audit: ${slot}/${auditSlot} not loop-capable — falling back to one-shot\n`), oneShot()))
+    : oneShot();
+
+  run.then(result => {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     process.exit(result.status === 'UNAVAIL' ? 1 : 0);
   }).catch(err => {
@@ -334,5 +405,8 @@ module.exports = {
   parseCodingResult,
   recordRoutingReward,
   routeCodingTask,
+  routeCodingTaskAudited,
+  slotToFamily,
+  LOOP_FAMILIES,
   selectSlot,
 };

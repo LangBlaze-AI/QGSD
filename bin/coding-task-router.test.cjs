@@ -345,3 +345,42 @@ test('recordRoutingReward does not throw on call', () => {
     mod.recordRoutingReward({ taskType: 'implement', slot: 'codex-1', reward: 0.9, latencyMs: 500 });
   });
 });
+
+// ── --audit worker+auditor loop wiring ─────────────────────────────────────────
+test('slotToFamily maps slot names to CLI families', () => {
+  assert.equal(mod.slotToFamily('codex-1'), 'codex');
+  assert.equal(mod.slotToFamily('claude-minimax'), 'claude');
+  assert.equal(mod.slotToFamily('gemini-1'), 'gemini');
+  assert.equal(mod.slotToFamily(''), '');
+});
+
+test('routeCodingTaskAudited: non-loop-capable families return null (caller falls back to one-shot)', async () => {
+  // gemini worker isn't session-capable → null so the CLI runs the one-shot path.
+  const r = await mod.routeCodingTaskAudited({ task: 't', slot: 'gemini-1', auditSlot: 'claude-1', runFn: async () => { throw new Error('should not run'); } });
+  assert.equal(r, null);
+});
+
+test('routeCodingTaskAudited: accepted decision → SUCCESS with audit fields', async () => {
+  const runFn = async (opts) => {
+    routeCodingTaskAudited_seen = opts;
+    return { decision: 'accepted', verdict: 'APPROVE', session_id: 'W-1', revisions: 1, diff: '+fix', audit: { verdict: 'APPROVE', issues: [], summary: 'looks good' }, history: [] };
+  };
+  const r = await mod.routeCodingTaskAudited({ task: 'fix bug', slot: 'codex-1', auditSlot: 'claude-1', repoDir: '/repo', runFn });
+  assert.equal(r.status, 'SUCCESS');
+  assert.equal(r.decision, 'accepted');
+  assert.equal(r.audit_verdict, 'APPROVE');
+  assert.equal(r.revisions, 1);
+  assert.equal(r.worker_session, 'W-1');
+  // worker=codex, auditor=claude (independent)
+  assert.equal(routeCodingTaskAudited_seen.workerFamily, 'codex');
+  assert.equal(routeCodingTaskAudited_seen.auditorFamily, 'claude');
+});
+
+test('routeCodingTaskAudited: decision → status mapping (exhausted/blocked/worker_error)', async () => {
+  const mk = (decision) => async () => ({ decision, verdict: 'REVISE', revisions: 2, audit: { issues: ['x'] }, history: [] });
+  assert.equal((await mod.routeCodingTaskAudited({ task: 't', slot: 'codex-1', auditSlot: 'claude-1', runFn: mk('exhausted') })).status, 'PARTIAL');
+  assert.equal((await mod.routeCodingTaskAudited({ task: 't', slot: 'codex-1', auditSlot: 'claude-1', runFn: mk('blocked') })).status, 'FAILED');
+  assert.equal((await mod.routeCodingTaskAudited({ task: 't', slot: 'codex-1', auditSlot: 'claude-1', runFn: mk('worker_error') })).status, 'UNAVAIL');
+});
+
+let routeCodingTaskAudited_seen;
