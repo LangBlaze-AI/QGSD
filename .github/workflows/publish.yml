@@ -97,6 +97,7 @@ jobs:
       - run: npm run lint:isolation
       - run: npm run test:ci
       - run: npm run test:tui
+      - run: npm run test:install   # install/virgin smoke gate (parity with the old stable release job)
       - name: Verify no test files in package
         run: |
           count=$(npm pack --dry-run 2>&1 | grep -c '\.test\.' || true)
@@ -118,7 +119,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'   # OIDC trusted publishing requires Node >= 22.14.0
+          node-version: '22'   # setup-node resolves to the latest 22.x, always >= 22.14.0 (the OIDC trusted-publishing minimum)
           registry-url: 'https://registry.npmjs.org'
           scope: '@nforma.ai'
       - name: Update npm (>= 11.5.1 for trusted publishing)
@@ -138,7 +139,17 @@ jobs:
         run: npm publish --access public --tag "${{ needs.context.outputs.dist_tag }}"
       - name: Align @next with @latest (stable only — next must never fall behind latest)
         if: needs.context.outputs.mode == 'stable'
-        run: npm dist-tag add "@nforma.ai/nforma@${{ needs.context.outputs.version }}" next
+        # Best-effort: OIDC trusted publishing authorizes `npm publish`, not necessarily
+        # `npm dist-tag add`. If the minted token can't move a dist-tag, do NOT fail the
+        # release (the publish already succeeded) — warn so it can be aligned manually
+        # (`npm dist-tag add @nforma.ai/nforma@<version> next`). The next prerelease will
+        # also re-advance @next.
+        run: |
+          if npm dist-tag add "@nforma.ai/nforma@${{ needs.context.outputs.version }}" next; then
+            echo "Aligned @next → ${{ needs.context.outputs.version }}"
+          else
+            echo "::warning::Could not align @next via OIDC (dist-tag may not be authorized by trusted publishing). Run: npm dist-tag add @nforma.ai/nforma@${{ needs.context.outputs.version }} next"
+          fi
       - name: Show dist-tags
         run: npm dist-tag ls @nforma.ai/nforma || true
 
@@ -159,7 +170,8 @@ jobs:
           TAG_NAME: ${{ needs.context.outputs.tag_name }}
           VERSION: ${{ needs.context.outputs.version }}
         run: |
-          if git tag -l "$TAG_NAME" | grep -q "$TAG_NAME"; then
+          # Exact match — `grep -q` would let v0.41.1 match an existing v0.41.10.
+          if git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
             echo "Tag $TAG_NAME already exists — skipping"
           else
             git config user.email "github-actions[bot]@users.noreply.github.com"

@@ -124,3 +124,5 @@ The single `publish.yml` workflow publishes both channels via **GitHub OIDC — 
 npm's trusted publisher (npmjs.com → package Settings) must match this file exactly:
 `Org=nForma-AI · Repo=nForma · Workflow filename=publish.yml · Environment=npm-publish · Allowed=npm publish`.
 Requirements baked into the workflow: Node ≥ 22.14.0 and npm ≥ 11.5.1 (`npm i -g npm@latest`), `permissions: id-token: write`, **no** `NODE_AUTH_TOKEN` (its presence forces the token path and defeats OIDC).
+
+**Caveat — dist-tag under OIDC:** trusted publishing authorizes `npm publish`, not necessarily `npm dist-tag add`. The stable job's `@next` alignment is therefore best-effort (non-fatal): if it can't move the tag under OIDC, the publish still succeeds and CI emits a warning — align manually with `npm dist-tag add @nforma.ai/nforma@{VERSION} next` (or the next prerelease re-advances `@next`). Always verify the invariant after a stable release: `npm view @nforma.ai/nforma dist-tags`.
