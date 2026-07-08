@@ -47,6 +47,10 @@
   ],
   "author": "nForma AI",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/nForma-AI/nForma.git"

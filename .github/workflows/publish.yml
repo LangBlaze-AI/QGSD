@@ -119,11 +119,13 @@ jobs:
       id-token: write   # required for OIDC trusted publishing
     steps:
       - uses: actions/checkout@v4
+      # NB: intentionally NO registry-url/scope here. setup-node's registry-url writes an
+      # .npmrc with `always-auth=true` + a placeholder `_authToken`, which forces npm down
+      # the (dummy) TOKEN path and it never attempts OIDC → E404. The registry + public
+      # access come from package.json `publishConfig` instead, leaving OIDC to authenticate.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'   # setup-node resolves to the latest 22.x, always >= 22.14.0 (the OIDC trusted-publishing minimum)
-          registry-url: 'https://registry.npmjs.org'
-          scope: '@nforma.ai'
       - name: Update npm (>= 11.5.1 for trusted publishing)
         # ^11.5.1 = latest 11.x AND guaranteed >= 11.5.1 (the trusted-publishing
         # minimum), with no unattended jump to a new npm major.
