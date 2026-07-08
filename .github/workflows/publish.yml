@@ -47,7 +47,8 @@ jobs:
             # ── Prerelease path (rc/next tag) → @next ──
             TAG_VERSION="${GITHUB_REF#refs/tags/v}"
             BASE_VERSION="${TAG_VERSION%%-*}"
-            if ! grep -qE "^## \[${BASE_VERSION}\]|^## \[${TAG_VERSION}\]" CHANGELOG.md; then
+            # Fixed-string match (grep -F) so dots in the version aren't regex wildcards.
+            if ! grep -qF -e "## [${BASE_VERSION}]" -e "## [${TAG_VERSION}]" CHANGELOG.md; then
               echo "ERROR: No CHANGELOG entry for ${TAG_VERSION} or ${BASE_VERSION}"; exit 1
             fi
             echo "mode=prerelease"        >> "$GITHUB_OUTPUT"
@@ -67,7 +68,8 @@ jobs:
               echo "Skipping: prerelease version $VERSION on main (publishes via rc tag)"
               echo "mode=none" >> "$GITHUB_OUTPUT"; echo "should_publish=false" >> "$GITHUB_OUTPUT"; exit 0
             fi
-            if ! grep -qE "^## \[${VERSION}\]" CHANGELOG.md; then
+            # Fixed-string match (grep -F) so dots in the version aren't regex wildcards.
+            if ! grep -qF "## [${VERSION}]" CHANGELOG.md; then
               echo "ERROR: No CHANGELOG entry for ${VERSION}"; exit 1
             fi
             NPM_VERSION=$(npm view "@nforma.ai/nforma@${VERSION}" version 2>/dev/null || echo "")
@@ -123,7 +125,9 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           scope: '@nforma.ai'
       - name: Update npm (>= 11.5.1 for trusted publishing)
-        run: npm install -g npm@latest
+        # Pin to the 11.x line: satisfies the >= 11.5.1 requirement without an
+        # unattended jump to a new npm major that could break publishing.
+        run: npm install -g "npm@^11"
       - run: npm ci || npm install
       - run: npm run build:hooks
       - name: Stamp version from tag (prerelease only)
@@ -154,6 +158,11 @@ jobs:
         run: npm dist-tag ls @nforma.ai/nforma || true
 
   # ── Git tag + GitHub Release (stable only, after a successful publish) ──
+  # Recovery note: if publish succeeds but this job fails transiently, a re-run finds
+  # the version already on npm → mode=none → this job is skipped and won't re-create
+  # the tag/release. Recover manually (both steps below are idempotent):
+  #   git tag -a vX.Y.Z -m "Release X.Y.Z" && git push origin vX.Y.Z
+  #   gh release create vX.Y.Z --title vX.Y.Z --generate-notes
   release:
     name: Tag + GitHub Release
     needs: [context, test, publish]
