@@ -27,8 +27,11 @@ echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > "$NPMRC"
 
 npm publish --access public "$@"
 
-# ── Align @next dist-tag with @latest ──
-# Invariant: next must never fall behind latest.
+# ── Align @next dist-tag with @latest (alias invariant) ──
+# Invariant: @next must always equal @latest (the @next dist-tag is an alias
+# of @latest — see CLAUDE.md). The CI workflow (`publish.yml`) is the
+# preferred path; this step is the manual fallback for token-based
+# publishing via this legacy script.
 VERSION=$(node -p "require('./package.json').version")
 if ! echo "$VERSION" | grep -qE '\-'; then
   echo ""

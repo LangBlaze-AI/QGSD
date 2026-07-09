@@ -63,7 +63,7 @@ if $AUTO; then
   # Auto-increment patch: 0.41.8 → 0.41.9, 0.41.9 → 0.41.10
   MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
   MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
-  PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3 | cut -d- -f1)  # strip any -rc suffix
+  PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
   VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
 fi
 
@@ -75,10 +75,12 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
-# Reject prerelease versions — use release.sh for those
+# Refuse prerelease versions — under the @next=@latest alias policy there is no
+# separate prerelease channel to ship them on. publish.yml errors on any version
+# with a `-` suffix, so refuse it here too (better message, before the PR is cut).
 if echo "$VERSION" | grep -qE '\-'; then
-  echo "ERROR: prepare-release.sh is for stable (latest) releases only."
-  echo "For prereleases, use: bash scripts/release.sh"
+  echo "ERROR: prerelease versions are not supported under the @next=@latest alias policy."
+  echo "Bump to a stable semver (no -rc.N suffix) and re-run."
   exit 1
 fi
 
