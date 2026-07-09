@@ -6,6 +6,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- chore(release): retire the `@next` prerelease channel as a separate surface — `@next` is now an alias for `@latest` (both tags point to the same tarball). OIDC trusted publishing authorizes `npm publish` but not `npm dist-tag add`, so the old "next must never fall behind latest" invariant produced recurring drift that needed a manual fix after every stable release (see `npm-oidc-publishing` note). With `@next == @latest` there is no separate prerelease channel to drift; anyone installing `@nforma.ai/nforma@next` gets the same package as `@latest`. CLAUDE.md invariant updated from `next ≥ latest` to `next == latest`. Verified post-change: `npm view @nforma.ai/nforma dist-tags --json` → `latest: 0.44.1, next: 0.44.1`.
+
 ## [0.44.1] - 2026-07-08 — Observability, OIDC publishing, cross-LLM delegation, and quorum hardening
 
 ### Added
