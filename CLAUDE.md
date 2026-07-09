@@ -6,7 +6,7 @@ nForma uses milestone-based semver:
 
 - `0.{milestone}` — milestone release (e.g., 0.40 = 40th milestone)
 - `0.{milestone}.{patch}` — quick task release within a milestone (e.g., 0.40.1, 0.40.2)
-- `0.{milestone}.{patch}-rc.N` — prerelease for `next` dist-tag (e.g., 0.40.2-rc.1)
+- `0.{milestone}.{patch}-rc.N` — prerelease for an upcoming version (e.g., 0.40.2-rc.1; under the alias policy below, `rc.N` versions publish to `@next` which is the same tarball as `@latest`)
 
 Dist-tag mapping:
 - `latest` — stable versions (0.40.1)
@@ -18,7 +18,7 @@ npm view @nforma.ai/nforma dist-tags --json
 # latest and next must show the same version
 ```
 
-When asked for a "new release", always ask: **stable or prerelease?** (Both now publish to `@latest`/`@next`; the choice only changes the version string — stable vs `rc.N`.) Then check `npm view @nforma.ai/nforma dist-tags --json` to determine the next version number.
+When asked for a "new release", there is now only **one** channel (`@latest`; `@next` mirrors it). Confirm the target version string (stable vs `rc.N` — both ship to `@latest`), then check `npm view @nforma.ai/nforma dist-tags --json` to determine the next version number.
 
 ### Release process
 
