@@ -3,6 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+# Always run from the repo root — the prerelease check reads ./package.json,
+# the .npmrc write goes to $ROOT_DIR/.npmrc, and `npm publish` packages the
+# current directory. Without this, the script breaks if invoked from any
+# other CWD (a pre-existing latent issue surfaced by the new prerelease gate).
+cd "$ROOT_DIR"
+
 ENV_FILE="$ROOT_DIR/.env"
 
 if [ ! -f "$ENV_FILE" ]; then
