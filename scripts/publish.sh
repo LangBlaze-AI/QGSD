@@ -18,7 +18,7 @@ if [ -z "$NPM_TOKEN" ]; then
   exit 1
 fi
 
-echo "Publishing @nforma.ai/nf..."
+echo "Publishing @nforma.ai/nforma..."
 
 # Refuse prerelease versions under the @next=@latest alias policy —
 # publishing 0.40.2-rc.1 to @latest would silently install the prerelease

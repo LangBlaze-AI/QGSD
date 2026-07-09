@@ -150,11 +150,12 @@ Run the update.
 
 First, update the npm package to `@latest` (the only channel — `@next` is an alias):
 ```bash
-npm install -g @nforma.ai/nforma@latest 2>/dev/null
+npm install -g @nforma.ai/nforma@latest
 ```
 
-If the install fails, surface the error to the user (do not swallow it — a
-stale updater would silently continue with the old version).
+If the install fails, surface the error to the user (do not suppress stderr
+or the exit code — a stale updater would silently continue with the old
+version).
 
 Then run the installer:
 
