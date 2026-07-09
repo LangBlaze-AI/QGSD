@@ -30,12 +30,35 @@ if echo "$VERSION" | grep -qE '\-'; then
   exit 1
 fi
 
+# Refuse any caller-supplied --tag (or --tag=next / --tag=latest) — under the
+# @next=@latest alias policy the publish MUST land on @latest. A caller passing
+# --tag next (or any non-latest tag) would publish the version to a tag that
+# the alias invariant doesn't reach, and downstream `npm dist-tag add ... next`
+# would silently point @next at the wrong tarball. Only a bare `--tag latest`
+# (or no --tag at all) is allowed.
+for arg in "$@"; do
+  case "$arg" in
+    --tag)
+      echo "ERROR: --tag is not supported by this script under the @next=@latest alias policy."
+      echo "Re-run without --tag; the script pins --tag=latest."
+      exit 1
+      ;;
+    --tag=*|--tag=latest)
+      if [[ "$arg" != "--tag=latest" ]]; then
+        echo "ERROR: --tag=${arg#--tag=} is not supported under the @next=@latest alias policy."
+        echo "Re-run with --tag=latest (or drop --tag entirely)."
+        exit 1
+      fi
+      ;;
+  esac
+done
+
 # Write a temporary project-level .npmrc with the token
 NPMRC="$ROOT_DIR/.npmrc"
 trap 'rm -f "$NPMRC"' EXIT
 echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > "$NPMRC"
 
-npm publish --access public "$@"
+npm publish --access public --tag=latest "$@"
 
 # ── Align @next dist-tag with @latest (alias invariant) ──
 # Invariant: @next must always equal @latest (the @next dist-tag is an alias
