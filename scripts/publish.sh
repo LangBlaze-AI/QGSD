@@ -20,6 +20,16 @@ fi
 
 echo "Publishing @nforma.ai/nf..."
 
+# Refuse prerelease versions under the @next=@latest alias policy —
+# publishing 0.40.2-rc.1 to @latest would silently install the prerelease
+# for every user doing `npm install @nforma.ai/nforma@latest`.
+VERSION=$(node -p "require('./package.json').version")
+if echo "$VERSION" | grep -qE '\-'; then
+  echo "ERROR: ${VERSION} is a prerelease; the @next=@latest alias policy forbids shipping prereleases."
+  echo "Bump to a stable semver (no -rc.N suffix) and re-run."
+  exit 1
+fi
+
 # Write a temporary project-level .npmrc with the token
 NPMRC="$ROOT_DIR/.npmrc"
 trap 'rm -f "$NPMRC"' EXIT
@@ -32,7 +42,6 @@ npm publish --access public "$@"
 # of @latest — see CLAUDE.md). The CI workflow (`publish.yml`) is the
 # preferred path; this step is the manual fallback for token-based
 # publishing via this legacy script.
-VERSION=$(node -p "require('./package.json').version")
 if ! echo "$VERSION" | grep -qE '\-'; then
   echo ""
   echo "=== Aligning @next dist-tag ==="

@@ -59,6 +59,15 @@ fi
 # ── Determine version ──
 CURRENT_VERSION=$(node -p "require('./package.json').version")
 
+# Refuse a prerelease starting version (e.g. 0.44.2-rc.1) up front — the -rc
+# suffix would otherwise crash the --auto arithmetic below (`PATCH + 1` on
+# a non-numeric string). The post-args check below catches user-supplied
+# prereleases; this catches the *current* one before --auto touches it.
+if echo "$CURRENT_VERSION" | grep -qE '\-'; then
+  echo "ERROR: current version ${CURRENT_VERSION} is a prerelease; bump to a stable semver first."
+  exit 1
+fi
+
 if $AUTO; then
   # Auto-increment patch: 0.41.8 → 0.41.9, 0.41.9 → 0.41.10
   MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
