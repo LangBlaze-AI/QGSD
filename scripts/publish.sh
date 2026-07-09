@@ -31,13 +31,12 @@ if echo "$VERSION" | grep -qE '\-'; then
 fi
 
 # Refuse any caller-supplied --tag — under the @next=@latest alias policy the
-# publish MUST land on @latest. A caller passing --tag next (or any non-latest
-# tag) would publish the version to a tag that the alias invariant doesn't
-# reach, and downstream `npm dist-tag add ... next` would silently point @next
-# at the wrong tarball. The only form allowed is an explicit --tag=latest,
-# which is a no-op given the script now pins --tag=latest unconditionally.
-# Bare '--tag latest' (space-separated) is refused to keep the allowlist
-# explicit; callers who want to publish to @latest should drop --tag entirely.
+# publish MUST land on @latest, and the script unconditionally pins --tag=latest
+# below. A caller passing --tag next (or any other tag) would publish to a tag
+# the alias invariant doesn't reach, and downstream `npm dist-tag add ... next`
+# would silently point @next at the wrong tarball. Bare '--tag latest'
+# (space-separated) and '--tag=latest' / '--tag=next' are all refused —
+# callers who want @latest should drop --tag entirely (the script pins it).
 for arg in "$@"; do
   case "$arg" in
     --tag)
@@ -45,12 +44,10 @@ for arg in "$@"; do
       echo "Re-run without --tag; the script pins --tag=latest."
       exit 1
       ;;
-    --tag=*|--tag=latest)
-      if [[ "$arg" != "--tag=latest" ]]; then
-        echo "ERROR: --tag=${arg#--tag=} is not supported under the @next=@latest alias policy."
-        echo "Re-run with --tag=latest (or drop --tag entirely)."
-        exit 1
-      fi
+    --tag=*)
+      echo "ERROR: --tag=${arg#--tag=} is not supported by this script under the @next=@latest alias policy."
+      echo "Re-run without --tag; the script pins --tag=latest."
+      exit 1
       ;;
   esac
 done
