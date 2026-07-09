@@ -30,12 +30,14 @@ if echo "$VERSION" | grep -qE '\-'; then
   exit 1
 fi
 
-# Refuse any caller-supplied --tag (or --tag=next / --tag=latest) — under the
-# @next=@latest alias policy the publish MUST land on @latest. A caller passing
-# --tag next (or any non-latest tag) would publish the version to a tag that
-# the alias invariant doesn't reach, and downstream `npm dist-tag add ... next`
-# would silently point @next at the wrong tarball. Only a bare `--tag latest`
-# (or no --tag at all) is allowed.
+# Refuse any caller-supplied --tag — under the @next=@latest alias policy the
+# publish MUST land on @latest. A caller passing --tag next (or any non-latest
+# tag) would publish the version to a tag that the alias invariant doesn't
+# reach, and downstream `npm dist-tag add ... next` would silently point @next
+# at the wrong tarball. The only form allowed is an explicit --tag=latest,
+# which is a no-op given the script now pins --tag=latest unconditionally.
+# Bare '--tag latest' (space-separated) is refused to keep the allowlist
+# explicit; callers who want to publish to @latest should drop --tag entirely.
 for arg in "$@"; do
   case "$arg" in
     --tag)
