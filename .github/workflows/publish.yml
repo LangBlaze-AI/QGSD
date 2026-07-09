@@ -3,9 +3,9 @@ name: Publish
 # SINGLE publishing workflow — the npm OIDC trusted-publisher target.
 #
 # npm allows only ONE trusted publisher per package (exact workflow-filename match),
-# so BOTH release channels live here:
-#   • Stable  → @latest : push to main whose package.json version has NO prerelease suffix
-#   • Prerelease → @next : push of a v*-rc* / v*-next* tag
+# so the single `@latest` channel lives here:
+#   • Stable  → @latest : push to main whose package.json version is a non-prerelease string
+#     (`@next` mirrors `@latest`; see CLAUDE.md invariant — there is no separate prerelease channel)
 #
 # Auth is GitHub OIDC — there is NO NPM_TOKEN. `id-token: write` on the publish job lets
 # the npm CLI mint a short-lived, workflow-scoped token and emit provenance automatically.
@@ -18,9 +18,6 @@ name: Publish
 on:
   push:
     branches: [main]
-    tags:
-      - 'v*-rc*'
-      - 'v*-next*'
 
 jobs:
   # ── Decide what (if anything) to publish ──
@@ -28,9 +25,9 @@ jobs:
     name: Determine publish context
     runs-on: ubuntu-latest
     outputs:
-      mode: ${{ steps.ctx.outputs.mode }}                 # stable | prerelease | none
+      mode: ${{ steps.ctx.outputs.mode }}                 # stable | none
       version: ${{ steps.ctx.outputs.version }}
-      dist_tag: ${{ steps.ctx.outputs.dist_tag }}         # latest | next
+      dist_tag: ${{ steps.ctx.outputs.dist_tag }}         # latest
       tag_name: ${{ steps.ctx.outputs.tag_name }}
       should_publish: ${{ steps.ctx.outputs.should_publish }}
     steps:
@@ -43,45 +40,32 @@ jobs:
       - id: ctx
         run: |
           set -e
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            # ── Prerelease path (rc/next tag) → @next ──
-            TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-            BASE_VERSION="${TAG_VERSION%%-*}"
-            # Fixed-string match (grep -F) so dots in the version aren't regex wildcards.
-            if ! grep -qF -e "## [${BASE_VERSION}]" -e "## [${TAG_VERSION}]" CHANGELOG.md; then
-              echo "ERROR: No CHANGELOG entry for ${TAG_VERSION} or ${BASE_VERSION}"; exit 1
-            fi
-            echo "mode=prerelease"        >> "$GITHUB_OUTPUT"
-            echo "version=$TAG_VERSION"   >> "$GITHUB_OUTPUT"
-            echo "dist_tag=next"          >> "$GITHUB_OUTPUT"
-            echo "tag_name=v$TAG_VERSION" >> "$GITHUB_OUTPUT"
-            echo "should_publish=true"    >> "$GITHUB_OUTPUT"
+          # ── Stable path (main push) → @latest ──
+          VERSION=$(node -p "require('./package.json').version")
+          TAG_NAME="v${VERSION}"
+          echo "version=$VERSION"   >> "$GITHUB_OUTPUT"
+          echo "dist_tag=latest"    >> "$GITHUB_OUTPUT"
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          # A prerelease version (e.g. 0.44.2-rc.1) cannot ship under the alias policy
+          # (@next == @latest — there is no separate prerelease channel). Refuse it.
+          if echo "$VERSION" | grep -qE '\-'; then
+            echo "ERROR: prerelease version $VERSION is not publishable under the @next=@latest alias policy."
+            echo "Bump to a stable semver (no -rc.N suffix) and re-push."
+            exit 1
+          fi
+          # Fixed-string match (grep -F) so dots in the version aren't regex wildcards.
+          if ! grep -qF "## [${VERSION}]" CHANGELOG.md; then
+            echo "ERROR: No CHANGELOG entry for ${VERSION}"; exit 1
+          fi
+          NPM_VERSION=$(npm view "@nforma.ai/nforma@${VERSION}" version 2>/dev/null || echo "")
+          if [[ -n "$NPM_VERSION" ]]; then
+            echo "Skipping: $VERSION already on npm"
+            echo "mode=none" >> "$GITHUB_OUTPUT"; echo "should_publish=false" >> "$GITHUB_OUTPUT"
           else
-            # ── Stable path (main push) → @latest ──
-            VERSION=$(node -p "require('./package.json').version")
-            TAG_NAME="v${VERSION}"
-            echo "version=$VERSION"   >> "$GITHUB_OUTPUT"
-            echo "dist_tag=latest"    >> "$GITHUB_OUTPUT"
-            echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
-            # A prerelease version staged on main publishes only via its rc tag, not here.
-            if echo "$VERSION" | grep -qE '\-'; then
-              echo "Skipping: prerelease version $VERSION on main (publishes via rc tag)"
-              echo "mode=none" >> "$GITHUB_OUTPUT"; echo "should_publish=false" >> "$GITHUB_OUTPUT"; exit 0
-            fi
-            # Fixed-string match (grep -F) so dots in the version aren't regex wildcards.
-            if ! grep -qF "## [${VERSION}]" CHANGELOG.md; then
-              echo "ERROR: No CHANGELOG entry for ${VERSION}"; exit 1
-            fi
-            NPM_VERSION=$(npm view "@nforma.ai/nforma@${VERSION}" version 2>/dev/null || echo "")
-            if [[ -n "$NPM_VERSION" ]]; then
-              echo "Skipping: $VERSION already on npm"
-              echo "mode=none" >> "$GITHUB_OUTPUT"; echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "mode=stable" >> "$GITHUB_OUTPUT"; echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            fi
+            echo "mode=stable" >> "$GITHUB_OUTPUT"; echo "should_publish=true" >> "$GITHUB_OUTPUT"
           fi
 
-  # ── Pre-publish tests (both channels) ──
+  # ── Pre-publish tests ──
   test:
     name: Pre-publish tests
     needs: context
@@ -132,24 +116,16 @@ jobs:
         run: npm install -g "npm@^11.5.1"
       - run: npm ci || npm install
       - run: npm run build:hooks
-      - name: Stamp version from tag (prerelease only)
-        if: needs.context.outputs.mode == 'prerelease'
-        run: |
-          CURRENT=$(node -p "require('./package.json').version")
-          if [ "$CURRENT" != "${{ needs.context.outputs.version }}" ]; then
-            npm version "${{ needs.context.outputs.version }}" --no-git-tag-version
-          fi
       # No NODE_AUTH_TOKEN and no --provenance: OIDC is auto-detected and provenance
       # is attached automatically when publishing via a trusted publisher.
       - name: Publish via OIDC trusted publisher
         run: npm publish --access public --tag "${{ needs.context.outputs.dist_tag }}"
-      - name: Align @next with @latest (stable only — next must never fall behind latest)
-        if: needs.context.outputs.mode == 'stable'
+      - name: Align @next with @latest
         # Best-effort: OIDC trusted publishing authorizes `npm publish`, not necessarily
         # `npm dist-tag add`. If the minted token can't move a dist-tag, do NOT fail the
         # release (the publish already succeeded) — warn so it can be aligned manually
-        # (`npm dist-tag add @nforma.ai/nforma@<version> next`). The next prerelease will
-        # also re-advance @next.
+        # (`npm dist-tag add @nforma.ai/nforma@<version> next`). `@next` and `@latest`
+        # must show the same version after every release (see CLAUDE.md invariant).
         run: |
           if npm dist-tag add "@nforma.ai/nforma@${{ needs.context.outputs.version }}" next; then
             echo "Aligned @next → ${{ needs.context.outputs.version }}"
@@ -159,7 +135,7 @@ jobs:
       - name: Show dist-tags
         run: npm dist-tag ls @nforma.ai/nforma || true
 
-  # ── Git tag + GitHub Release (stable only, after a successful publish) ──
+  # ── Git tag + GitHub Release (after a successful publish) ──
   # Recovery note: if publish succeeds but this job fails transiently, a re-run finds
   # the version already on npm → mode=none → this job is skipped and won't re-create
   # the tag/release. Recover manually (both steps below are idempotent):
@@ -168,7 +144,7 @@ jobs:
   release:
     name: Tag + GitHub Release
     needs: [context, test, publish]
-    if: needs.context.outputs.mode == 'stable'
+    if: needs.context.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

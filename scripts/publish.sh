@@ -3,6 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+# Always run from the repo root — the prerelease check reads ./package.json,
+# the .npmrc write goes to $ROOT_DIR/.npmrc, and `npm publish` packages the
+# current directory. Without this, the script breaks if invoked from any
+# other CWD (a pre-existing latent issue surfaced by the new prerelease gate).
+cd "$ROOT_DIR"
+
 ENV_FILE="$ROOT_DIR/.env"
 
 if [ ! -f "$ENV_FILE" ]; then
@@ -18,18 +24,52 @@ if [ -z "$NPM_TOKEN" ]; then
   exit 1
 fi
 
-echo "Publishing @nforma.ai/nf..."
+echo "Publishing @nforma.ai/nforma..."
+
+# Refuse prerelease versions under the @next=@latest alias policy —
+# publishing 0.40.2-rc.1 to @latest would silently install the prerelease
+# for every user doing `npm install @nforma.ai/nforma@latest`.
+VERSION=$(node -p "require('./package.json').version")
+if echo "$VERSION" | grep -qE '\-'; then
+  echo "ERROR: ${VERSION} is a prerelease; the @next=@latest alias policy forbids shipping prereleases."
+  echo "Bump to a stable semver (no -rc.N suffix) and re-run."
+  exit 1
+fi
+
+# Refuse any caller-supplied --tag — under the @next=@latest alias policy the
+# publish MUST land on @latest, and the script unconditionally pins --tag=latest
+# below. A caller passing --tag next (or any other tag) would publish to a tag
+# the alias invariant doesn't reach, and downstream `npm dist-tag add ... next`
+# would silently point @next at the wrong tarball. Bare '--tag latest'
+# (space-separated) and '--tag=latest' / '--tag=next' are all refused —
+# callers who want @latest should drop --tag entirely (the script pins it).
+for arg in "$@"; do
+  case "$arg" in
+    --tag)
+      echo "ERROR: --tag is not supported by this script under the @next=@latest alias policy."
+      echo "Re-run without --tag; the script pins --tag=latest."
+      exit 1
+      ;;
+    --tag=*)
+      echo "ERROR: --tag=${arg#--tag=} is not supported by this script under the @next=@latest alias policy."
+      echo "Re-run without --tag; the script pins --tag=latest."
+      exit 1
+      ;;
+  esac
+done
 
 # Write a temporary project-level .npmrc with the token
 NPMRC="$ROOT_DIR/.npmrc"
 trap 'rm -f "$NPMRC"' EXIT
 echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > "$NPMRC"
 
-npm publish --access public "$@"
+npm publish --access public --tag=latest "$@"
 
-# ── Align @next dist-tag with @latest ──
-# Invariant: next must never fall behind latest.
-VERSION=$(node -p "require('./package.json').version")
+# ── Align @next dist-tag with @latest (alias invariant) ──
+# Invariant: @next must always equal @latest (the @next dist-tag is an alias
+# of @latest — see CLAUDE.md). The CI workflow (`publish.yml`) is the
+# preferred path; this step is the manual fallback for token-based
+# publishing via this legacy script.
 if ! echo "$VERSION" | grep -qE '\-'; then
   echo ""
   echo "=== Aligning @next dist-tag ==="

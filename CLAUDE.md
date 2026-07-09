@@ -2,11 +2,12 @@
 
 ## Versioning
 
-nForma uses milestone-based semver:
+nForma uses milestone-based semver (no separate prerelease channel — see dist-tag mapping below):
 
 - `0.{milestone}` — milestone release (e.g., 0.40 = 40th milestone)
 - `0.{milestone}.{patch}` — quick task release within a milestone (e.g., 0.40.1, 0.40.2)
-- `0.{milestone}.{patch}-rc.N` — prerelease for an upcoming version (e.g., 0.40.2-rc.1; under the alias policy below, `rc.N` versions publish to `@next` which is the same tarball as `@latest`)
+
+Versions with a prerelease suffix (e.g. `0.40.2-rc.1`) **cannot ship** under the `@next == @latest` alias policy — a prerelease semver string published to `@latest` would silently install `0.40.2-rc.1` for every user doing `npm install @nforma.ai/nforma@latest`. `publish.yml` rejects any version with a `-` suffix.
 
 Dist-tag mapping:
 - `latest` — stable versions (0.40.1)
@@ -18,7 +19,7 @@ npm view @nforma.ai/nforma dist-tags --json
 # latest and next must show the same version
 ```
 
-When asked for a "new release", there is now only **one** channel (`@latest`; `@next` mirrors it). Confirm the target version string (stable vs `rc.N` — both ship to `@latest`), then check `npm view @nforma.ai/nforma dist-tags --json` to determine the next version number.
+When asked for a "new release", there is now only **one** channel — `@latest` (`@next` mirrors it). Confirm the target version string, then check `npm view @nforma.ai/nforma dist-tags --json` to determine the next version number.
 
 ### Release process
 
@@ -53,20 +54,6 @@ The script will:
 9. Commit, push branch, open PR to main
 10. Merge triggers release pipeline → publishes to `@latest`
 
-**next release** (prerelease) — use `release.sh`:
-```bash
-bash scripts/release.sh                # release current package.json version
-bash scripts/release.sh --dry-run      # preview first
-```
-
-Manual steps:
-1. Bump `package.json` to `0.{milestone}.{N+1}-rc.1`
-2. **Sync lockfile**: `npm install --package-lock-only`
-3. Add `## [0.{milestone}.{N+1}]` entry to CHANGELOG.md (gate checks base version)
-4. `npm run generate-terminal` (asset staleness gate)
-5. Commit, push to main, tag `v0.{milestone}.{N+1}-rc.1`, push tag
-6. Prerelease pipeline publishes to `@next`
-
 ### Critical: lockfile sync
 
 **Always run `npm install --package-lock-only` after changing `package.json`.**
@@ -77,10 +64,10 @@ Quick check: `node -p "require('./package-lock.json').version"` should match `no
 
 ### CI gates to remember
 - **Lockfile sync**: `package-lock.json` version must match `package.json` version
-- CHANGELOG gate: requires `## [{base_version}]` in CHANGELOG.md
+- CHANGELOG gate: requires `## [{VERSION}]` in CHANGELOG.md
 - Asset staleness: `npm run check:assets` — regenerate with `npm run generate-terminal`
 - Lint isolation: `npm run lint:isolation` — require paths must use `$HOME/.claude/nf-bin/` with CWD fallback
-- CLI version test: regex accepts prerelease suffixes (`X.Y.Z-rc.N`)
+- **No prerelease versions**: `package.json` version must NOT contain a `-` suffix; `publish.yml` rejects prerelease semver (the alias policy means there's no separate prerelease channel to ship them on)
 
 ### Troubleshooting CI failures
 
@@ -94,8 +81,8 @@ Quick check: `node -p "require('./package-lock.json').version"` should match `no
 
 ## Git workflow
 
-- Always use PRs with CI gates for stable releases — never direct push to main
-- Direct push to main is acceptable for prerelease version bumps and CI fixes
+- Always use PRs with CI gates for releases — never direct push to main
+- Direct push to main is acceptable for CI fixes only
 - Branch naming:
   - `release/{VERSION}` — release branches (e.g., `release/0.41.10`)
   - `nf/quick-{N}-{description}` — quick task branches
@@ -110,18 +97,15 @@ Quick check: `node -p "require('./package-lock.json').version"` should match `no
 
 ## Release scripts
 
-- `bash scripts/prepare-release.sh {VERSION}` — prepare stable release via PR (recommended)
-- `bash scripts/release.sh` — tag + push prerelease (direct push flow)
-- `bash scripts/publish.sh` — manual npm publish (reads NPM_TOKEN from .env). **Legacy/token-based** — CI publishing moved to OIDC (`publish.yml`), so this only works if the npm package still allows token publishing (i.e. NOT with the "disallow tokens" setting).
+- `bash scripts/prepare-release.sh {VERSION}` — prepare release via PR (recommended; the only release path now that the prerelease flow has been retired)
 
 ## Publishing (npm OIDC trusted publisher)
 
-The single `publish.yml` workflow publishes both channels via **GitHub OIDC — there is no `NPM_TOKEN` secret**:
-- **@latest** — push to main with a non-prerelease `package.json` version (runs tests → publish → tag → GitHub Release → align `@next`).
-- **@next** — push of a `v*-rc*` / `v*-next*` tag.
+The single `publish.yml` workflow publishes the single `@latest` channel via **GitHub OIDC — there is no `NPM_TOKEN` secret**:
+- **@latest** — push to main with a non-prerelease `package.json` version (runs tests → publish → tag → GitHub Release → align `@next` to match `@latest` per the alias invariant).
 
 npm's trusted publisher (npmjs.com → package Settings) must match this file exactly:
 `Org=nForma-AI · Repo=nForma · Workflow filename=publish.yml · Environment=npm-publish · Allowed=npm publish`.
 Requirements baked into the workflow: Node ≥ 22.14.0 and npm ≥ 11.5.1 (`npm i -g npm@latest`), `permissions: id-token: write`, **no** `NODE_AUTH_TOKEN` (its presence forces the token path and defeats OIDC).
 
-**Caveat — dist-tag under OIDC:** trusted publishing authorizes `npm publish`, not necessarily `npm dist-tag add`. The `@next` alignment step is therefore best-effort (non-fatal): if it can't move the tag under OIDC, the publish still succeeds and CI emits a warning — align manually with `npm dist-tag add @nforma.ai/nforma@{VERSION} next`. Always verify the invariant after a release: `npm view @nforma.ai/nforma dist-tags`.
+**Caveat — dist-tag under OIDC:** trusted publishing authorizes `npm publish`, not necessarily `npm dist-tag add`. The `@next` alignment step is therefore best-effort (non-fatal): if it can't move the tag under OIDC, the publish still succeeds and CI emits a warning — align manually with `npm dist-tag add @nforma.ai/nforma@{VERSION} next`. Always verify the invariant after a release: `npm view @nforma.ai/nforma dist-tags` (must show `next == latest`).

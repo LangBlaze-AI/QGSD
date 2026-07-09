@@ -44,30 +44,12 @@ Running fresh install...
 Proceed to install step (treat as version 0.0.0 for comparison).
 </step>
 
-<step name="select_channel">
-Fetch both dist-tag versions so the user can make an informed choice:
-
-```bash
-npm view @nforma.ai/nforma dist-tags --json 2>/dev/null
-```
-
-Parse the JSON to get `latest` and `next` versions. Then use AskUserQuestion:
-- Question: "Which channel do you want to update to?\n\n- **latest** — stable release (currently {latest_version})\n- **next** — prerelease / rc (currently {next_version})"
-- Options:
-  - "latest (stable)"
-  - "next (prerelease)"
-  - "Cancel"
-
-If user selects "Cancel": exit.
-
-Store the selected channel as `$CHANNEL` (`"latest"` or `"next"`).
-</step>
-
 <step name="check_latest_version">
-Check npm for the version on the selected channel:
+Check npm for the current `@latest` version (the only channel — `@next` is
+an alias for `@latest`, see CLAUDE.md):
 
 ```bash
-npm view @nforma.ai/nforma dist-tags.$CHANNEL 2>/dev/null
+npm view @nforma.ai/nforma dist-tags.latest 2>/dev/null
 ```
 
 Store result as `$LATEST_VERSION`.
@@ -97,7 +79,7 @@ You're already on the latest version.
 
 Exit.
 
-**If installed > latest (and CHANNEL is "latest"):**
+**If installed > latest:**
 ```
 ## nForma Update
 
@@ -105,18 +87,6 @@ Exit.
 **Latest:** A.B.C
 
 You're ahead of the latest release (development version?).
-```
-
-Exit.
-
-**If CHANNEL is "next" and installed == latest:**
-```
-## nForma Update (next channel)
-
-**Installed:** X.Y.Z-rc.N
-**Latest next:** X.Y.Z-rc.N
-
-You're already on the latest prerelease.
 ```
 
 Exit.
@@ -133,7 +103,7 @@ Exit.
 ## nForma Update Available
 
 **Installed:** 1.5.10
-**Latest (${CHANNEL}):** 1.5.15
+**Latest:** 1.5.15
 
 ### What's New
 ────────────────────────────────────────────────────────────
@@ -176,12 +146,16 @@ Use AskUserQuestion:
 </step>
 
 <step name="run_update">
-Run the update using the install type and channel selected earlier.
+Run the update.
 
-First, update the npm package to the selected channel tag:
+First, update the npm package to `@latest` (the only channel — `@next` is an alias):
 ```bash
-npm install -g @nforma.ai/nforma@$CHANNEL 2>/dev/null || true
+npm install -g @nforma.ai/nforma@latest
 ```
+
+If the install fails, surface the error to the user (do not suppress stderr
+or the exit code — a stale updater would silently continue with the old
+version).
 
 Then run the installer:
 

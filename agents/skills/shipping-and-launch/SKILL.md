@@ -120,7 +120,7 @@ Repo-specific checklist anchors
 - Fast verification: `npm run test:ci`
 - Full suite: `npm test`
 - Formal pipeline when relevant: `npm run test:formal` or `node bin/run-formal-verify.cjs`
-- Release scripts: `scripts/prepare-release.sh`, `scripts/release.sh`, `scripts/publish.sh`
+- Release scripts: `scripts/prepare-release.sh` (the only release path now — the prerelease flow has been retired under the `@next == @latest` alias policy; `scripts/release.sh` was deleted), `scripts/publish.sh` (legacy token-based fallback)
 - Production observation entry point: `/nf:observe`
 
 Edge cases

@@ -59,11 +59,20 @@ fi
 # ── Determine version ──
 CURRENT_VERSION=$(node -p "require('./package.json').version")
 
+# Refuse a prerelease starting version (e.g. 0.44.2-rc.1) up front — the -rc
+# suffix would otherwise crash the --auto arithmetic below (`PATCH + 1` on
+# a non-numeric string). The post-args check below catches user-supplied
+# prereleases; this catches the *current* one before --auto touches it.
+if echo "$CURRENT_VERSION" | grep -qE '\-'; then
+  echo "ERROR: current version ${CURRENT_VERSION} is a prerelease; bump to a stable semver first."
+  exit 1
+fi
+
 if $AUTO; then
   # Auto-increment patch: 0.41.8 → 0.41.9, 0.41.9 → 0.41.10
   MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
   MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
-  PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3 | cut -d- -f1)  # strip any -rc suffix
+  PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
   VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
 fi
 
@@ -75,10 +84,12 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
-# Reject prerelease versions — use release.sh for those
+# Refuse prerelease versions — under the @next=@latest alias policy there is no
+# separate prerelease channel to ship them on. publish.yml errors on any version
+# with a `-` suffix, so refuse it here too (better message, before the PR is cut).
 if echo "$VERSION" | grep -qE '\-'; then
-  echo "ERROR: prepare-release.sh is for stable (latest) releases only."
-  echo "For prereleases, use: bash scripts/release.sh"
+  echo "ERROR: prerelease versions are not supported under the @next=@latest alias policy."
+  echo "Bump to a stable semver (no -rc.N suffix) and re-run."
   exit 1
 fi
 
