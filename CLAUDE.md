@@ -6,20 +6,19 @@ nForma uses milestone-based semver:
 
 - `0.{milestone}` — milestone release (e.g., 0.40 = 40th milestone)
 - `0.{milestone}.{patch}` — quick task release within a milestone (e.g., 0.40.1, 0.40.2)
-- `0.{milestone}.{patch}-rc.N` — prerelease for `next` dist-tag (e.g., 0.40.2-rc.1)
+- `0.{milestone}.{patch}-rc.N` — prerelease for an upcoming version (e.g., 0.40.2-rc.1; under the alias policy below, `rc.N` versions publish to `@next` which is the same tarball as `@latest`)
 
 Dist-tag mapping:
 - `latest` — stable versions (0.40.1)
-- `next` — prereleases (0.40.2-rc.1)
+- `next` — alias for `latest` (always points to the same version; see invariant below)
 
-**Invariant: `next` must never fall behind `latest`.**
-When a stable version publishes to `@latest`, the `next` dist-tag must also be updated to point to the same version. This is automated in `publish.yml` (the single OIDC publish workflow), but verify after every release:
+**Invariant: `next` is an alias for `latest`** — both dist-tags point to the same tarball at all times; there is no separate prerelease channel. When `@latest` is updated, `@next` must be moved to the same version. This is automated in `publish.yml` (best-effort under OIDC; see caveat below). Verify after every release:
 ```bash
 npm view @nforma.ai/nforma dist-tags --json
-# Both latest and next should be >= the version you just published
+# latest and next must show the same version
 ```
 
-When asked for a "new release", always ask: **latest or next?** Then check `npm view @nforma.ai/nforma dist-tags --json` to determine the next version number.
+When asked for a "new release", there is now only **one** channel (`@latest`; `@next` mirrors it). Confirm the target version string (stable vs `rc.N` — both ship to `@latest`), then check `npm view @nforma.ai/nforma dist-tags --json` to determine the next version number.
 
 ### Release process
 
@@ -125,4 +124,4 @@ npm's trusted publisher (npmjs.com → package Settings) must match this file ex
 `Org=nForma-AI · Repo=nForma · Workflow filename=publish.yml · Environment=npm-publish · Allowed=npm publish`.
 Requirements baked into the workflow: Node ≥ 22.14.0 and npm ≥ 11.5.1 (`npm i -g npm@latest`), `permissions: id-token: write`, **no** `NODE_AUTH_TOKEN` (its presence forces the token path and defeats OIDC).
 
-**Caveat — dist-tag under OIDC:** trusted publishing authorizes `npm publish`, not necessarily `npm dist-tag add`. The stable job's `@next` alignment is therefore best-effort (non-fatal): if it can't move the tag under OIDC, the publish still succeeds and CI emits a warning — align manually with `npm dist-tag add @nforma.ai/nforma@{VERSION} next` (or the next prerelease re-advances `@next`). Always verify the invariant after a stable release: `npm view @nforma.ai/nforma dist-tags`.
+**Caveat — dist-tag under OIDC:** trusted publishing authorizes `npm publish`, not necessarily `npm dist-tag add`. The `@next` alignment step is therefore best-effort (non-fatal): if it can't move the tag under OIDC, the publish still succeeds and CI emits a warning — align manually with `npm dist-tag add @nforma.ai/nforma@{VERSION} next`. Always verify the invariant after a release: `npm view @nforma.ai/nforma dist-tags`.
