@@ -22,6 +22,34 @@ const { spawnSync } = require('child_process');
 const MD_PATH = path.join(__dirname, '../commands/nf/goal-writer.md');
 const MD = fs.readFileSync(MD_PATH, 'utf8');
 
+const ESC = String.fromCharCode(27);
+const ANSI_SGR = new RegExp(`${ESC}\\[[0-9;]*m`, 'g');
+
+/**
+ * Remove ANSI SGR escapes so assertions match human-readable text.
+ *
+ * The escape byte is built with String.fromCharCode(27) rather than embedded
+ * literally: a raw ESC in source is invisible, and any formatter or copy-paste
+ * that drops it degrades this to /\[[0-9;]*m/, which strips "[33m" but leaves a
+ * bare ESC behind — silently defeating a following \s* match. The test would then
+ * pass or fail depending on whether the runner colourises, which is worse than
+ * failing outright.
+ */
+function stripAnsi(s) {
+  return String(s).replace(ANSI_SGR, '');
+}
+
+/**
+ * Env for the shipped verifier, with colour pinned OFF. console.log colourises
+ * numeric args via util.inspect, so without this the result depends on whether
+ * the developer's shell exports FORCE_COLOR.
+ */
+function noColorEnv(extra) {
+  const env = { ...process.env, ...extra, NO_COLOR: '1' };
+  delete env.FORCE_COLOR;
+  return env;
+}
+
 /** Bodies of executable shell fences (```bash / ```sh / ```shell). */
 function shellBlocks(md) {
   const re = /^```(?:bash|sh|shell)\r?\n([\s\S]*?)^```/gm;
@@ -75,7 +103,15 @@ describe('goal-writer — embedded blocks actually execute', () => {
     assert.equal(r.stdout.trim(), '1', 'pattern must match a conventional fix commit under stock grep');
   });
 
-  it('the char-count verifier runs and reports a correct length', () => {
+  it('the SHIPPED char-count verifier runs and reports a correct length', () => {
+    // Extract and execute the skill's actual NF_EVAL body — do NOT reimplement it.
+    // A reimplementation stays green when the shipped verifier's input contract or
+    // count logic changes, which is the very live-path gap this file exists to close.
+    const m = MD.match(/node << 'NF_EVAL'\r?\n([\s\S]*?)\r?\nNF_EVAL/);
+    assert.ok(m, 'could not extract the NF_EVAL verifier from the skill');
+    const verifier = m[1];
+    assert.match(verifier, /GOAL_FILE/, 'shipped verifier is expected to read process.env.GOAL_FILE');
+
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-goalw-'));
     try {
       // Deliberately adversarial: quotes, backticks, parens and $VAR are exactly
@@ -83,16 +119,43 @@ describe('goal-writer — embedded blocks actually execute', () => {
       const cond = `Read /abs/d.md and follow it. "quoted" \`ticks\` (parens) $VAR -- stop after 40 turns.`;
       const f = path.join(dir, 'goal.txt');
       fs.writeFileSync(f, cond + '\n');
+
       const r = spawnSync('node', [], {
-        input: `const t=require('fs').readFileSync(process.env.GOAL_FILE,'utf8').trim();
-                console.log(JSON.stringify({len:t.length, intact:t.includes('"quoted"')&&t.includes('$VAR')}));`,
-        env: { ...process.env, GOAL_FILE: f },
+        input: verifier,
+        env: noColorEnv({ GOAL_FILE: f }),
+        encoding: 'utf8',
+      });
+      assert.equal(r.status, 0, `shipped verifier failed to run:\n${r.stderr}`);
+      // It prints e.g. "chars: 96 / 4000 — OK". console.log colourises numeric args
+      // via util.inspect, so the count can arrive wrapped in ANSI escapes — strip
+      // them before matching. (A reimplementation using JSON.stringify never shows
+      // this, which is precisely why the shipped block must be the thing executed.)
+      const printed = stripAnsi(r.stdout).match(/chars:\s*(\d+)/);
+      assert.ok(printed, `shipped verifier printed no char count:\n${r.stdout}`);
+      assert.equal(
+        Number(printed[1]),
+        cond.length,
+        'shipped verifier must report the true condition length (special chars intact)'
+      );
+      assert.match(stripAnsi(r.stdout), /\bOK\b/, 'a short condition must be reported as OK');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('the SHIPPED verifier flags an over-limit condition', () => {
+    const verifier = MD.match(/node << 'NF_EVAL'\r?\n([\s\S]*?)\r?\nNF_EVAL/)[1];
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-goalw-long-'));
+    try {
+      const f = path.join(dir, 'goal.txt');
+      fs.writeFileSync(f, 'x'.repeat(4001));
+      const r = spawnSync('node', [], {
+        input: verifier,
+        env: noColorEnv({ GOAL_FILE: f }),
         encoding: 'utf8',
       });
       assert.equal(r.status, 0, r.stderr);
-      const got = JSON.parse(r.stdout);
-      assert.equal(got.len, cond.length, 'reported length must match the real condition length');
-      assert.equal(got.intact, true, 'special characters must survive the round-trip');
+      assert.match(stripAnsi(r.stdout), /TOO LONG/, '4001 chars must be reported as over the /goal limit');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
