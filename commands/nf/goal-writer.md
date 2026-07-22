@@ -78,7 +78,7 @@ node "$HOME/.claude/nf-bin/memory-store.cjs" query-errors 2>/dev/null || node ./
 **Recurrence evidence — the strongest signal of a real class.** A bug shape fixed
 three or more times is a missing shared primitive plus a missing gate:
 ```bash
-git log --oneline -400 | grep -iE '^\w+ (fix|revert)' | head -60
+git log --oneline -400 | grep -iE '^[[:alnum:]_]+ (fix|revert)' | head -60
 ```
 
 **Repo fleet, if the intent is multi-repo:**
@@ -119,7 +119,7 @@ For a consequential doctrine — one that will run unattended, touch multiple re
 gate merges — ratify the principle set through the quorum. Skip for a small,
 single-repo, low-blast-radius goal, and say that you skipped it.
 
-```
+```text
 /nf:quorum Here is a derived operating doctrine for an autonomous session: <principles>.
 Which of these are genuinely load-bearing, which are generic filler that should be cut,
 and which important failure class is missing? Cite evidence for additions.
@@ -132,9 +132,21 @@ consensus, report that and continue with the underived doctrine clearly marked
 </step>
 
 <step name="5_write_doctrine">
-Write the `.md`. Default path `~/.claude/goals/<slug>.md` — global, and outside the
+Write the `.md`. Default location `~/.claude/goals/<slug>.md` — global, and outside the
 directories `bin/install.js` wipes (`commands/nf/`, `nf/`, `agents/nf-*`). Use a
 repo-local path only if the doctrine is genuinely repo-specific.
+
+**Resolve `~` to an absolute path now and reuse that exact string in §6.** The `/goal`
+condition is prose handed to a fresh agent whose shell may not expand `~`, and a
+doctrine the agent cannot read makes the whole goal inert:
+
+```bash
+mkdir -p "$HOME/.claude/goals"
+DOCTRINE_PATH="$HOME/.claude/goals/<slug>.md"   # expands to /Users/... or /home/...
+echo "$DOCTRINE_PATH"
+```
+
+Carry the printed absolute path — never the `~` form — into the condition.
 
 Required sections:
 
@@ -184,7 +196,7 @@ that `lint:isolation` and `skill-eval-lint` do **not** catch — they check for 
 
 The condition must contain, in this order:
 
-1. **The read instruction** — "Read `<abs path>` and follow it as your operating
+1. **The read instruction** — "Read `<$DOCTRINE_PATH from §5, absolute>` and follow it as your operating
    doctrine" (prose, because `/goal` has no file-reference syntax).
 2. **The observable end state** — phrased so the evaluator can judge it from what the
    agent reports. Prefer countable or exit-code-shaped conditions.
