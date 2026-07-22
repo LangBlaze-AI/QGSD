@@ -180,3 +180,9 @@ nf-benchmark/baseline.json
 
 # Ephemeral per-machine worker session ids (delegate loop)
 .planning/delegate-sessions.json
+
+# Per-session sentinel flags written by hooks/nf-prompt.js (isFirstMessageOfSession).
+# Keyed by a local session UUID with a timestamp body — no cross-clone meaning, and
+# they accumulate one file per session forever. Local state, never committed.
+.claude/nf-session-seen-*.flag
+.copilot/nf-session-seen-*.flag
