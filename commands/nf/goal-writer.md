@@ -80,7 +80,19 @@ condition:
 > Where is a change *done*? (a) merged to main, (b) deployed and healthy in staging,
 > (c) deployed and healthy in production.
 
-Record the answer verbatim. Everything downstream keys off it.
+**Canonicalise before using it.** Keep the raw answer for the record, but resolve it to
+exactly one of the three literal values `merged`, `staging`, `production` — an answer of
+`b`, "production deploy", or "staging then prod" must never flow straight into
+authorisation logic, because that logic decides whether the session may deploy:
+
+- Map an unambiguous answer (`b`, "stage", "prod") to its canonical value and **state
+  the mapping you applied**.
+- If the answer names **more than one** target, take the **least-privileged** one and
+  say so — a goal is delivered at one place, and guessing upward grants deploy
+  authority nobody asked for.
+- If it is ambiguous or names something unsupported, **re-prompt**. Do not default.
+
+Echo the canonical value back before continuing. Everything downstream keys off it.
 </step>
 
 <step name="2_gather_evidence">
@@ -196,8 +208,11 @@ Required sections:
    Write the health check concretely: the endpoint, smoke command, or error-rate signal
    that constitutes "healthy", and how long to observe. "Looks fine" is not a check.
 
-   **A merged-but-undeployed PR is an unfinished unit.** Do not open the next one while
-   it sits there; if the post-merge pipeline is red, that red is now the work.
+   **Under a deploying target (`staging` / `production`), a merged-but-undeployed PR is
+   an unfinished unit.** Do not open the next one while it sits there; if the post-merge
+   pipeline is red, that red is now the work. **Under `merged` this rule does not
+   apply** — the merge *is* the terminus, and treating it as unfinished would keep the
+   goal running against a condition it has already satisfied.
 5. **Hard stops** — the non-negotiable list. Deployment is scoped by §1's delivery
    target rather than banned outright:
 
@@ -216,9 +231,24 @@ Required sections:
    Always hard-stop regardless of target: publish/release to a public registry, secret
    rotation or re-keying, destructive git (force-push, history rewrite, shared-ref
    deletion), data migrations that drop or transform production data, money/identity
-   operations, and external communication. Add the reversibility test — if it cannot be
-   undone in one command with no external side effects, it is a hard stop — and a
-   repeat-failure ceiling (escalate at 3; a loop is not progress).
+   operations, and external communication. Add a repeat-failure ceiling (escalate at 3;
+   a loop is not progress).
+
+   **Precedence — state this explicitly, or the doctrine contradicts itself.** The
+   reversibility test ("if it cannot be undone in one command with no external side
+   effects, it is a hard stop") would otherwise forbid the very deployment the target
+   authorises. Resolve it in this order:
+
+   1. **An explicit hard stop always wins.** The always-stop list above is absolute; a
+      delivery target never authorises publishing, secret rotation, or a data migration,
+      even when they sit on the delivery path.
+   2. **Deployment to the declared target is pre-authorised** and is therefore *exempt
+      from the reversibility test* — declaring the target is the human decision that
+      accepted the risk. The exemption is conditional: it holds only while a rollback
+      path exists and is known. **If the deploy cannot be rolled back, it is a hard
+      stop again** — identify the rollback command *before* deploying, not after.
+   3. **The reversibility test governs everything else** — any action not on the
+      declared delivery path and not already listed above.
 6. **Definition of done** — a per-unit checklist, each item traceable to a principle.
    Its final item must be the **delivery target reached and verified healthy**, so the
    checklist cannot be satisfied by a merge alone when the target is staging or prod.
