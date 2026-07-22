@@ -22,6 +22,14 @@ const { spawnSync } = require('child_process');
 const MD_PATH = path.join(__dirname, '../commands/nf/goal-writer.md');
 const MD = fs.readFileSync(MD_PATH, 'utf8');
 
+/**
+ * Whitespace-normalised view of the skill, for prose assertions.
+ * Markdown is hard-wrapped, so a phrase like '"Looks fine" is not a check' spans a
+ * line break. Matching against raw MD makes the test fail whenever a paragraph is
+ * reflowed — a false alarm about formatting dressed up as a contract violation.
+ */
+const PROSE = MD.replace(/\s+/g, ' ');
+
 const ESC = String.fromCharCode(27);
 const ANSI_SGR = new RegExp(`${ESC}\\[[0-9;]*m`, 'g');
 
@@ -179,5 +187,97 @@ describe('goal-writer — /goal contract facts stay correct', () => {
 
   it('records that /goal does not grant tool permissions', () => {
     assert.match(MD, /not.{0,40}per-tool permission|auto mode/i);
+  });
+});
+
+describe('goal-writer — delivery target drives pr-resolve past merge', () => {
+  // A goal whose definition of done is "live in staging" cannot be satisfied by an
+  // agent that stops at merge: it burns every remaining turn on unreachable work.
+  // The skill must resolve a delivery target and carry it into the pr-resolve
+  // terminus, the hard stops, the done-checklist and the goal condition.
+
+  it('defines the three delivery targets', () => {
+    for (const t of ['merged', 'staging', 'production']) {
+      assert.match(
+      PROSE, new RegExp('`' + t + '`'), `delivery target \`${t}\` must be defined`);
+    }
+  });
+
+  it('states that merged is not delivered', () => {
+    assert.match(
+      PROSE,
+      /Merged is not delivered|merged-but-undeployed|does not end at merge/i,
+      'the skill must state that a merge alone is not delivery'
+    );
+  });
+
+  it('requires pr-resolve to drive to the target, not to the merge button', () => {
+    assert.match(
+      PROSE, /nf:pr-resolve/, 'pr-resolve must be named');
+    assert.match(
+      PROSE,
+      /terminus/i,
+      'the skill must state pr-resolve\'s terminus explicitly'
+    );
+    assert.match(
+      PROSE,
+      /follow the deployment through/i,
+      'pr-resolve must be told to follow the deployment through, not stop at merge'
+    );
+  });
+
+  it('requires health verification rather than a green pipeline', () => {
+    assert.match(
+      PROSE,
+      /not merely that\s+the pipeline reported green|crashlooping|not merely "the pipeline was green"|settle for "the pipeline was green"/i,
+      'the skill must reject "pipeline green" as a health check'
+    );
+    assert.match(
+      PROSE, /"Looks fine" is not a check|is not a check/i);
+  });
+
+  it('scopes deployment authority by the target instead of banning it', () => {
+    assert.match(
+      PROSE, /Deploying \*\*to the declared target\*\* is authorised/i);
+    assert.match(
+      PROSE, /Deploying \*\*past\*\* the declared target is a hard stop/i);
+  });
+
+  it('authorises rollback of a self-driven unhealthy deploy', () => {
+    assert.match(
+      PROSE,
+      /Rolling back a deploy this session drove[\s\S]{0,200}authorised/i,
+      'rollback of a self-driven unhealthy deploy must be authorised, not a hard stop'
+    );
+  });
+
+  it('forbids bypassing an approval gate', () => {
+    assert.match(
+      PROSE, /waited on, never bypassed/i);
+  });
+
+  it('keeps publish/secrets/destructive-git hard-stopped at every target', () => {
+    for (const kind of ['publish', 'secret', 'destructive git', 'external communication']) {
+      assert.match(
+      PROSE, new RegExp(kind, 'i'), `${kind} must remain a hard stop`);
+    }
+  });
+
+  it('requires the goal condition end state to name the target', () => {
+    assert.match(
+      PROSE,
+      /end state must name the target explicitly/i,
+      'without this the evaluator accepts a merge as completion'
+    );
+    assert.match(
+      PROSE, /verified healthy there/i, 'deploying targets need a health clause in the end state');
+  });
+
+  it('requires telling the user plainly that a deploying target auto-deploys', () => {
+    assert.match(
+      PROSE,
+      /will deploy (autonomously|without asking)/i,
+      'the user must be told a staging/production target deploys without asking'
+    );
   });
 });
