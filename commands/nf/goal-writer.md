@@ -160,11 +160,27 @@ imperative voice, no hedging.
 </step>
 
 <step name="6_emit_goal_condition">
-Emit the `/goal` condition. Verify **before** printing it:
+Emit the `/goal` condition. Verify the length **before** printing it.
+
+Write the condition to a file first and count from disk — do **not** interpolate it
+into the shell. The condition contains quotes, backticks, and parentheses that mangle
+under shell quoting, and a mangled count is worse than no count.
 
 ```bash
-GOAL_TEXT='<the condition>' node -e 'const t=process.env.GOAL_TEXT||""; console.log("chars:", t.length, t.length<=4000?"OK":"TOO LONG — TIGHTEN")'
+cat > /tmp/nf-goal-draft.txt <<'GOALEOF'
+<the condition, verbatim>
+GOALEOF
+GOAL_FILE=/tmp/nf-goal-draft.txt node << 'NF_EVAL'
+const t = require('fs').readFileSync(process.env.GOAL_FILE, 'utf8').trim();
+console.log('chars:', t.length, '/ 4000 —', t.length <= 4000 ? 'OK' : 'TOO LONG — TIGHTEN');
+NF_EVAL
 ```
+
+**Use the `node << 'NF_EVAL'` heredoc form, never `node -e`.** The `nf-node-eval-guard`
+PreToolUse hook blocks `node -e` outright on zsh (history expansion mangles `!`), so a
+`node -e` command in this skill fails every time it runs. This is a live-path defect
+that `lint:isolation` and `skill-eval-lint` do **not** catch — they check for arguments
+*after* the eval, not for the use of `-e` itself.
 
 The condition must contain, in this order:
 
