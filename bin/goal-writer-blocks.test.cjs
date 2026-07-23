@@ -309,3 +309,33 @@ describe('goal-writer — delivery target drives pr-resolve past merge', () => {
       'disclosure must be up-front, not after the fact');
   });
 });
+
+// ── nf:quorum round-cap parameterisation (quorum.max_rounds) ──
+// The R3.3 cap was hardcoded to "10 total / 9 deliberation". It is now driven by
+// quorum.max_rounds. A regression would re-hardcode a literal and silently ignore
+// a user's `quorum.max_rounds: 50`, capping the very deliberation they configured.
+describe('nf:quorum — round cap reads quorum.max_rounds, not a hardcoded 10', () => {
+  const QMD = require('fs').readFileSync(
+    require('path').join(__dirname, '../commands/nf/quorum.md'), 'utf8');
+
+  it('reads MAX_ROUNDS from config at the deliberation step', () => {
+    assert.match(QMD, /MAX_ROUNDS\s*=\s*`?quorum\.max_rounds`?/i,
+      'the skill must bind MAX_ROUNDS to quorum.max_rounds');
+    assert.match(QMD, /Read `quorum\.full_convergence`[^.]*and `quorum\.max_rounds`/,
+      'max_rounds must be read alongside full_convergence at the termination step');
+  });
+
+  it('no longer hardcodes the "9 deliberation / 10 total" cap in prose', () => {
+    assert.doesNotMatch(QMD, /up to 9 deliberation rounds/i,
+      'the "9 deliberation" literal must be parameterised to MAX_ROUNDS - 1');
+    assert.doesNotMatch(QMD, /max 10 total rounds/i,
+      'the "10 total" literal must be parameterised to MAX_ROUNDS');
+    assert.doesNotMatch(QMD, /After 10 total rounds without convergence/i,
+      'the escalation threshold must be parameterised to MAX_ROUNDS');
+  });
+
+  it('states the cap is always finite (cannot loop forever)', () => {
+    assert.match(QMD, /can never run forever|always finite/i,
+      'the skill must state the loop is bounded even under a bad config');
+  });
+});
