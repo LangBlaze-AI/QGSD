@@ -604,7 +604,7 @@ Only write the `## Improvements` section when `request_improvements: true` AND i
 Substitute the configured `MAX_ROUNDS` for the literal below (e.g. `50` when
 `quorum.max_rounds: 50`).
 
-```
+```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  nForma ► QUORUM ESCALATING — NO CONSENSUS AFTER {MAX_ROUNDS} ROUNDS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
