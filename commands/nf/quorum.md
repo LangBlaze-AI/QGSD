@@ -432,7 +432,14 @@ If all valid (non-UNAVAIL) external voters agree (CE-3 unanimity) → skip to **
 
 ### Deliberation rounds (R3.3)
 
-Run up to 9 deliberation rounds (max 10 total rounds including Round 1).
+**Read the round cap from config first.** `MAX_ROUNDS = quorum.max_rounds` (default: 10),
+read the same way as `quorum.full_convergence`. It is the total round budget including
+Round 1, so the deliberation loop runs up to `MAX_ROUNDS - 1` further rounds. Every "10"
+below is shorthand for this configured value — a project that sets `quorum.max_rounds: 50`
+gets up to 50 rounds before escalation. The cap is always finite (config-loader clamps a
+missing or garbage value back to the default), so the loop can never run forever.
+
+Run up to `MAX_ROUNDS - 1` deliberation rounds (max `MAX_ROUNDS` total rounds including Round 1).
 
 For each round, dispatch one `Task(subagent_type="nf-quorum-slot-worker", model="haiku", ...)` per slot in **`$DISPATCH_LIST`** as **parallel sibling calls**. For Round 2+, write a prior-positions file and pass it via `--prior-positions-file`:
 
@@ -463,7 +470,7 @@ Populate `citations:` from the `citations:` field in each model's result file. I
 
 Workers are dispatched as **parallel sibling Tasks** per round. Between rounds (Bash scoreboard calls, set-availability) remain sequential.
 
-**Termination — full convergence (CE-5).** Read `quorum.full_convergence` from config (default: true). When true, `--request-improvements` is ON for **every** round (so each round collects `improvements:`), and after each round apply this check (Claude's advisory position is never counted):
+**Termination — full convergence (CE-5).** Read `quorum.full_convergence` (default: true) and `quorum.max_rounds` (i.e. `MAX_ROUNDS`, default 10) from config. When `full_convergence` is true, `--request-improvements` is ON for **every** round (so each round collects `improvements:`), and after each round apply this check (Claude's advisory position is never counted). The loop stops on convergence (below) or when the round count reaches `MAX_ROUNDS` (escalate) — whichever comes first:
 
 1. **Any BLOCK** from a valid external voter → consensus NOT reached (CE-2). Continue deliberation.
 2. **Unanimous** (all valid external voters APPROVE, CE-3) → collect the `improvements:` field from every valid voter this round. Maintain a running `REVIEWED_IMPROVEMENTS` set (improvements circulated in a prior round) and compute `NEW_IMPROVEMENTS` = this round's proposals not already in that set (de-duplicated semantically, not just by string).
@@ -472,7 +479,7 @@ Workers are dispatched as **parallel sibling Tasks** per round. Between rounds (
 
 When `quorum.full_convergence` is false, stop **immediately** at the first unanimous round (step 2's first check only — legacy CE-3 behavior), regardless of open improvements.
 
-After 10 total rounds without convergence → **Escalate**, surfacing the unanimous verdict (if one was reached) plus the still-open improvements that had not yet dried up.
+After `MAX_ROUNDS` total rounds without convergence → **Escalate**, surfacing the unanimous verdict (if one was reached) plus the still-open improvements that had not yet dried up.
 
 ### Consensus output
 
@@ -592,11 +599,14 @@ Rounds: <N>
 
 Only write the `## Improvements` section when `request_improvements: true` AND improvements were proposed. Omit entirely when no improvements or when `request_improvements` is not set.
 
-### Escalate — no consensus after 10 rounds
+### Escalate — no consensus after `MAX_ROUNDS` rounds
+
+Substitute the configured `MAX_ROUNDS` for the literal below (e.g. `50` when
+`quorum.max_rounds: 50`).
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- nForma ► QUORUM ESCALATING — NO CONSENSUS AFTER 10 ROUNDS
+ nForma ► QUORUM ESCALATING — NO CONSENSUS AFTER {MAX_ROUNDS} ROUNDS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Question: [question]
@@ -645,7 +655,7 @@ node "$HOME/.claude/nf-bin/update-scoreboard.cjs" \
 
 Run one command per model per round. Each call is atomic and idempotent.
 
-Write QUORUM_DEBATE.md using the debate file path rule above. Set `Consensus: ESCALATED`. Include one `## Round N` section per round (all 10). Set `## Outcome` to the core disagreement summary and Claude's recommendation from the escalation output above.
+Write QUORUM_DEBATE.md using the debate file path rule above. Set `Consensus: ESCALATED`. Include one `## Round N` section per round that occurred (up to `MAX_ROUNDS`). Set `## Outcome` to the core disagreement summary and Claude's recommendation from the escalation output above.
 
 ---
 
@@ -728,7 +738,7 @@ Determine consensus:
 - Mixed APPROVE/FLAG → `FLAG`
 - All UNAVAIL → stop: "All quorum models unavailable — cannot evaluate."
 
-If split: run deliberation (up to 9 deliberation rounds, max 10 total rounds including Round 1) with traces always included in context.
+If split: run deliberation (up to `MAX_ROUNDS - 1` deliberation rounds, max `MAX_ROUNDS` total rounds including Round 1; `MAX_ROUNDS = quorum.max_rounds`, default 10) with traces always included in context.
 
 ### Output consensus verdict
 
@@ -771,4 +781,4 @@ Update the scoreboard with the same `update-scoreboard.cjs` pattern as Mode A.
 
 Run one command per model per round. Each call is atomic and idempotent — if re-run for the same task+round+model it overwrites that model's vote and recalculates from scratch.
 
-Write QUORUM_DEBATE.md using the debate file path rule above. Set `Consensus:` to the final consensus verdict (APPROVE / REJECT / FLAG). Include one `## Round N` section per round that occurred. Set `## Outcome` to the rationale from the verdict output above. If 10 rounds elapsed without full consensus, set `Consensus: ESCALATED`.
+Write QUORUM_DEBATE.md using the debate file path rule above. Set `Consensus:` to the final consensus verdict (APPROVE / REJECT / FLAG). Include one `## Round N` section per round that occurred. Set `## Outcome` to the rationale from the verdict output above. If `MAX_ROUNDS` rounds elapsed without full consensus, set `Consensus: ESCALATED`.

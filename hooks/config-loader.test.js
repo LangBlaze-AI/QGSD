@@ -891,3 +891,83 @@ test('ADVERSARIAL: quorum.maxSize exceeding quorum_active count is not validated
     fs.rmSync(projectDir, { recursive: true, force: true });
   }
 });
+
+// ── R3.3 round cap: quorum.max_rounds is configurable, defaulted, clamped ──
+// The deliberation loop's total round budget (Round 1 + deliberation) before it
+// escalates. Configurable so a project can "round until dry" (e.g. 50); defaulted
+// and clamped so a dropped or garbage value can never mean "loop forever".
+
+test('QMR1: the shipped default round cap is 10', async (t) => {
+  // Asserted against DEFAULT_CONFIG, not loadConfig(): loadConfig also merges the real
+  // global ~/.claude/nf.json on this machine (the same limitation TC2 notes), which may
+  // legitimately override max_rounds. The shipped-default contract lives in DEFAULT_CONFIG.
+  assert.equal(DEFAULT_CONFIG.quorum.max_rounds, 10, 'shipped default must stay 10');
+  assert.ok(Number.isInteger(DEFAULT_CONFIG.quorum.max_rounds), 'default must be a finite integer');
+});
+
+test('QMR2: an explicit project max_rounds overrides the global/default', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-qmr2-'));
+  try {
+    writeTempConfig(dir, JSON.stringify({ quorum: { max_rounds: 33 } }));
+    assert.equal(loadConfig(dir).quorum.max_rounds, 33, 'a project value must override the global');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('QMR3: a partial quorum block does not drop the other consensus keys', async (t) => {
+  // The core hazard: `quorum: { max_rounds: 50 }` shallow-merges over DEFAULT_CONFIG
+  // and would otherwise leave min_live_voters / full_convergence / maxSize undefined —
+  // silently disabling the consensus floor and CE-5. All four must survive.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-qmr3-'));
+  try {
+    writeTempConfig(dir, JSON.stringify({ quorum: { max_rounds: 33 } }));
+    const q = loadConfig(dir).quorum;
+    assert.equal(q.max_rounds, 33);
+    assert.equal(q.min_live_voters, 2, 'min_live_voters must be restored');
+    assert.equal(q.full_convergence, true, 'full_convergence must be restored');
+    assert.equal(q.maxSize, 4, 'maxSize must be restored');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('QMR4: a garbage max_rounds is clamped to the default, never left unbounded', async (t) => {
+  for (const bad of [0, -5, 2.5, 'fifty', null]) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-qmr4-'));
+    try {
+      writeTempConfig(dir, JSON.stringify({ quorum: { max_rounds: bad } }));
+      const mr = loadConfig(dir).quorum.max_rounds;
+      assert.equal(mr, 10, `max_rounds=${JSON.stringify(bad)} must clamp to 10, got ${mr}`);
+      assert.ok(Number.isInteger(mr) && mr >= 1, 'the cap must always be a finite positive integer');
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
+test('QMR5: an ABSENT maxSize in a partial block restores silently (no warning)', async (t) => {
+  // Regression: adding max_rounds without maxSize used to emit a maxSize warning on
+  // every hook run. An absent key is a partial-merge drop, not a user error.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-qmr5-'));
+  const origWrite = process.stderr.write;
+  let warned = false;
+  try {
+    writeTempConfig(dir, JSON.stringify({ quorum: { max_rounds: 50 } }));
+    process.stderr.write = (s) => { if (/maxSize/.test(String(s))) warned = true; return true; };
+    loadConfig(dir);
+  } finally {
+    process.stderr.write = origWrite;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  assert.equal(warned, false, 'a valid partial quorum block must not warn about maxSize');
+});
+
+test('QMR6: a genuinely garbage maxSize still warns (real errors stay visible)', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-qmr6-'));
+  const origWrite = process.stderr.write;
+  let warned = false;
+  try {
+    writeTempConfig(dir, JSON.stringify({ quorum: { maxSize: 'four' } }));
+    process.stderr.write = (s) => { if (/maxSize/.test(String(s))) warned = true; return true; };
+    loadConfig(dir);
+  } finally {
+    process.stderr.write = origWrite;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  assert.equal(warned, true, 'a provided-but-invalid maxSize must still warn');
+});

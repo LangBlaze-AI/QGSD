@@ -143,6 +143,7 @@ const DEFAULT_CONFIG = {
     preferSub: false,
     min_live_voters: 2,  // minimum live voters for valid consensus (issue #170)
     full_convergence: true,  // CE-5: loop until unanimous AND no new improvements (all reviewed by all)
+    max_rounds: 10,  // R3.3: total rounds (incl. Round 1) before escalate. Backstop for CE-5 convergence; raise for "round until dry".
   },
   // agent_config: per-slot metadata.
   //   auth_type: "sub" (subscription, flat-fee) | "api" (pay-per-token)
@@ -418,7 +419,14 @@ function validateConfig(config) {
       delete config.quorum.minSize;
     }
     if (!Number.isInteger(config.quorum.maxSize) || config.quorum.maxSize < 1) {
-      process.stderr.write('[nf] WARNING: nf.json: quorum.maxSize must be a positive integer; defaulting to 4\n');
+      // An ABSENT maxSize is the partial-merge drop (a `quorum: { max_rounds: N }`
+      // override shallow-merges and loses the other keys) — restore it silently, the
+      // same as min_live_voters / full_convergence / max_rounds below. Only warn when
+      // the key was actually PROVIDED but garbage (e.g. "four", 0, -1) — a real config
+      // error the user should see, not noise on every hook run for a valid partial block.
+      if (config.quorum.maxSize !== undefined) {
+        process.stderr.write('[nf] WARNING: nf.json: quorum.maxSize must be a positive integer; defaulting to 4\n');
+      }
       config.quorum.maxSize = DEFAULT_CONFIG.quorum.maxSize;
     }
     if (typeof config.quorum.preferSub !== 'boolean') {
@@ -435,6 +443,12 @@ function validateConfig(config) {
     // full_convergence → undefined. Default it back to true unless explicitly a boolean.
     if (typeof config.quorum.full_convergence !== 'boolean') {
       config.quorum.full_convergence = DEFAULT_CONFIG.quorum.full_convergence;
+    }
+    // Same partial-merge gap for the R3.3 round cap: restore the default, and clamp a
+    // nonsensical value (< 1, non-integer) so the deliberation loop always has a finite
+    // upper bound — a dropped or garbage max_rounds must never mean "loop forever".
+    if (!Number.isInteger(config.quorum.max_rounds) || config.quorum.max_rounds < 1) {
+      config.quorum.max_rounds = DEFAULT_CONFIG.quorum.max_rounds;
     }
   }
 
