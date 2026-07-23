@@ -9,7 +9,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { findMcpToolViolations } = require('./skill-mcp-lint.cjs');
+const { findMcpToolViolations, VALID_TOOLS } = require('./skill-mcp-lint.cjs');
 
 const v = (s) => findMcpToolViolations(s, 'f.md');
 
@@ -42,6 +42,23 @@ describe('skill-mcp-lint detector', () => {
 
   it('flags a tool antigravity does not expose (the `ask` class)', () => {
     const r = v('mcp__antigravity-1__ask');
+    assert.equal(r.length, 1);
+    assert.equal(r[0].rule, 'mcp-bad-tool');
+  });
+
+  it('recognizes the kimi family (slot + real/shared tools)', () => {
+    // Non-vacuous: assert kimi is a KNOWN family with the expected tool surface.
+    // A plain deepEqual(v('mcp__kimi-1__kimi'), []) passes even if kimi is absent
+    // (an unknown slot is skipped, not validated → also []), so pin the family too.
+    assert.ok(Array.isArray(VALID_TOOLS.kimi), 'kimi must be a registered family');
+    assert.ok(VALID_TOOLS.kimi.includes('kimi'), 'kimi family must expose its main tool');
+    assert.deepEqual(v('mcp__kimi-1__kimi'), []);
+    assert.deepEqual(v('mcp__kimi-1__identity'), []);
+    assert.deepEqual(v('mcp__kimi-1__health_check'), []);
+  });
+
+  it('flags a tool kimi does not expose (the `ask` class)', () => {
+    const r = v('mcp__kimi-1__ask');
     assert.equal(r.length, 1);
     assert.equal(r[0].rule, 'mcp-bad-tool');
   });

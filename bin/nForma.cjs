@@ -2559,6 +2559,7 @@ async function updateAgentsFlow() {
     copilot:  { installType: 'gh-extension', ext: 'github/gh-copilot'  },
     ccr:      { installType: 'npm-global',   pkg: 'claude-code-router'  },
     antigravity: { installType: 'curl-script', bin: 'agy', installCommand: 'curl -fsSL https://antigravity.google/cli/install.sh | bash' },
+    kimi:        { installType: 'self-update', bin: 'kimi', installCommand: 'kimi upgrade' },
   };
 
   const lines = ['{bold}Update Status{/bold}', '─'.repeat(50)];

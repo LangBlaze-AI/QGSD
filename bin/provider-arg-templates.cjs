@@ -33,6 +33,9 @@ const FAMILY_ARGS_TEMPLATE = {
   copilot:     ['-p', '{prompt}', '--allow-all-tools', '--no-color', '-s'],
   // antigravity (`agy` binary): print mode (verified against agy v1.0.8 `-p`/--print)
   antigravity: ['-p', '{prompt}'],
+  // kimi (`kimi` binary, Kimi Code): `-p/--prompt <prompt>` runs one prompt
+  // non-interactively and prints the response (verified against kimi v0.27.0 --help).
+  kimi:        ['-p', '{prompt}'],
 };
 
 /**

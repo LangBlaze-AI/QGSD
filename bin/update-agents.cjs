@@ -27,6 +27,10 @@ const CLI_META = {
   // npm/gh package — detectCurrent/detectLatest fall through to null for this
   // installType, so it shows as "unknown" rather than crashing the updater.
   antigravity: { installType: 'curl-script', bin: 'agy', installCommand: 'curl -fsSL https://antigravity.google/cli/install.sh | bash' },
+  // Kimi Code self-updates via `kimi upgrade`; installType 'self-update' isn't
+  // npm-global/gh-extension, so detectCurrent/detectLatest fall through to null
+  // and it shows "unknown" rather than crashing the updater (same as antigravity).
+  kimi:        { installType: 'self-update', bin: 'kimi', installCommand: 'kimi upgrade' },
 };
 
 // ---------------------------------------------------------------------------
