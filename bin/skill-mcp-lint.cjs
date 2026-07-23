@@ -24,6 +24,7 @@ const VALID_TOOLS = {
   copilot: ['copilot', 'suggest', 'explain', 'identity', 'health_check', 'deep_health_check', 'help', 'ping'],
   opencode: ['opencode', 'opencode_check_update', 'identity', 'health_check', 'deep_health_check', 'help', 'ping'],
   antigravity: ['antigravity', 'identity', 'health_check', 'deep_health_check', 'help', 'ping'],
+  kimi:        ['kimi', 'identity', 'health_check', 'deep_health_check', 'help', 'ping'],
 };
 const FAMILIES = Object.keys(VALID_TOOLS);
 

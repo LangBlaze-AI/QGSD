@@ -20,6 +20,7 @@ const COST_PER_M = {
   'opencode':  { input: 2.00,  output: 8.00 },
   'copilot':   { input: 0.00,  output: 0.00, subscription: true },
   'antigravity': { input: 0.00, output: 0.00, subscription: true },
+  'kimi':      { input: 0.00,  output: 0.00, subscription: true },  // Kimi Code via managed oauth (flat-fee)
   'default':   { input: 3.00,  output: 15.00 },
 };
 

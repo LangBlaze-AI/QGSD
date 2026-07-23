@@ -49,6 +49,7 @@ try {
       { family: 'opencode',    bin: 'opencode' },
       { family: 'copilot',     bin: 'copilot' },
       { family: 'antigravity', bin: 'agy' },
+      { family: 'kimi',        bin: 'kimi' },
     ];
     const found = [];
     for (const { family, bin } of KNOWN_CLIS) {
@@ -88,6 +89,7 @@ function getInstallHint(mainTool) {
     opencode: 'npm i -g opencode',
     copilot:  'npm i -g @githubnext/github-copilot-cli',
     antigravity: 'curl -fsSL https://antigravity.google/cli/install.sh | bash',
+    kimi:     'kimi upgrade  # Kimi Code self-updates; see kimi.com for first install',
   };
   return hints[mainTool] || '';
 }
@@ -415,6 +417,7 @@ const NF_KEYWORD_MAP = {
   cursor:   { keywords: ['cursor'],   defaultPrefix: 'mcp__cursor-1__'     },
   windsurf: { keywords: ['windsurf', 'codeium'], defaultPrefix: 'mcp__windsurf-1__' },
   antigravity: { keywords: ['antigravity'], defaultPrefix: 'mcp__antigravity-1__' },
+  kimi:     { keywords: ['kimi'],     defaultPrefix: 'mcp__kimi-1__'      },
   augment:  { keywords: ['augment'],  defaultPrefix: 'mcp__augment-1__'  },
   trae:     { keywords: ['trae'],     defaultPrefix: 'mcp__trae-1__'      },
   cline:    { keywords: ['cline'],    defaultPrefix: 'mcp__cline-1__'     },
@@ -611,7 +614,7 @@ function ensureMcpSlotsFromProviders() {
 
           // Step 1: Sync slots from ~/.claude.json (fan-out creates MCP entries here)
           // Only include slots whose prefix is a known coding agent CLI.
-          const KNOWN_CLI_PREFIXES = ['claude', 'codex', 'gemini', 'opencode', 'copilot', 'kilo', 'cursor', 'windsurf', 'antigravity', 'augment', 'trae', 'cline'];
+          const KNOWN_CLI_PREFIXES = ['claude', 'codex', 'gemini', 'opencode', 'copilot', 'kilo', 'cursor', 'windsurf', 'antigravity', 'kimi', 'augment', 'trae', 'cline'];
           const { resolveCli } = require('./resolve-cli.cjs');
           const { argsTemplateFor } = require('./provider-arg-templates.cjs');
           const claudeJsonPath = path.join(os.homedir(), '.claude.json');
@@ -669,6 +672,7 @@ function ensureMcpSlotsFromProviders() {
             { family: 'opencode',    bin: 'opencode' },
             { family: 'copilot',     bin: 'copilot' },
             { family: 'antigravity', bin: 'agy' },
+            { family: 'kimi',        bin: 'kimi' },
           ];
           const existingNames = new Set(mcpSlots);
           for (const { family, bin } of KNOWN_CLIS) {

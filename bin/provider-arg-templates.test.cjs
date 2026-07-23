@@ -18,16 +18,18 @@ const { FAMILY_ARGS_TEMPLATE, argsTemplateFor, resolveArgsTemplate } = require('
 const { buildSpawnArgs } = require('./call-quorum-slot.cjs');
 
 describe('provider-arg-templates: canonical map', () => {
-  it('has a template for every quorum CLI family incl. antigravity', () => {
-    for (const fam of ['claude', 'codex', 'gemini', 'opencode', 'copilot', 'antigravity']) {
+  it('has a template for every quorum CLI family incl. antigravity + kimi', () => {
+    for (const fam of ['claude', 'codex', 'gemini', 'opencode', 'copilot', 'antigravity', 'kimi']) {
       assert.ok(Array.isArray(FAMILY_ARGS_TEMPLATE[fam]), `${fam} must have a template`);
       assert.ok(FAMILY_ARGS_TEMPLATE[fam].includes('{prompt}'), `${fam} template must carry {prompt}`);
     }
   });
 
-  it('codex uses exec; antigravity uses -p print mode', () => {
+  it('codex uses exec; antigravity + kimi use -p print mode', () => {
     assert.deepEqual(argsTemplateFor('codex'), ['exec', '{prompt}']);
     assert.deepEqual(argsTemplateFor('antigravity'), ['-p', '{prompt}']);
+    // kimi (Kimi Code) `-p/--prompt <prompt>` — verified against kimi v0.27.0 --help.
+    assert.deepEqual(argsTemplateFor('kimi'), ['-p', '{prompt}']);
   });
 
   it('argsTemplateFor returns a fresh copy (no shared mutation) and null for unknown', () => {
@@ -68,6 +70,11 @@ describe('buildSpawnArgs: no crash on a provider missing args_template', () => {
 
   it('antigravity slot (no args_template) dispatches via -p', () => {
     const { args } = buildSpawnArgs({ name: 'antigravity-1', mainTool: 'antigravity', cli: '/x/agy' }, 'HI');
+    assert.deepEqual(args, ['-p', 'HI']);
+  });
+
+  it('kimi slot (no args_template) dispatches via -p, prompt substituted verbatim', () => {
+    const { args } = buildSpawnArgs({ name: 'kimi-1', mainTool: 'kimi', cli: '/x/kimi' }, 'HI');
     assert.deepEqual(args, ['-p', 'HI']);
   });
 

@@ -248,6 +248,23 @@ test('SC-TC11b: --model antigravity is accepted and recorded', () => {
   }
 });
 
+// SC-TC11c: 'kimi' (Kimi Code CLI family) is a recognized --model — accepted and recorded.
+test('SC-TC11c: --model kimi is accepted and recorded', () => {
+  const sb = tmpScoreboard();
+  try {
+    const { exitCode } = runCLI([
+      '--model', 'kimi', '--result', 'TP', '--task', 'quick-99',
+      '--round', '1', '--verdict', 'APPROVE', '--scoreboard', sb,
+    ]);
+    assert.strictEqual(exitCode, 0, 'kimi must be a valid --model');
+    const data = JSON.parse(fs.readFileSync(sb, 'utf8'));
+    assert.ok(data.models.kimi, 'kimi must appear in the scoreboard models map');
+    assert.strictEqual(data.models.kimi.score, 1, 'one TP vote → score 1');
+  } finally {
+    cleanup(sb);
+  }
+});
+
 // SC-TC12: invalid --result value → exits 1
 test('SC-TC12: invalid --result value exits 1', () => {
   const { stderr, exitCode } = runCLI([
