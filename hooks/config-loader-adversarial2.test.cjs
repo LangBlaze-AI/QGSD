@@ -61,7 +61,7 @@ function writeNfJson(dir, content) {
 test('B1: fully-valid custom config round-trips unchanged (no over-coercion regression)', () => {
   const valid = {
     ...clone(DEFAULT_CONFIG),
-    quorum: { maxSize: 6, preferSub: true, min_live_voters: 3, full_convergence: false },
+    quorum: { maxSize: 6, preferSub: true, min_live_voters: 3, full_convergence: false, max_rounds: 25 },
     circuit_breaker: {
       oscillation_depth: 4,
       commit_window: 8,
@@ -94,6 +94,7 @@ test('B1: fully-valid custom config round-trips unchanged (no over-coercion regr
   // Every customized field preserved verbatim.
   assert.equal(after.quorum.maxSize, 6);
   assert.equal(after.quorum.preferSub, true);
+  assert.equal(after.quorum.max_rounds, 25, 'a valid custom max_rounds must not be coerced to the default');
   assert.deepEqual(after.circuit_breaker, before.circuit_breaker, 'valid circuit_breaker untouched');
   assert.deepEqual(after.context_monitor, before.context_monitor, 'valid context_monitor untouched');
   assert.deepEqual(after.budget, before.budget, 'valid budget untouched');
