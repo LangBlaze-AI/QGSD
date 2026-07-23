@@ -497,7 +497,7 @@ const {
   probeAndPersistKey,
 } = pure;
 
-const { updateAgents, getUpdateStatuses } = require('./update-agents.cjs');
+const { updateAgents, getUpdateStatuses, resolveUpdateCommand } = require('./update-agents.cjs');
 const reqCore = require('./requirements-core.cjs');
 const principleMapping = require('./principle-mapping.cjs');
 
@@ -2624,14 +2624,17 @@ async function updateAgentsFlow() {
   const results = [];
   for (const { name, meta } of toUpdate) {
     setContent('Update Agents', `{gray-fg}Updating ${name}…{/}`);
-    let cmd, args;
-    if (meta.installType === 'npm-global') {
-      cmd = 'npm'; args = ['install', '-g', `${meta.pkg}@latest`];
-    } else {
-      cmd = 'gh'; args = ['extension', 'upgrade', 'copilot'];
+    // Shared resolver (update-agents.cjs) — the single source of truth. The old
+    // inline `else` hardcoded `gh extension upgrade copilot`, so every non-npm
+    // family (antigravity curl-script, kimi self-update) was "updated" with
+    // copilot's command. Route through resolveUpdateCommand instead.
+    const c = resolveUpdateCommand(meta);
+    if (!c) {
+      results.push(`{yellow-fg}? ${name} — no known update command (installType '${meta.installType}'); update manually{/}`);
+      continue;
     }
-    const res = spawnSync(cmd, args, {
-      encoding: 'utf8', timeout: 60000,
+    const res = spawnSync(c.cmd, c.args, {
+      encoding: 'utf8', timeout: c.shell ? 120000 : 60000, shell: c.shell,
     });
     const ok = res.status === 0;
     results.push(ok

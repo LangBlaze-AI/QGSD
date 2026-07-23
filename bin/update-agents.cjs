@@ -260,20 +260,43 @@ function printTable(rows) {
 // Run update for one CLI
 // ---------------------------------------------------------------------------
 
+/**
+ * Resolve the update command for an agent from its install metadata.
+ * Single source of truth shared by this file's runUpdate AND nForma.cjs's
+ * updateAgentsFlow — they previously duplicated this logic, which is why the
+ * `else`-branch hardcoded copilot's command reached every non-npm family
+ * (antigravity's curl-script, kimi's self-update) with the wrong command.
+ * Returns { cmd, args, shell } or null when there is no known way to update.
+ */
+function resolveUpdateCommand(meta) {
+  if (!meta) return null;
+  if (meta.installType === 'npm-global' && meta.pkg) {
+    return { cmd: 'npm', args: ['install', '-g', `${meta.pkg}@latest`], shell: false };
+  }
+  if (meta.installType === 'gh-extension') {
+    return { cmd: 'gh', args: ['extension', 'upgrade', 'copilot'], shell: false };
+  }
+  // curl-script (antigravity), self-update (kimi), or any future family that
+  // carries an explicit installCommand — run it through a shell since it may
+  // contain a pipe (e.g. `curl … | bash`).
+  if (meta.installCommand) {
+    return { cmd: meta.installCommand, args: [], shell: true };
+  }
+  return null; // unknown installType with no installCommand — caller must handle
+}
+
 function runUpdate({ name, meta }) {
   try {
-    let result;
-    if (meta.installType === 'npm-global') {
-      result = spawnSync('npm', ['install', '-g', `${meta.pkg}@latest`], {
-        stdio: 'inherit',
-        timeout: 60000,
-      });
-    } else if (meta.installType === 'gh-extension') {
-      result = spawnSync('gh', ['extension', 'upgrade', 'copilot'], {
-        stdio: 'inherit',
-        timeout: 30000,
-      });
+    const c = resolveUpdateCommand(meta);
+    if (!c) {
+      console.log(`\n  \x1b[33m? ${name}: no known update command (installType '${meta && meta.installType}') — update manually\x1b[0m`);
+      return;
     }
+    const result = spawnSync(c.cmd, c.args, {
+      stdio: 'inherit',
+      shell: c.shell,
+      timeout: c.shell ? 120000 : 60000,
+    });
     if (result && result.status === 0) {
       console.log(`\n  Updated: ${name}`);
     } else {
@@ -372,4 +395,4 @@ async function updateAgents() {
 // Exports
 // ---------------------------------------------------------------------------
 
-module.exports = { updateAgents, getUpdateStatuses };
+module.exports = { updateAgents, getUpdateStatuses, resolveUpdateCommand };
