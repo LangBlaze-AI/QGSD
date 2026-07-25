@@ -20,6 +20,10 @@ describe('buildResumeArgv — per-family resume argv', () => {
   });
 
   it('claude: round-2 argv is [-p, --resume, <id>, {prompt}]', () => {
+    // Note: --output-format json IS required for FRESH (to extract session id
+    // from stdout), but NOT for resume (we already have the id, no stdout parse).
+    // buildResumeArgv returns the round-2 shape only; the fresh-vs-resume
+    // distinction lives in cap.freshArgs vs the helper's dispatch logic.
     const argv = buildResumeArgv('claude', '{prompt}', 'sess-xyz');
     assert.deepEqual(argv, ['-p', '--resume', 'sess-xyz', '{prompt}']);
   });
@@ -75,7 +79,7 @@ describe('parseSessionId — round-1 stdout parser', () => {
   });
 
   it('claude: extracts session_id from --output-format json', () => {
-    const stdout = '{"session_id":"sess-123","result":"ok"}';
+    const stdout = '{"is_error":false,"duration_api_ms":3409,"session_id":"sess-123","result":"ok"}';
     assert.equal(parseSessionId('claude', stdout), 'sess-123');
   });
 
@@ -186,6 +190,21 @@ describe('QUORUM_RESUME registry — capability matrix', () => {
       const r = cap.resumeArgs('P', 'sid');
       assert.ok(f.includes('P'), `${family} freshArgs must carry prompt`);
       assert.ok(r.includes('P'), `${family} resumeArgs must carry prompt`);
+    }
+  });
+
+  it('every family: freshArgs/resumeArgs are valid arrays (no undefined/null/empty)', () => {
+    // The wire-up in call-quorum-slot.cjs replaces argsTemplate with this argv
+    // on round 2+. A malformed argv (undefined / null element / empty array)
+    // would crash spawn(). Guard against accidental edits.
+    for (const [family, cap] of Object.entries(QUORUM_RESUME)) {
+      for (const variant of [cap.freshArgs('P'), cap.resumeArgs('P', 'sid')]) {
+        assert.ok(Array.isArray(variant), `${family} argv must be an array`);
+        assert.ok(variant.length > 0, `${family} argv must not be empty`);
+        for (const arg of variant) {
+          assert.equal(typeof arg, 'string', `${family} argv element must be a string`);
+        }
+      }
     }
   });
 
