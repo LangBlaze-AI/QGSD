@@ -98,7 +98,7 @@ function buildResumeArgv(family, prompt, sessionId) {
   if (!cap || !cap.supportsSession) return [];
   if (family === 'agy' || family === 'kimi') {
     // CWD-scoped — no id needed; `-c` plus the original prompt form.
-    return ['-c', '{prompt}'];
+    return ['-c', '-p', '{prompt}'];
   }
   if (!sessionId) return [];
   // codex:  ['exec', 'resume', <id>, '--json', '--skip-git-repo-check', '{prompt}']

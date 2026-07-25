@@ -373,7 +373,15 @@ const persistentThreads = (() => {
     return !!(cfg && cfg.quorum && cfg.quorum.persistent_threads === true);
   } catch (_) { return false; }
 })();
-const invocationId = `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+// QPERSIST-04 (stable invocation id): round 1 writes a session marker, round 2
+// reads it. If invocationId were generated per-process, each call-quorum-slot
+// invocation would have a different id and round 2 couldn't find round 1's marker.
+// The orchestrator (commands/nf/quorum.md / the slot-worker agent) is
+// expected to pass QUORUM_INVOCATION_ID in the environment so all rounds of one
+// quorum run agree. If absent, fall back to a per-process id — that lets the
+// feature work for direct CLI testing but is broken in the live dispatch.
+const invocationId = process.env.QUORUM_INVOCATION_ID
+  || `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const repoDir = findProjectRoot(spawnCwd);
 
 // QPERSIST-05 (GC): on every invocation, sweep stale session files (>24h) so the
@@ -1117,15 +1125,19 @@ async function main() {
     // want to resume a broken session).
     if (persistentThreads) {
       try {
-        const newId = parseSessionId(provider.mainTool, result);
-        if (newId) {
-          sessionStore.write(repoDir, slot, invocationId, {
-            family: provider.mainTool,
-            thread_id: newId,
-            started_at: new Date().toISOString(),
-            round: Number(roundNum) || 1,
-          });
-        }
+        const family = provider.mainTool;
+        const cap = (() => { try { return require('./quorum-resume.cjs').QUORUM_RESUME[family]; } catch (_) { return null; } })();
+        // For CWD-scoped families (agy, kimi), parseSessionId returns null but the
+        // family supports session continuity via -c (CWD). Write a marker with
+        // thread_id:null so round 2+ can detect "this family is CWD-scoped, use -c"
+        // even though there's no explicit id to resume.
+        const newId = cap ? parseSessionId(family, result) : null;
+        sessionStore.write(repoDir, slot, invocationId, {
+          family,
+          thread_id: newId,           // null for CWD-scoped (agy, kimi); uuid for codex/claude
+          started_at: new Date().toISOString(),
+          round: Number(roundNum) || 1,
+        });
       } catch (_) { /* fail-open: session persistence is best-effort */ }
     }
     process.stdout.write(result);

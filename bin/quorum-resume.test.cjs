@@ -28,19 +28,21 @@ describe('buildResumeArgv — per-family resume argv', () => {
     assert.deepEqual(argv, ['-p', '--resume', 'sess-xyz', '{prompt}']);
   });
 
-  it('agy: round-2 argv is [-c, {prompt}] (CWD-scoped, no id needed)', () => {
+  it('agy: round-2 argv is [-c, -p, {prompt}] (CWD-scoped, no id needed, -p delivers the prompt)', () => {
+    // The -p flag is required: agy reads the prompt from -p in non-interactive
+    // mode (without it, agy reads from stdin and the CLI hangs).
     const argv = buildResumeArgv('agy', '{prompt}', null);
-    assert.deepEqual(argv, ['-c', '{prompt}']);
+    assert.deepEqual(argv, ['-c', '-p', '{prompt}']);
   });
 
   it('agy: round-2 still works WITH an id in the arg (id is ignored, not required)', () => {
     const argv = buildResumeArgv('agy', '{prompt}', 'ignored-id');
-    assert.deepEqual(argv, ['-c', '{prompt}']);
+    assert.deepEqual(argv, ['-c', '-p', '{prompt}']);
   });
 
-  it('kimi: round-2 argv is [-c, {prompt}] (CWD-scoped)', () => {
+  it('kimi: round-2 argv is [-c, -p, {prompt}] (CWD-scoped)', () => {
     const argv = buildResumeArgv('kimi', '{prompt}', null);
-    assert.deepEqual(argv, ['-c', '{prompt}']);
+    assert.deepEqual(argv, ['-c', '-p', '{prompt}']);
   });
 
   it('returns [] when session id is absent AND the family requires an id (codex, claude)', () => {
