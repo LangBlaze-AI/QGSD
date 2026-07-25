@@ -61,7 +61,7 @@ function writeNfJson(dir, content) {
 test('B1: fully-valid custom config round-trips unchanged (no over-coercion regression)', () => {
   const valid = {
     ...clone(DEFAULT_CONFIG),
-    quorum: { maxSize: 6, preferSub: true, min_live_voters: 3, full_convergence: false, max_rounds: 25 },
+    quorum: { maxSize: 6, preferSub: true, min_live_voters: 3, full_convergence: false, max_rounds: 25, persistent_threads: false },
     circuit_breaker: {
       oscillation_depth: 4,
       commit_window: 8,
@@ -74,7 +74,7 @@ test('B1: fully-valid custom config round-trips unchanged (no over-coercion regr
     budget: { session_limit_tokens: 200000, warn_pct: 50, downgrade_pct: 80 },
     stall_detection: { timeout_s: 120, consecutive_threshold: 3, check_commits: false },
     smart_compact: { enabled: false, context_warn_pct: 45 },
-    quorum_active: ['codex-1', 'gemini-1', 'copilot-1'],
+    quorum_active: ['codex-1', 'claude-1', 'copilot-1'],
     orchestrator_slot_family: 'codex',
     hook_profile: 'strict',
     fail_mode: 'closed',
@@ -179,7 +179,7 @@ test('B3: hook_profile, quorum_active, orchestrator_slot_family, hook_priorities
   const config = quiet(() => validateConfig({
     ...clone(DEFAULT_CONFIG),
     hook_profile: 'paranoid',                                  // unknown profile
-    quorum_active: ['codex-1', 123, '', '  ', null, 'gemini-1'], // mixed junk
+    quorum_active: ['codex-1', 123, '', '  ', null, 'claude-1'], // mixed junk
     orchestrator_slot_family: 42,                              // non-string
     hook_priorities: { 'nf-stop': -5, 'nf-prompt': 1.5, 'nf-ok': 200 }, // neg/float/valid
   }));
@@ -190,7 +190,7 @@ test('B3: hook_profile, quorum_active, orchestrator_slot_family, hook_priorities
   assert.ok(shouldRunHook('nf-prompt', config.hook_profile), 'coerced profile must resolve in shouldRunHook');
 
   // quorum_active keeps only non-empty strings.
-  assert.deepEqual(config.quorum_active, ['codex-1', 'gemini-1'],
+  assert.deepEqual(config.quorum_active, ['codex-1', 'claude-1'],
     '🔴 quorum_active not filtered to non-empty strings (config-loader.js ~391)');
 
   // orchestrator_slot_family non-string → default string.
