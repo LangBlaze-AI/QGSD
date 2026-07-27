@@ -364,6 +364,31 @@ const spawnCwd  = getArg('--cwd') ?? process.cwd();
 const allowedTools = getArg('--allowed-tools'); // EXEC-01: e.g. "Read,Grep,Glob" for review-only slots
 const innerOutputFile = getArg('--output-file');  // Defense-in-depth: write result file from child process
 const innerDispatchNonce = getArg('--dispatch-nonce');  // Nonce from parent for file authenticity
+// QPERSIST-03 (thread-persistence opt-in): the flag, an invocation id (per quorum run),
+// and the repo dir for the session-id store. All three default to "off" / generated so
+// existing callers see no behavior change.
+const persistentThreads = (() => {
+  try {
+    const cfg = loadConfig(process.cwd());
+    return !!(cfg && cfg.quorum && cfg.quorum.persistent_threads === true);
+  } catch (_) { return false; }
+})();
+// QPERSIST-04 (stable invocation id): round 1 writes a session marker, round 2
+// reads it. If invocationId were generated per-process, each call-quorum-slot
+// invocation would have a different id and round 2 couldn't find round 1's marker.
+// The orchestrator (commands/nf/quorum.md / the slot-worker agent) is
+// expected to pass QUORUM_INVOCATION_ID in the environment so all rounds of one
+// quorum run agree. If absent, fall back to a per-process id — that lets the
+// feature work for direct CLI testing but is broken in the live dispatch.
+const invocationId = process.env.QUORUM_INVOCATION_ID
+  || `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const repoDir = findProjectRoot(spawnCwd);
+
+// QPERSIST-05 (GC): on every invocation, sweep stale session files (>24h) so the
+// .planning/quorum/sessions/ directory doesn't grow unbounded across invocations.
+// Runs regardless of the persistent_threads flag (cheap, fail-open) — even callers
+// who never opt in shouldn't leak disk.
+try { sessionStore.gcStale(repoDir); } catch (_) { /* fail-open */ }
 
 // #202: warn (stderr) on any --flag this child does not parse, so future
 // parent→child dispatch-argv contract drift is visible instead of silent.
@@ -413,7 +438,11 @@ function readStdin() {
 }
 
 // ─── SHELL-ESCAPE-01: Args builder (extracted for testability) ────────────────
-function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
+const { buildResumeArgv, parseSessionId } = require('./quorum-resume.cjs');
+const sessionStore = require('./quorum-sessions-store.cjs');
+const { loadConfig } = require('../hooks/config-loader');
+
+function buildSpawnArgs(provider, prompt, allowedToolsFlag, opts) {
   // Match `ccr` as a path SEGMENT/basename, not a raw substring: a plain
   // `.includes('ccr')` false-matches innocent paths (e.g. /Users/mccray/bin/gemini),
   // wrongly flagging the slot as CCR and neutralizing $/!/backticks in its prompt.
@@ -444,7 +473,7 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
   // lack args_template; `.map` on undefined crashed every slot opaquely. Fall back
   // to the canonical per-family template (by mainTool), and fail LOUD with an
   // actionable message if the family is unknown — never the bare TypeError.
-  const argsTemplate = resolveArgsTemplate(provider);
+  let argsTemplate = resolveArgsTemplate(provider);
   if (!Array.isArray(argsTemplate)) {
     throw new Error(
       `provider ${provider.name || '(unnamed)'} has no args_template and family ` +
@@ -461,6 +490,16 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag) {
       `provider ${provider.name || '(unnamed)'} args_template has no {prompt} placeholder ` +
       `(${JSON.stringify(argsTemplate)}) — the prompt would be silently dropped; fix providers.json.`
     );
+  }
+  // QPERSIST-01 (opt-in thread persistence): if quorum.persistent_threads is on AND
+  // a stored session id exists for this slot/invocation, REPLACE argsTemplate with
+  // the family-specific resume argv. The resume argv carries `{prompt}` so the
+  // existing substitution loop below applies uniformly. Round 1 has no stored id →
+  // falls through to fresh.
+  if (opts && opts.persistentThreads && opts.repoDir && opts.slotName && opts.invocationId) {
+    const stored = sessionStore.read(opts.repoDir, opts.slotName, opts.invocationId);
+    const resumeFrag = buildResumeArgv(provider.mainTool, '{prompt}', stored && stored.thread_id);
+    if (resumeFrag.length > 0) argsTemplate = resumeFrag;
   }
   // Substitute the {prompt} placeholder. Handle both a bare element (`'{prompt}'`)
   // AND an embedded form (`'--prompt={prompt}'`), and replace every occurrence —
@@ -506,8 +545,8 @@ function stallTimeoutFor(provider) {
   return Math.min(v, TIMEOUT_MAX);
 }
 
-function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag) {
-  const { args, useStdinPrompt, isCcr, promptMutated } = buildSpawnArgs(provider, prompt, allowedToolsFlag);
+function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts) {
+  const { args, useStdinPrompt, isCcr, promptMutated } = buildSpawnArgs(provider, prompt, allowedToolsFlag, resumeOpts);
   if (promptMutated) {
     // CCR-MUTATE-01: warn that the prompt was neutralized for CCR's shell re-spawn.
     process.stderr.write('[call-quorum-slot] WARNING: prompt_mutated=true — CCR neutralized $/!/backtick chars; review may cite mutilated code\n');
@@ -726,7 +765,7 @@ function spawnRotateCmd(cmdArray) {
   });
 }
 
-async function runSubprocessWithRotation(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag) {
+async function runSubprocessWithRotation(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts) {
   const rot      = provider.oauth_rotation;
   const max      = rot.max_retries ?? 3;
   const patterns = rot.retry_on_patterns ?? ['quota', 'resource_exhausted', 'unauthorized', '401', '403'];
@@ -740,7 +779,7 @@ async function runSubprocessWithRotation(provider, prompt, idleTimeoutMs, hardTi
     }
     try {
       // Wrap inner call with retry-with-backoff (each oauth attempt gets retry protection)
-      const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag), provider.name);
+      const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts), provider.name);
       const out = retryResult.result;
       totalRetryCount = attempt + retryResult.retryCount;
       if (matchesRotationPattern(out, patterns) && attempt < max) {
@@ -1000,12 +1039,15 @@ async function main() {
     let retryCount = 0;
 
     if (provider.type === 'subprocess') {
+      // QPERSIST-02 (resume opts): built once and threaded to both call shapes so
+      // thread-persistence semantics are identical for the rotation and non-rotation paths.
+      const resumeOpts = { persistentThreads, repoDir, slotName: slot, invocationId };
       if (provider.oauth_rotation?.enabled) {
-        const retryResult = await runSubprocessWithRotation(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools);
+        const retryResult = await runSubprocessWithRotation(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools, resumeOpts);
         result = retryResult.result;
         retryCount = retryResult.retryCount;
       } else {
-        const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools), slot);
+        const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools, resumeOpts), slot);
         result = retryResult.result;
         retryCount = retryResult.retryCount;
       }
@@ -1077,6 +1119,27 @@ async function main() {
     clearFailureOnSuccess(slot);
 
     writeInnerOutputFile(result);
+    // QPERSIST-04 (session-id persistence): capture this round's thread/session id
+    // so the next round's call-quorum-slot.cjs can pass it via --resume. Only the
+    // success path writes — a failed call doesn't update the stored id (we don't
+    // want to resume a broken session).
+    if (persistentThreads) {
+      try {
+        const family = provider.mainTool;
+        const cap = (() => { try { return require('./quorum-resume.cjs').QUORUM_RESUME[family]; } catch (_) { return null; } })();
+        // For CWD-scoped families (agy, kimi), parseSessionId returns null but the
+        // family supports session continuity via -c (CWD). Write a marker with
+        // thread_id:null so round 2+ can detect "this family is CWD-scoped, use -c"
+        // even though there's no explicit id to resume.
+        const newId = cap ? parseSessionId(family, result) : null;
+        sessionStore.write(repoDir, slot, invocationId, {
+          family,
+          thread_id: newId,           // null for CWD-scoped (agy, kimi); uuid for codex/claude
+          started_at: new Date().toISOString(),
+          round: Number(roundNum) || 1,
+        });
+      } catch (_) { /* fail-open: session persistence is best-effort */ }
+    }
     process.stdout.write(result);
     if (!result.endsWith('\n')) process.stdout.write('\n');
     appendTokenSentinel(slot);
