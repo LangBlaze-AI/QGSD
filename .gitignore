@@ -186,3 +186,4 @@ nf-benchmark/baseline.json
 # they accumulate one file per session forever. Local state, never committed.
 .claude/nf-session-seen-*.flag
 .copilot/nf-session-seen-*.flag
+.codex/nf-session-seen-*.flag

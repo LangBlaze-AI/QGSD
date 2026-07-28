@@ -5,6 +5,15 @@ const path = require('path');
 const os = require('os');
 const readline = require('readline');
 const crypto = require('crypto');
+const {
+  adaptCodexMarkdown,
+  configureCodexMcp,
+  convertMarkdownToCodexAgent,
+  ensureCodexProviders,
+  installCodexSkills,
+  removeCodexMcp,
+  removeCodexSkills,
+} = require('./codex-install.cjs');
 
 // Colors
 const cyan = '\x1b[36m';
@@ -317,9 +326,12 @@ function getGlobalDir(runtime, explicitDir = null) {
   }
   
   if (runtime === 'codex') {
-    // Codex: --config-dir > CODEX_CONFIG_DIR > ~/.codex
+    // Codex: --config-dir > CODEX_HOME > legacy CODEX_CONFIG_DIR > ~/.codex
     if (explicitDir) {
       return expandTilde(explicitDir);
+    }
+    if (process.env.CODEX_HOME) {
+      return expandTilde(process.env.CODEX_HOME);
     }
     if (process.env.CODEX_CONFIG_DIR) {
       return expandTilde(process.env.CODEX_CONFIG_DIR);
@@ -1082,6 +1094,43 @@ function writeSettings(settingsPath, settings) {
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
 }
 
+/**
+ * Remove nForma-owned registrations written to settings.json by legacy Codex
+ * installs. Preserve every unrelated user setting and hook.
+ */
+function cleanupLegacyCodexSettings(targetDir) {
+  const legacyPath = path.join(targetDir, 'settings.json');
+  if (!fs.existsSync(legacyPath)) return false;
+  const legacy = readSettings(legacyPath);
+  let modified = false;
+
+  if (legacy.hooks) {
+    for (const event of Object.keys(legacy.hooks)) {
+      if (!Array.isArray(legacy.hooks[event])) continue;
+      const before = legacy.hooks[event].length;
+      legacy.hooks[event] = legacy.hooks[event].filter(group =>
+        !(group.hooks || []).some(h => /[/\\]hooks[/\\]nf-/.test(h.command || ''))
+      );
+      if (legacy.hooks[event].length < before) modified = true;
+      if (legacy.hooks[event].length === 0) delete legacy.hooks[event];
+    }
+    if (Object.keys(legacy.hooks).length === 0) delete legacy.hooks;
+  }
+
+  if (legacy.statusLine && (legacy.statusLine.command || '').includes('nf-statusline')) {
+    delete legacy.statusLine;
+    modified = true;
+  }
+
+  if (!modified) return false;
+  if (Object.keys(legacy).length === 0) {
+    fs.unlinkSync(legacyPath);
+  } else {
+    writeSettings(legacyPath, legacy);
+  }
+  return true;
+}
+
 // Cache for attribution settings (populated once per runtime during install)
 const attributionCache = new Map();
 
@@ -1560,6 +1609,7 @@ function copyFlattenedCommands(srcDir, destDir, prefix, pathPrefix, runtime) {
  */
 function copyWithPathReplacement(srcDir, destDir, pathPrefix, runtime) {
   const isOpencode = runtime === 'opencode';
+  const isCodex = runtime === 'codex';
   const dirName = getDirName(runtime);
 
   // Clean install: remove existing destination to prevent orphaned files
@@ -1596,6 +1646,8 @@ function copyWithPathReplacement(srcDir, destDir, pathPrefix, runtime) {
         // Replace extension with .toml
         const tomlPath = destPath.replace(/\.md$/, '.toml');
         fs.writeFileSync(tomlPath, tomlContent);
+      } else if (isCodex) {
+        fs.writeFileSync(destPath, adaptCodexMarkdown(content, pathPrefix));
       } else {
         fs.writeFileSync(destPath, content);
       }
@@ -1709,6 +1761,7 @@ function cleanupOrphanedHooks(settings) {
  */
 function uninstall(isGlobal, runtime = 'claude') {
   const isOpencode = runtime === 'opencode';
+  const isCodex = runtime === 'codex';
   const dirName = getDirName(runtime);
 
   // Get the target directory based on runtime and install type
@@ -1768,6 +1821,18 @@ function uninstall(isGlobal, runtime = 'claude') {
     }
   }
 
+  if (isCodex) {
+    const officialSkillsDir = isGlobal
+      ? path.join(os.homedir(), '.agents', 'skills')
+      : path.join(process.cwd(), '.agents', 'skills');
+    const removedSkills = removeCodexSkills(path.join(targetDir, 'skills'))
+      + removeCodexSkills(officialSkillsDir);
+    if (removedSkills > 0) {
+      removedCount++;
+      console.log(`  ${green}✓${reset} Removed ${removedSkills} native Codex skill directories`);
+    }
+  }
+
   // 2. Remove nf directory
   const nfDir = path.join(targetDir, 'nf');
   if (fs.existsSync(nfDir)) {
@@ -1790,13 +1855,13 @@ function uninstall(isGlobal, runtime = 'claude') {
     console.log();
   }
 
-  // 3. Remove NF agents (nf-*.md files only)
+  // 3. Remove NF agents
   const agentsDir = path.join(targetDir, 'agents');
   if (fs.existsSync(agentsDir)) {
     const files = fs.readdirSync(agentsDir);
     let agentCount = 0;
     for (const file of files) {
-      if (file.startsWith('nf-') && file.endsWith('.md')) {
+      if (file.startsWith('nf-') && (file.endsWith('.md') || (isCodex && file.endsWith('.toml')))) {
         fs.unlinkSync(path.join(agentsDir, file));
         agentCount++;
       }
@@ -1819,11 +1884,13 @@ function uninstall(isGlobal, runtime = 'claude') {
   // 4. Remove NF hooks
   const hooksDir = path.join(targetDir, 'hooks');
   if (fs.existsSync(hooksDir)) {
-    const nfHooks = [
-      'nf-statusline.js', 'nf-check-update.js', 'nf-check-update.sh',
-      'nf-prompt.js', 'nf-stop.js', 'nf-circuit-breaker.js',
-      'nf-session-start.js', 'nf-check-update.js', 'nf-statusline.js',
-    ];
+    const nfHooks = isCodex
+      ? fs.readdirSync(hooksDir).filter(file => file.startsWith('nf-'))
+      : [
+          'nf-statusline.js', 'nf-check-update.js', 'nf-check-update.sh',
+          'nf-prompt.js', 'nf-stop.js', 'nf-circuit-breaker.js',
+          'nf-session-start.js', 'nf-check-update.js', 'nf-statusline.js',
+        ];
     let hookCount = 0;
     for (const hook of nfHooks) {
       const hookPath = path.join(hooksDir, hook);
@@ -1854,11 +1921,23 @@ function uninstall(isGlobal, runtime = 'claude') {
     }
   }
 
-  // 6. Clean up settings.json (remove NF hooks and statusline)
-  const settingsPath = path.join(targetDir, 'settings.json');
+  // 6. Clean up the runtime hook configuration.
+  const settingsPath = path.join(targetDir, isCodex ? 'hooks.json' : 'settings.json');
   if (fs.existsSync(settingsPath)) {
     let settings = readSettings(settingsPath);
     let settingsModified = false;
+
+    if (isCodex && settings.hooks) {
+      for (const event of Object.keys(settings.hooks)) {
+        const before = Array.isArray(settings.hooks[event]) ? settings.hooks[event].length : 0;
+        if (!before) continue;
+        settings.hooks[event] = settings.hooks[event].filter(entry =>
+          !(entry.hooks && entry.hooks.some(h => /[/\\]hooks[/\\]nf-/.test(h.command || '')))
+        );
+        if (settings.hooks[event].length < before) settingsModified = true;
+        if (settings.hooks[event].length === 0) delete settings.hooks[event];
+      }
+    }
 
     // Remove NF statusline if it references our hook (nf-* or old nf-*)
     if (settings.statusLine && settings.statusLine.command &&
@@ -2030,9 +2109,18 @@ function uninstall(isGlobal, runtime = 'claude') {
     }
 
     if (settingsModified) {
-      writeSettings(settingsPath, settings);
+      if (isCodex && Object.keys(settings).every(key => key === 'description')) {
+        fs.unlinkSync(settingsPath);
+      } else {
+        writeSettings(settingsPath, settings);
+      }
       removedCount++;
     }
+  }
+
+  if (isCodex && removeCodexMcp(path.join(targetDir, 'config.toml'))) {
+    removedCount++;
+    console.log(`  ${green}✓${reset} Removed nForma MCP servers from config.toml`);
   }
 
   // 6. For OpenCode, clean up permissions from opencode.json
@@ -2366,10 +2454,11 @@ function validateHookPaths(hooksDest, targetDir) {
  * @param {string} runtime - 'claude', 'opencode', or 'gemini'
  * @returns {string[]} List of error messages (empty if pass)
  */
-function validateStructuralIntegrity(targetDir, runtime) {
+function validateStructuralIntegrity(targetDir, runtime, codexSkillsDir = null) {
   const errors = [];
   const isOpencode = runtime === 'opencode';
   const isGemini = runtime === 'gemini';
+  const isCodex = runtime === 'codex';
 
   // Helper: Recursive file count
   const countFiles = (dir, filter) => {
@@ -2386,11 +2475,26 @@ function validateStructuralIntegrity(targetDir, runtime) {
     }
     return count;
   };
+  const collectFilesNamed = (dir, fileName) => {
+    if (!fs.existsSync(dir)) return [];
+    const matches = [];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        matches.push(...collectFilesNamed(fullPath, fileName));
+      } else if (entry.name === fileName) {
+        matches.push(fullPath);
+      }
+    }
+    return matches;
+  };
 
   // 1. Verify Commands (Expected: 60)
   const EXPECTED_COMMANDS = 60;
   let commandCount = 0;
-  if (isOpencode) {
+  if (isCodex) {
+    commandCount = countFiles(codexSkillsDir || path.join(targetDir, 'skills'), f => f === 'SKILL.md');
+  } else if (isOpencode) {
     commandCount = countFiles(path.join(targetDir, 'command'), f => f.startsWith('nf-') && f.endsWith('.md'));
   } else {
     const ext = isGemini ? '.toml' : '.md';
@@ -2403,7 +2507,8 @@ function validateStructuralIntegrity(targetDir, runtime) {
 
   // 2. Verify Agents (Expected: 17 for Claude/OpenCode, ~13 for Gemini)
   const EXPECTED_AGENTS = isGemini ? 13 : 17;
-  const agentCount = countFiles(path.join(targetDir, 'agents'), f => f.startsWith('nf-') && f.endsWith('.md'));
+  const agentExtension = isCodex ? '.toml' : '.md';
+  const agentCount = countFiles(path.join(targetDir, 'agents'), f => f.startsWith('nf-') && f.endsWith(agentExtension));
   if (agentCount < EXPECTED_AGENTS) {
     errors.push(`Agent count mismatch: expected at least ${EXPECTED_AGENTS}, found ${agentCount}`);
   }
@@ -2432,7 +2537,15 @@ function validateStructuralIntegrity(targetDir, runtime) {
   }
 
   // 4. Runtime Transformation Check
-  if (isOpencode) {
+  if (isCodex) {
+    const skillsDir = codexSkillsDir || path.join(targetDir, 'skills');
+    for (const skillFile of collectFilesNamed(skillsDir, 'SKILL.md')) {
+      const content = fs.readFileSync(skillFile, 'utf8');
+      if (content.includes('/nf:')) {
+        errors.push(`Codex transformation failed: found /nf: reference in ${skillFile}`);
+      }
+    }
+  } else if (isOpencode) {
     const cmdDir = path.join(targetDir, 'command');
     if (fs.existsSync(cmdDir)) {
       const cmdFiles = fs.readdirSync(cmdDir).filter(f => f.startsWith('nf-') && f.endsWith('.md'));
@@ -2494,7 +2607,7 @@ function generateManifest(dir, baseDir) {
 /**
  * Write file manifest after installation for future modification detection
  */
-function writeManifest(configDir) {
+function writeManifest(configDir, runtime = 'claude') {
   const nfDir = path.join(configDir, 'nf');
   const commandsDir = path.join(configDir, 'commands', 'nf');
   const agentsDir = path.join(configDir, 'agents');
@@ -2512,7 +2625,8 @@ function writeManifest(configDir) {
   }
   if (fs.existsSync(agentsDir)) {
     for (const file of fs.readdirSync(agentsDir)) {
-      if (file.startsWith('nf-') && file.endsWith('.md')) {
+      const expectedExtension = runtime === 'codex' ? '.toml' : '.md';
+      if (file.startsWith('nf-') && file.endsWith(expectedExtension)) {
         manifest.files['agents/' + file] = fileHash(path.join(agentsDir, file));
       }
     }
@@ -2592,6 +2706,7 @@ function reportLocalPatches(configDir) {
 function install(isGlobal, runtime = 'claude') {
   const isOpencode = runtime === 'opencode';
   const isGemini = runtime === 'gemini';
+  const isCodex = runtime === 'codex';
   const dirName = getDirName(runtime);
   const src = path.join(__dirname, '..');
 
@@ -2599,6 +2714,11 @@ function install(isGlobal, runtime = 'claude') {
   const targetDir = isGlobal
     ? getGlobalDir(runtime, explicitConfigDir)
     : path.join(process.cwd(), dirName);
+  const codexSkillsDir = isCodex
+    ? (isGlobal
+        ? path.join(os.homedir(), '.agents', 'skills')
+        : path.join(process.cwd(), '.agents', 'skills'))
+    : null;
 
   const locationLabel = isGlobal
     ? targetDir.replace(os.homedir(), '~')
@@ -2635,9 +2755,19 @@ function install(isGlobal, runtime = 'claude') {
   // Clean up orphaned files from previous versions
   cleanupOrphanedFiles(targetDir);
 
-  // OpenCode uses 'command/' (singular) with flat structure
-  // Claude Code & Gemini use 'commands/' (plural) with nested structure
-  if (isOpencode) {
+  // Codex workflows are installed as skills later in this function.
+  // OpenCode uses command/ (singular); Claude Code and Gemini use commands/.
+  if (isCodex) {
+    const legacyCommandsDir = path.join(targetDir, 'commands', 'nf');
+    if (fs.existsSync(legacyCommandsDir)) {
+      fs.rmSync(legacyCommandsDir, { recursive: true, force: true });
+      log(`  ${green}✓${reset} Removed legacy Codex commands/nf/`);
+    }
+    const legacySkillCount = removeCodexSkills(path.join(targetDir, 'skills'));
+    if (legacySkillCount > 0) {
+      log(`  ${green}✓${reset} Removed ${legacySkillCount} legacy Codex skill director${legacySkillCount === 1 ? 'y' : 'ies'}`);
+    }
+  } else if (isOpencode) {
     // OpenCode: flat structure in command/ directory
     const commandDir = path.join(targetDir, 'command');
     fs.mkdirSync(commandDir, { recursive: true });
@@ -2682,10 +2812,10 @@ function install(isGlobal, runtime = 'claude') {
     const agentsDest = path.join(targetDir, 'agents');
     fs.mkdirSync(agentsDest, { recursive: true });
 
-    // Remove old nf-*.md files before copying new ones
+    // Remove old nForma agent files before copying new ones.
     if (fs.existsSync(agentsDest)) {
       for (const file of fs.readdirSync(agentsDest)) {
-        if (file.startsWith('nf-') && file.endsWith('.md')) {
+        if (file.startsWith('nf-') && (file.endsWith('.md') || (isCodex && file.endsWith('.toml')))) {
           fs.unlinkSync(path.join(agentsDest, file));
         }
       }
@@ -2705,8 +2835,16 @@ function install(isGlobal, runtime = 'claude') {
           content = convertClaudeToOpencodeFrontmatter(content);
         } else if (isGemini) {
           content = convertClaudeToGeminiAgent(content);
+        } else if (isCodex) {
+          content = adaptCodexMarkdown(content, pathPrefix);
         }
-        fs.writeFileSync(path.join(agentsDest, entry.name), content);
+        if (isCodex) {
+          const agentName = entry.name.replace(/\.md$/, '');
+          const toml = convertMarkdownToCodexAgent(content, agentName);
+          fs.writeFileSync(path.join(agentsDest, `${agentName}.toml`), toml, 'utf8');
+        } else {
+          fs.writeFileSync(path.join(agentsDest, entry.name), content);
+        }
       }
     }
     if (verifyInstalled(agentsDest, 'agents')) {
@@ -2728,9 +2866,23 @@ function install(isGlobal, runtime = 'claude') {
     }
   }
 
-  // Copy skills to skills directory (Claude Code / OpenCode only)
+  // Copy packaged skills. Codex converts every command into a native skill
+  // under the current ~/.agents/skills discovery location.
   const skillsSrc = path.join(agentsSrc, 'skills');
-  if (fs.existsSync(skillsSrc)) {
+  if (isCodex) {
+    const skillCount = installCodexSkills({
+      commandsDir: path.join(src, 'commands', 'nf'),
+      packagedSkillsDir: skillsSrc,
+      destinationDirs: [codexSkillsDir],
+      pathPrefix,
+      transformContent: content => processAttribution(content, getCommitAttribution(runtime)),
+    });
+    if (skillCount > 0) {
+      log(`  ${green}✓${reset} Installed ${skillCount} native Codex skills to ${codexSkillsDir}`);
+    } else {
+      failures.push('skills');
+    }
+  } else if (fs.existsSync(skillsSrc)) {
     const skillsDest = path.join(targetDir, 'skills');
     let skillCount = 0;
     for (const entry of fs.readdirSync(skillsSrc, { withFileTypes: true })) {
@@ -2798,6 +2950,29 @@ function install(isGlobal, runtime = 'claude') {
         if (entry.endsWith('.js')) {
           let content = fs.readFileSync(srcFile, 'utf8');
           content = content.replace(/'\.claude'/g, configDirReplacement);
+          if (isCodex) {
+            content = adaptCodexMarkdown(content, pathPrefix)
+              .replace(/Task\(subagent_type=/g, 'CodexSubagent(agent=')
+              .replace(/Claude's vote/g, "Codex's vote")
+              .replace(/Claude \+/g, 'Codex +');
+            if (entry === 'nf-prompt.js') {
+              // Keep the mature command-matching logic unchanged internally:
+              // normalize Codex's $nf:* invocation to the slash form it parses.
+              content = content.replace(
+                "const prompt    = (input.prompt || '').trim();",
+                "const prompt    = (input.prompt || '').trim().replace(/^\\s*\\$nf:/, '/nf:');"
+              );
+            }
+            if (entry === 'config-loader.js') {
+              // Codex MCP server names use an nforma- prefix to avoid colliding
+              // with user-defined servers. Strip it only for provider-family
+              // lookup while retaining it in the actual MCP tool prefix.
+              content = content.replace(
+                "const family = slotName.replace(/-\\d+$/, '');",
+                "const family = slotName.replace(/^nforma-/, '').replace(/-\\d+$/, '');"
+              );
+            }
+          }
           fs.writeFileSync(destFile, content);
         } else {
           fs.copyFileSync(srcFile, destFile);
@@ -3024,6 +3199,7 @@ function install(isGlobal, runtime = 'claude') {
       const nfPythonEnv = path.join(os.homedir(), '.claude', 'nf-python-env');
       const nfPython = path.join(nfPythonEnv, 'bin', 'python');
       try {
+        let uvAvailable = true;
         // Check uv availability first — install it if missing
         const uvCheck = _spawnRiver('which', ['uv'], { timeout: 3000 });
         if (uvCheck.status !== 0) {
@@ -3031,32 +3207,40 @@ function install(isGlobal, runtime = 'claude') {
           const uvInstall = _spawnRiver('curl', ['-sSL', 'https://astral.sh/uv/install.sh'], { timeout: 30000 });
           if (uvInstall.status !== 0) {
             log(`  ${yellow}⚠${reset} uv install failed — skipping River ML`);
-            return;
-          }
-          // Reload PATH so uv is found immediately after install
-          const newPath = [...new Set([path.join(os.homedir(), '.local', 'bin'), ...process.env.PATH.split(':')])].join(':');
-          const uvPathCheck = _spawnRiver('which', ['uv'], { timeout: 3000, env: { ...process.env, PATH: newPath } });
-          if (uvPathCheck.status !== 0) {
-            log(`  ${yellow}⚠${reset} uv not in PATH after install — skipping River ML`);
-            return;
-          }
-        }
-        // Create venv first if missing — River needs the file to be active
-        if (!fs.existsSync(nfPythonEnv)) {
-          _spawnRiver('uv', ['venv', nfPythonEnv], { timeout: 30000 });
-        }
-        const riverCheck = _spawnRiver(nfPython, ['-c', 'import river'], { timeout: 3000 });
-        if (riverCheck.status !== 0) {
-          console.log(`  ${cyan}↓${reset} Installing River ML (uv)...`);
-          const riverInstall = _spawnRiver('uv', ['pip', 'install', '--python', nfPythonEnv, 'river'], { timeout: 60000 });
-          if (riverInstall.status === 0) {
-            console.log(`  ${green}✓${reset} River ML installed`);
+            uvAvailable = false;
           } else {
-            const errOut = riverInstall.stderr ? riverInstall.stderr.toString().slice(0, 120) : '';
-            console.log(`  ${yellow}⚠${reset} River ML install skipped: uv returned non-zero${errOut ? ' (' + errOut + ')' : ''}`);
+            // Reload PATH so uv is found immediately after install.
+            const currentPath = process.env.PATH || '';
+            const newPath = [...new Set([
+              path.join(os.homedir(), '.local', 'bin'),
+              ...currentPath.split(path.delimiter).filter(Boolean),
+            ])].join(path.delimiter);
+            const uvPathCheck = _spawnRiver('which', ['uv'], { timeout: 3000, env: { ...process.env, PATH: newPath } });
+            if (uvPathCheck.status !== 0) {
+              log(`  ${yellow}⚠${reset} uv not in PATH after install — skipping River ML`);
+              uvAvailable = false;
+            }
           }
         }
-        // status === 0: River already importable — skip silently
+
+        if (uvAvailable) {
+          // Create venv first if missing — River needs the file to be active
+          if (!fs.existsSync(nfPythonEnv)) {
+            _spawnRiver('uv', ['venv', nfPythonEnv], { timeout: 30000 });
+          }
+          const riverCheck = _spawnRiver(nfPython, ['-c', 'import river'], { timeout: 3000 });
+          if (riverCheck.status !== 0) {
+            console.log(`  ${cyan}↓${reset} Installing River ML (uv)...`);
+            const riverInstall = _spawnRiver('uv', ['pip', 'install', '--python', nfPythonEnv, 'river'], { timeout: 60000 });
+            if (riverInstall.status === 0) {
+              console.log(`  ${green}✓${reset} River ML installed`);
+            } else {
+              const errOut = riverInstall.stderr ? riverInstall.stderr.toString().slice(0, 120) : '';
+              console.log(`  ${yellow}⚠${reset} River ML install skipped: uv returned non-zero${errOut ? ' (' + errOut + ')' : ''}`);
+            }
+          }
+          // status === 0: River already importable — skip silently
+        }
       } catch (e) {
         // uv or nfPython not found or timed out — skip silently (fail-open)
       }
@@ -3117,7 +3301,7 @@ function install(isGlobal, runtime = 'claude') {
   }
 
   // Deep structural validation
-  const structuralErrors = validateStructuralIntegrity(targetDir, runtime);
+  const structuralErrors = validateStructuralIntegrity(targetDir, runtime, codexSkillsDir);
   if (structuralErrors.length > 0) {
     console.log(`\n  ${yellow}Structural validation failed:${reset}`);
     for (const err of structuralErrors) {
@@ -3133,14 +3317,31 @@ function install(isGlobal, runtime = 'claude') {
     process.exit(1);
   }
 
-  // Configure statusline and hooks in settings.json
-  // Gemini shares same hook system as Claude Code for now
-  const settingsPath = path.join(targetDir, 'settings.json');
+  // Codex discovers hooks.json next to config.toml. Other supported runtimes
+  // continue using their settings.json hook configuration.
+  const settingsPath = path.join(targetDir, isCodex ? 'hooks.json' : 'settings.json');
   const settings = cleanupOrphanedHooks(readSettings(settingsPath));
-  const statuslineCommand = isGlobal
+  if (isCodex && !settings.description) {
+    settings.description = 'nForma lifecycle, safety, and quorum hooks for Codex.';
+  }
+  if (isCodex && cleanupLegacyCodexSettings(targetDir)) {
+    log(`  ${green}✓${reset} Removed legacy nForma hooks from Codex settings.json`);
+  }
+  if (isCodex && settings.hooks) {
+    const incompatibleSessionHooks = ['nf-session-start', 'nf-slot-health-probe'];
+    if (settings.hooks.SessionStart) {
+      settings.hooks.SessionStart = settings.hooks.SessionStart.filter(group =>
+        !(group.hooks || []).some(h =>
+          incompatibleSessionHooks.some(name => (h.command || '').includes(name))
+        )
+      );
+      if (settings.hooks.SessionStart.length === 0) delete settings.hooks.SessionStart;
+    }
+  }
+  const statuslineCommand = (isGlobal || isCodex)
     ? buildHookCommand(targetDir, 'nf-statusline.js')
     : 'node ' + dirName + '/hooks/nf-statusline.js';
-  const updateCheckCommand = isGlobal
+  const updateCheckCommand = (isGlobal || isCodex)
     ? buildHookCommand(targetDir, 'nf-check-update.js')
     : 'node ' + dirName + '/hooks/nf-check-update.js';
 
@@ -3199,43 +3400,47 @@ function install(isGlobal, runtime = 'claude') {
       log(`  ${green}✓${reset} Configured update check hook`);
     }
 
-    // Register nForma session-start secret sync hook
-    const hasNfSessionStartHook = settings.hooks.SessionStart.some(entry =>
-      entry.hooks && entry.hooks.some(h => h.command && h.command.includes('nf-session-start'))
-    );
-    if (!hasNfSessionStartHook) {
-      settings.hooks.SessionStart.push({
-        hooks: [
-          {
-            type: 'command',
-            command: buildHookCommand(targetDir, 'nf-session-start.js')
-          }
-        ]
-      });
-      log(`  ${green}✓${reset} Configured nForma secret sync hook (SessionStart)`);
-    }
+    // These two SessionStart hooks mutate/read Claude's ~/.claude.json MCP
+    // registry. Codex uses config.toml, so registering them there would be a
+    // misleading no-op and could create unrelated Claude state.
+    if (!isCodex) {
+      const hasNfSessionStartHook = settings.hooks.SessionStart.some(entry =>
+        entry.hooks && entry.hooks.some(h => h.command && h.command.includes('nf-session-start'))
+      );
+      if (!hasNfSessionStartHook) {
+        settings.hooks.SessionStart.push({
+          hooks: [
+            {
+              type: 'command',
+              command: buildHookCommand(targetDir, 'nf-session-start.js')
+            }
+          ]
+        });
+        log(`  ${green}✓${reset} Configured nForma secret sync hook (SessionStart)`);
+      }
 
-    // Register nForma slot-health probe (populates ~/.claude/nf/slot-health.json
-    // for the statusline's quorum slots line). Probe runs in parallel and finishes
-    // in ~400ms for a typical 5-7 slot setup; capped at 15s.
-    const hasSlotHealthProbeHook = settings.hooks.SessionStart.some(entry =>
-      entry.hooks && entry.hooks.some(h => h.command && h.command.includes('nf-slot-health-probe'))
-    );
-    if (!hasSlotHealthProbeHook) {
-      settings.hooks.SessionStart.push({
-        hooks: [
-          {
-            type: 'command',
-            command: buildHookCommand(targetDir, 'nf-slot-health-probe.js'),
-            timeout: 15
-          }
-        ]
-      });
-      log(`  ${green}✓${reset} Configured nForma slot-health probe (SessionStart)`);
+      // Register nForma slot-health probe (populates the statusline cache).
+      const hasSlotHealthProbeHook = settings.hooks.SessionStart.some(entry =>
+        entry.hooks && entry.hooks.some(h => h.command && h.command.includes('nf-slot-health-probe'))
+      );
+      if (!hasSlotHealthProbeHook) {
+        settings.hooks.SessionStart.push({
+          hooks: [
+            {
+              type: 'command',
+              command: buildHookCommand(targetDir, 'nf-slot-health-probe.js'),
+              timeout: 15
+            }
+          ]
+        });
+        log(`  ${green}✓${reset} Configured nForma slot-health probe (SessionStart)`);
+      }
     }
 
     // INST-05: Warn (yellow) if quorum MCP servers are absent — runs every install
-    warnMissingMcpServers();
+    if (!isCodex) {
+      warnMissingMcpServers();
+    }
 
     // ── MIGRATION: remove old nf-* hook entries ─────────────────────────
     // Old installs registered hooks as nf-prompt.js, nf-stop.js, nf-circuit-breaker.js.
@@ -3252,7 +3457,7 @@ function install(isGlobal, runtime = 'claude') {
       Stop: 'nf-stop',
       PreToolUse: 'nf-circuit-breaker',
       PostToolUse: ['nf-spec-regen', 'nf-context-monitor', 'nf-context-monitor'],
-      SessionStart: ['nf-check-update'],
+      SessionStart: isCodex ? [] : ['nf-check-update'],
     };
     for (const [event, oldNames] of Object.entries(OLD_HOOK_MAP)) {
       if (settings.hooks[event]) {
@@ -3273,8 +3478,8 @@ function install(isGlobal, runtime = 'claude') {
     // ── Non-Session hooks: skip for Gemini (only supports SessionStart + SessionEnd) ──
     if (!isGemini) {
 
-    // Register nForma UserPromptSubmit hook (quorum injection)
-    // MUST be in settings.json — plugin hooks.json silently discards UserPromptSubmit output (GitHub #10225)
+    // Register nForma UserPromptSubmit hook (quorum injection). Claude requires
+    // settings.json; Codex loads the same event from its native hooks.json.
     if (!settings.hooks.UserPromptSubmit) settings.hooks.UserPromptSubmit = [];
     const hasNfPromptHook = settings.hooks.UserPromptSubmit.some(entry =>
       entry.hooks && entry.hooks.some(h => h.command && h.command.includes('nf-prompt'))
@@ -3286,19 +3491,23 @@ function install(isGlobal, runtime = 'claude') {
       log(`  ${green}✓${reset} Configured nForma quorum injection hook (UserPromptSubmit)`);
     }
 
-    // Register nForma Stop hook (quorum gate — verifies quorum evidence before Claude delivers planning output)
-    if (!settings.hooks.Stop) settings.hooks.Stop = [];
-    const hasNfStopHook = settings.hooks.Stop.some(entry =>
-      entry.hooks && entry.hooks.some(h => h.command && h.command.includes('nf-stop'))
-    );
-    if (!hasNfStopHook) {
-      settings.hooks.Stop.push({
-        hooks: [{ type: 'command', command: buildHookCommand(targetDir, 'nf-stop.js'), timeout: 30 }]
-      });
-      log(`  ${green}✓${reset} Configured nForma quorum gate hook (Stop)`);
+    // nf-stop parses Claude's transcript representation. Codex explicitly
+    // treats transcript format as unstable, so keep quorum fail-open there
+    // instead of risking false blocks until a native evidence adapter exists.
+    if (!isCodex) {
+      if (!settings.hooks.Stop) settings.hooks.Stop = [];
+      const hasNfStopHook = settings.hooks.Stop.some(entry =>
+        entry.hooks && entry.hooks.some(h => h.command && h.command.includes('nf-stop'))
+      );
+      if (!hasNfStopHook) {
+        settings.hooks.Stop.push({
+          hooks: [{ type: 'command', command: buildHookCommand(targetDir, 'nf-stop.js'), timeout: 30 }]
+        });
+        log(`  ${green}✓${reset} Configured nForma quorum gate hook (Stop)`);
+      }
     }
 
-    // INST-08: Register nForma circuit breaker hook (PreToolUse — Claude Code only)
+    // INST-08: Register nForma circuit breaker hook (PreToolUse)
     if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
     const hasCircuitBreakerHook = settings.hooks.PreToolUse.some(entry =>
       entry.hooks && entry.hooks.some(h => h.command && h.command.includes('nf-circuit-breaker'))
@@ -3454,10 +3663,30 @@ function install(isGlobal, runtime = 'claude') {
       log(`  ${green}✓${reset} Configured nForma session-end hook (SessionEnd)`);
     }
 
-    // MULTI-03: ensureMcpSlotsFromProviders() MUST run before buildActiveSlots() because
-    // buildActiveSlots() discovers slots from existing mcpServers keys in ~/.claude.json.
-    // This ensures codex-2, gemini-2, and all other provider slots have MCP entries before quorum_active discovery.
-    ensureMcpSlotsFromProviders();
+    // Codex stores MCP servers in config.toml. Claude-compatible runtimes keep
+    // their existing ~/.claude.json slot synchronization path.
+    let codexMcp = null;
+    if (isCodex) {
+      const installedProvidersPath = path.join(targetDir, 'nf-bin', 'providers.json');
+      const codexProviders = ensureCodexProviders(installedProvidersPath, providers, selectedProviderSlots);
+      codexMcp = configureCodexMcp(
+        path.join(targetDir, 'config.toml'),
+        codexProviders,
+        targetDir,
+        installedProvidersPath
+      );
+      log(`  ${green}✓${reset} Configured ${codexProviders.length} nForma MCP server${codexProviders.length === 1 ? '' : 's'} in config.toml`);
+    } else {
+      // MULTI-03: this MUST run before buildActiveSlots(), which discovers
+      // slots from existing mcpServers keys in ~/.claude.json.
+      ensureMcpSlotsFromProviders();
+    }
+    const detectRequiredModels = () => isCodex
+      ? codexMcp.requiredModels
+      : buildRequiredModelsFromMcp();
+    const detectActiveSlots = () => isCodex
+      ? codexMcp.activeSlots
+      : buildActiveSlots();
 
     // Write nForma config — skip if exists unless --redetect-mcps flag set
     const nfConfigPath = path.join(targetDir, 'nf.json');
@@ -3470,7 +3699,7 @@ function install(isGlobal, runtime = 'claude') {
 
     if (!fs.existsSync(nfConfigPath)) {
       // Build config with auto-detected MCP prefixes
-      const detectedModels = buildRequiredModelsFromMcp();
+      const detectedModels = detectRequiredModels();
       const nfConfig = {
         quorum_commands: [
           'plan-phase', 'new-project', 'new-milestone',
@@ -3478,9 +3707,10 @@ function install(isGlobal, runtime = 'claude') {
         ],
         fail_mode: 'open',
         required_models: detectedModels,
-        quorum_active: buildActiveSlots(),   // COMP-04: populated from all discovered slots
-        // Generated from detected prefixes — behavioral instructions match structural enforcement
-        quorum_instructions: buildQuorumInstructions(detectedModels),
+        quorum_active: detectActiveSlots(),   // COMP-04: populated from all discovered slots
+        // Codex uses quorum_active so nf-prompt emits native subagent dispatch.
+        // Other runtimes retain direct MCP instructions for backward compatibility.
+        ...(isCodex ? {} : { quorum_instructions: buildQuorumInstructions(detectedModels) }),
         // INST-09: Must match DEFAULT_CONFIG.circuit_breaker in hooks/config-loader.js
         circuit_breaker: {
           oscillation_depth: 3,
@@ -3489,7 +3719,7 @@ function install(isGlobal, runtime = 'claude') {
       };
 
       fs.writeFileSync(nfConfigPath, JSON.stringify(nfConfig, null, 2) + '\n', 'utf8');
-      log(`  ${green}✓${reset} Wrote nForma config with detected MCP prefixes (~/.claude/nf.json)`);
+      log(`  ${green}✓${reset} Wrote nForma config with detected MCP prefixes (${nfConfigPath})`);
       log(`  ${green}✓${reset} Wrote quorum_active (${nfConfig.quorum_active.length} slots) to nf.json`);
     } else {
       // INST-06: print active config summary on reinstall
@@ -3526,7 +3756,7 @@ function install(isGlobal, runtime = 'claude') {
 
         // COMP-04: Backfill quorum_active if absent or empty (same pattern as circuit_breaker backfill)
         if (!existingConfig.quorum_active || existingConfig.quorum_active.length === 0) {
-          const discoveredSlots = buildActiveSlots();
+          const discoveredSlots = detectActiveSlots();
           if (discoveredSlots.length > 0) {
             existingConfig.quorum_active = discoveredSlots;
             fs.writeFileSync(nfConfigPath, JSON.stringify(existingConfig, null, 2) + '\n', 'utf8');
@@ -3538,7 +3768,7 @@ function install(isGlobal, runtime = 'claude') {
         // Only runs if quorum_active is already set (non-empty); new slots are appended, existing preserved
         if (existingConfig.quorum_active && existingConfig.quorum_active.length > 0) {
           const { addSlotToQuorumActive } = require('./migrate-to-slots.cjs');
-          const allCurrentSlots = buildActiveSlots();
+          const allCurrentSlots = detectActiveSlots();
           const newSlots = allCurrentSlots.filter(s => !existingConfig.quorum_active.includes(s));
           for (const newSlot of newSlots) {
             const result = addSlotToQuorumActive(newSlot, nfConfigPath);
@@ -3555,8 +3785,21 @@ function install(isGlobal, runtime = 'claude') {
     }
   }
 
+  if (isCodex && settings.hooks) {
+    // Codex currently parses but does not execute asynchronous command hooks.
+    // Run the two accounting hooks synchronously so they are not silently skipped.
+    for (const groups of Object.values(settings.hooks)) {
+      if (!Array.isArray(groups)) continue;
+      for (const group of groups) {
+        for (const hook of group.hooks || []) {
+          delete hook.async;
+        }
+      }
+    }
+  }
+
   // Write file manifest for future modification detection
-  writeManifest(targetDir);
+  writeManifest(targetDir, runtime);
   log(`  ${green}✓${reset} Wrote file manifest (${MANIFEST_NAME})`);
 
   // Report any backed-up local patches
@@ -3571,8 +3814,9 @@ function install(isGlobal, runtime = 'claude') {
  */
 function finishInstall(settingsPath, settings, statuslineCommand, shouldInstallStatusline, runtime = 'claude', isGlobal = true, multiRuntime = false) {
   const isOpencode = runtime === 'opencode';
+  const isCodex = runtime === 'codex';
 
-  if (shouldInstallStatusline && !isOpencode) {
+  if (shouldInstallStatusline && !isOpencode && !isCodex) {
     settings.statusLine = {
       type: 'command',
       command: statuslineCommand
@@ -3582,6 +3826,13 @@ function finishInstall(settingsPath, settings, statuslineCommand, shouldInstallS
 
   // PRIO-01: Sort hooks by priority for deterministic execution order
   const nfConfig = (() => {
+    if (isCodex) {
+      try {
+        return JSON.parse(fs.readFileSync(path.join(path.dirname(settingsPath), 'nf.json'), 'utf8'));
+      } catch {
+        return { hook_priorities: {} };
+      }
+    }
     try {
       const { loadConfig } = require('../hooks/config-loader');
       return loadConfig(process.cwd());
@@ -3616,7 +3867,7 @@ function finishInstall(settingsPath, settings, statuslineCommand, shouldInstallS
   if (runtime === 'trae') program = 'Trae';
   if (runtime === 'cline') program = 'Cline';
 
-  const command = isOpencode ? '/nf-help' : '/nf:help';
+  const command = isOpencode ? '/nf-help' : (isCodex ? '$nf:help' : '/nf:help');
 
   let nudge = '';
   if (runtime === 'claude' && !hasClaudeMcpAgents()) {
@@ -3633,7 +3884,7 @@ ${nudge}
 `);
 
   // Best-effort formal tools — always runs after success banner, never blocks main install
-  if (!hasUninstall && !hasFormal) {
+  if (!hasUninstall && !hasFormal && process.env.NF_INSTALL_SKIP_FORMAL !== '1') {
     const { spawnSync: _formalSpawn } = require('child_process');
     const formalScript = path.join(__dirname, 'install-formal-tools.cjs');
     if (fs.existsSync(formalScript)) {
@@ -4160,7 +4411,7 @@ function printMultiRuntimeSummary(runtimes, isGlobal) {
   ${green}Done!${reset} Installed for ${cyan}${runtimeNames.length}${reset} runtime${runtimeNames.length > 1 ? 's' : ''}:
   ${runtimeNames.map(n => `${green}✓${reset} ${n}`).join('\n  ')}
 ${nudge}
-  Run ${cyan}/nf:help${reset} (or ${cyan}/nf-help${reset} in OpenCode) to get started.
+  Run ${cyan}/nf:help${reset} (${cyan}/nf-help${reset} in OpenCode, ${cyan}$nf:help${reset} in Codex) to get started.
 
   ${dim}TUI dashboard:${reset} ${cyan}npx @nforma.ai/nforma tui${reset}
   ${dim}Or install globally:${reset} ${cyan}npm install -g @nforma.ai/nforma${reset} → then run ${cyan}nforma${reset}
@@ -4169,7 +4420,7 @@ ${nudge}
 `);
 
   // Best-effort formal tools — always runs after success banner, never blocks main install
-  if (!hasUninstall && !hasFormal) {
+  if (!hasUninstall && !hasFormal && process.env.NF_INSTALL_SKIP_FORMAL !== '1') {
     const { spawnSync: _formalSpawn } = require('child_process');
     const formalScript = path.join(__dirname, 'install-formal-tools.cjs');
     if (fs.existsSync(formalScript)) {
@@ -4188,6 +4439,9 @@ function installAllRuntimes(runtimes, isGlobal, isInteractive) {
 
   for (const runtime of runtimes) {
     const result = install(isGlobal, runtime);
+    if (!result || typeof result !== 'object') {
+      throw new Error(`Internal installer error: ${RUNTIME_LABELS[runtime] || runtime} did not return an installation result`);
+    }
     results.push(result);
   }
 
