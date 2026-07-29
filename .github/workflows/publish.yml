@@ -121,16 +121,17 @@ jobs:
       - name: Publish via OIDC trusted publisher
         run: npm publish --access public --tag "${{ needs.context.outputs.dist_tag }}"
       - name: Align @next with @latest
-        # Best-effort: OIDC trusted publishing authorizes `npm publish`, not necessarily
-        # `npm dist-tag add`. If the minted token can't move a dist-tag, do NOT fail the
-        # release (the publish already succeeded) — warn so it can be aligned manually
-        # (`npm dist-tag add @nforma.ai/nforma@<version> next`). `@next` and `@latest`
-        # must show the same version after every release (see CLAUDE.md invariant).
+        # OIDC trusted publishing authorizes `npm publish` but NOT `npm dist-tag add`.
+        # Use the legacy NPM_TOKEN (GitHub repo secret) for dist-tag operations only —
+        # publish keeps using OIDC. `@next` and `@latest` must show the same version
+        # after every release (see CLAUDE.md invariant).
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if npm dist-tag add "@nforma.ai/nforma@${{ needs.context.outputs.version }}" next; then
             echo "Aligned @next → ${{ needs.context.outputs.version }}"
           else
-            echo "::warning::Could not align @next via OIDC (dist-tag may not be authorized by trusted publishing). Run: npm dist-tag add @nforma.ai/nforma@${{ needs.context.outputs.version }} next"
+            echo "::warning::Could not align @next via NPM_TOKEN (token may be revoked or expired). Run: npm dist-tag add @nforma.ai/nforma@${{ needs.context.outputs.version }} next"
           fi
       - name: Show dist-tags
         run: npm dist-tag ls @nforma.ai/nforma || true
