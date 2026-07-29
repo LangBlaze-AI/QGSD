@@ -4,7 +4,7 @@ All notable changes to nForma will be documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.44.2] - 2026-07-29 — Thread-persistent quorum loop, model-expanded slot roster, multi-repo scope, and goal delivery
 
 ### Added
 - feat(quorum): **opt-in thread persistence per slot** (`quorum.persistent_threads`, default false). The CE-5 full-convergence loop was stateless by design: each round spawns a fresh CLI invocation with prior-round outputs spliced into the prompt, and the convergence check diffs that prompt-injected state. With `persistent_threads: true`, slot CLIs keep a native conversation across rounds — `codex exec resume <thread_id>`, `-p --resume <session_id>`, or `-c` for CWD-scoped continue (agy, kimi). Round 1 captures the session id from stdout (codex JSONL `thread.started`, claude `--output-format json`) and persists it to `.planning/quorum/sessions/<slot>-<invocation>.json`; round 2+ reads the file and replaces the fresh argv template with the resume argv before `{prompt}` substitution. GC: every invocation sweeps session files >24h old, fail-open. Drop-guard mirrors the existing pattern (garbage `persistent_threads` warns + falls back to false; absent restores silently). New: `bin/quorum-resume.cjs` (helper), `bin/quorum-sessions-store.cjs` (scratch store), `bin/quorum-resume.test.cjs` (28 PURE tests, red-proven). Also fixes a latent path bug: `bin/call-quorum-slot.cjs` required `./config-loader` which resolves to a nonexistent path; corrected to `../hooks/config-loader`.
@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 - chore(release): retire the prerelease flow entirely — the alias policy makes a separate prerelease channel nonsensical (publishing `0.40.2-rc.1` to `@latest` would silently install the prerelease for every user, and `@next == @latest` means there is no separate surface to ship it on). Concretely: (1) `.github/workflows/publish.yml` no longer triggers on `v*-rc*` / `v*-next*` tag pushes, the `prerelease` branch in the `context` job is gone, the `Stamp version from tag (prerelease only)` step is gone, and the workflow now REFUSES any `package.json` version with a `-` suffix (errors instead of publishing). (2) `scripts/release.sh` is deleted — its sole job was the prerelease flow (bump `-rc.N`, push tag). The stable path remains `scripts/prepare-release.sh` (PR-based, the only release path now). (3) `release/{VERSION}-rc.N` branch naming is no longer a thing; CLAUDE.md "Git workflow" now restricts direct-to-main pushes to CI fixes only. (4) CLAUDE.md "CI gates to remember" replaces the "regex accepts prerelease suffixes" note with "**No prerelease versions**". Older rc tags in git history (e.g. `v0.44.0-rc.2`) remain inert; the workflow no longer matches them.
+
+
+## [Unreleased]
+
 
 ## [0.44.1] - 2026-07-08 — Observability, OIDC publishing, cross-LLM delegation, and quorum hardening
 
