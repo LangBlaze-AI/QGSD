@@ -131,14 +131,7 @@ if $DRY_RUN; then
   echo "[dry-run] Would create branch ${BRANCH} from origin/main"
 else
   git fetch origin main --quiet
-  # Patch: idempotent branch create (handles existing branch)
-if git show-ref --verify --quiet refs/heads/"$BRANCH"; then
-  # Branch exists. Verify it tracks origin/main and is clean (no CI drift).
-  git checkout "$BRANCH" --quiet
-  git merge --ff-only origin/main --quiet || true
-else
   git checkout -b "$BRANCH" origin/main
-fi
 fi
 
 # ── Step 2: Bump package.json version ──
