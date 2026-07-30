@@ -48,7 +48,7 @@ describe('proximity-embed.mjs fails open when @huggingface/transformers is missi
     // path caused CI to fail with status:null (ENOENT on the cwd).
     const proc = require('child_process').spawnSync(
       'node', ['--input-type=module', '--eval',
-        'import("./bin/proximity-embed.mjs").then(() => process.exit(0)).catch(e => process.exit(1))'],
+        'import("./bin/proximity-embed.mjs").then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); })'],
       { cwd: process.cwd() });
     // Acceptable outcomes: 0 (loaded OK — transformers present) or 1 (failed with
     // some module-load error). We accept 1 here as long as it's NOT a parse error.
