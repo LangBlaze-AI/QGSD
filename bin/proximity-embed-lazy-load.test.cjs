@@ -43,10 +43,13 @@ describe('proximity-embed.mjs fails open when @huggingface/transformers is missi
   it('loads cleanly as ESM with a clear failure mode on missing transformers', () => {
     // First-level contract: the file imports cleanly under node ESM. This
     // catches syntax errors and stale require() patterns inside the ESM module.
+    // Use process.cwd() — the test is always run from the repo root by `npm run test:ci`,
+    // so this works locally and on CI. An earlier hardcoded /Users/jonathanborduas/...
+    // path caused CI to fail with status:null (ENOENT on the cwd).
     const proc = require('child_process').spawnSync(
       'node', ['--input-type=module', '--eval',
         'import("./bin/proximity-embed.mjs").then(() => process.exit(0)).catch(e => process.exit(1))'],
-      { cwd: '/Users/jonathanborduas/code/QGSD' });
+      { cwd: process.cwd() });
     // Acceptable outcomes: 0 (loaded OK — transformers present) or 1 (failed with
     // some module-load error). We accept 1 here as long as it's NOT a parse error.
     assert.ok(
