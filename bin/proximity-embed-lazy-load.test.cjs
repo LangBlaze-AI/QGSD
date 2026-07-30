@@ -106,23 +106,25 @@ describe('cache build/load round-trip on hand-rolled vectors', () => {
     assert.deepEqual(parsed, [], 'missing cache parses to empty array');
   });
 
-  it('cosine similarity of identical unit vector is 1.0', () => {
-    // Embedding math sanity check — the script's cosineSim helper.
-    const a = [1, 0, 0, 0];
-    const b = [1, 0, 0, 0];
-    const dot = a.reduce((s, x, i) => s + x * b[i], 0);
+  it('cosine similarity is consistent across a small table of vector pairs (table-driven)', () => {
+    // Parameterized check for the dot/mag/cosine primitives used by the
+    // proximity-embed pipeline. Hand-rolled vectors keep this test OFF the
+    // 23MB model download path (NF_INSTALL_SKIP_OPTIONAL=1 in CI).
+    const dot = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
     const mag = v => Math.sqrt(v.reduce((s, x) => s + x * x, 0));
-    const cos = dot / (mag(a) * mag(b));
-    assert.equal(cos, 1.0);
-  });
-
-  it('cosine similarity of orthogonal vectors is 0.0', () => {
-    const a = [1, 0, 0, 0];
-    const b = [0, 1, 0, 0];
-    const dot = a.reduce((s, x, i) => s + x * b[i], 0);
-    const mag = v => Math.sqrt(v.reduce((s, x) => s + x * x, 0));
-    const cos = dot / (mag(a) * mag(b));
-    assert.equal(cos, 0.0);
+    const cos = (a, b) => dot(a, b) / (mag(a) * mag(b));
+    const cases = [
+      { name: 'identical unit vector', a: [1, 0, 0, 0], b: [1, 0, 0, 0], expected: 1.0 },
+      { name: 'orthogonal unit vectors', a: [1, 0, 0, 0], b: [0, 1, 0, 0], expected: 0.0 },
+      { name: '45-degree unit vectors', a: [1, 0, 0, 0], b: [1, 1, 0, 0], expected: Math.SQRT1_2 },
+    ];
+    for (const { name, a, b, expected } of cases) {
+      const got = cos(a, b);
+      assert.ok(
+        Math.abs(got - expected) < 1e-9,
+        `${name}: expected ~${expected}, got ${got}`
+      );
+    }
   });
 
   it('cache schema_version mismatch is detected and forces a rebuild', () => {
