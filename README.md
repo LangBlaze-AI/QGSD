@@ -156,8 +156,14 @@ npm install @huggingface/transformers
 > Runs a local [all-MiniLM-L6-v2](https://huggingface.co/Xenova/all-MiniLM-L6-v2) model on CPU (~23MB). No API keys or cloud calls. The `/nf:proximity` pipeline automatically uses embeddings when this dependency is present.
 
 The installer prompts you to choose:
-1. **Runtime** — Claude Code, OpenCode, Gemini, or all
+1. **Runtime** — Claude Code, OpenCode, Gemini, Codex, or another supported runtime
 2. **Location** — Global (all projects) or local (current project only)
+
+> [!NOTE]
+> **Using Codex?** Choose Codex in the installer, or run
+> `npx @nforma.ai/nforma --codex --global`. nForma installs native Codex skills,
+> custom agents, hooks, and MCP servers. Invoke workflows with `$nf:help`,
+> `$nf:new-project`, and the other `$nf:*` skill names.
 
 ### 2. Use Skip-Permissions Mode
 
@@ -201,6 +207,7 @@ If you prefer not to use that flag, add this to your project's `.claude/settings
 ```
 
 You should see the full command list. If not, restart your runtime to reload commands.
+In Codex, use `$nf:help` (or open `/skills` and select `nf:help`) instead.
 
 ### 4. Set Up Your Quorum (Optional)
 
@@ -272,12 +279,16 @@ npx @nforma.ai/nforma --opencode --global # Install to ~/.config/opencode/
 # Gemini CLI
 npx @nforma.ai/nforma --gemini --global   # Install to ~/.gemini/
 
+# OpenAI Codex
+npx @nforma.ai/nforma --codex --global    # Skills: ~/.agents/skills; config: ~/.codex/
+npx @nforma.ai/nforma --codex --local     # Skills: ./.agents/skills; config: ./.codex/
+
 # All runtimes
 npx @nforma.ai/nforma --all --global      # Install to all directories
 ```
 
 Use `--global` (`-g`) or `--local` (`-l`) to skip the location prompt.
-Use `--claude`, `--opencode`, `--gemini`, or `--all` to skip the runtime prompt.
+Use `--claude`, `--opencode`, `--gemini`, `--codex`, or `--all` to skip the runtime prompt.
 
 </details>
 

@@ -61,7 +61,7 @@ function countAllFiles(dir) {
 /**
  * Run the installer for a given runtime into a temp directory.
  */
-function runInstall(tmpDir, runtime) {
+function runInstall(tmpDir, runtime, homeDir = null) {
   return execFileSync(process.execPath, [
     INSTALL_SCRIPT,
     `--${runtime}`,
@@ -79,11 +79,41 @@ function runInstall(tmpDir, runtime) {
       // Prevent any env var overrides from affecting test
       CLAUDE_CONFIG_DIR: undefined,
       GEMINI_CONFIG_DIR: undefined,
+      CODEX_HOME: undefined,
+      CODEX_CONFIG_DIR: undefined,
       OPENCODE_CONFIG_DIR: undefined,
       OPENCODE_CONFIG: undefined,
       XDG_CONFIG_HOME: undefined,
       // Skip heavy network installs (River ML, @huggingface/transformers) to avoid CI timeouts
       NF_INSTALL_SKIP_OPTIONAL: '1',
+      NF_INSTALL_SKIP_FORMAL: '1',
+      ...(homeDir ? { HOME: homeDir, USERPROFILE: homeDir } : {}),
+    },
+  });
+}
+
+function runUninstall(tmpDir, runtime, homeDir = null) {
+  return execFileSync(process.execPath, [
+    INSTALL_SCRIPT,
+    `--${runtime}`,
+    '--uninstall',
+    '--global',
+    '--config-dir', tmpDir,
+  ], {
+    stdio: 'pipe',
+    timeout: 120000,
+    env: {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: undefined,
+      GEMINI_CONFIG_DIR: undefined,
+      CODEX_HOME: undefined,
+      CODEX_CONFIG_DIR: undefined,
+      OPENCODE_CONFIG_DIR: undefined,
+      OPENCODE_CONFIG: undefined,
+      XDG_CONFIG_HOME: undefined,
+      NF_INSTALL_SKIP_OPTIONAL: '1',
+      NF_INSTALL_SKIP_FORMAL: '1',
+      ...(homeDir ? { HOME: homeDir, USERPROFILE: homeDir } : {}),
     },
   });
 }
@@ -205,6 +235,202 @@ describe('virgin install: claude', () => {
     assert.equal(countBefore, countAfter, 'File count must be identical after re-install');
     assert.equal(versionBefore, versionAfter, 'VERSION must be identical after re-install');
   });
+});
+
+// ── Codex Runtime ──────────────────────────────────────────────────────────
+
+describe('virgin install: codex', () => {
+  let tmpRoot;
+  let homeDir;
+  let tmpDir;
+
+  before(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-codex-install-test-'));
+    homeDir = path.join(tmpRoot, 'home');
+    tmpDir = path.join(homeDir, '.codex');
+    fs.mkdirSync(path.join(tmpDir, 'nf-bin'), { recursive: true });
+
+    // Seed one provider so MCP assertions stay deterministic on CI hosts that
+    // do not have any supported quorum CLI installed on PATH.
+    fs.writeFileSync(path.join(tmpDir, 'nf-bin', 'providers.json'), JSON.stringify({
+      providers: [{
+        name: 'gemini-1',
+        provider: 'test',
+        type: 'subprocess',
+        description: 'Test Gemini slot',
+        mainTool: 'gemini',
+        cli: 'gemini',
+        args_template: ['-p', '{prompt}'],
+      }],
+    }, null, 2) + '\n');
+    fs.writeFileSync(path.join(tmpDir, 'config.toml'), 'model = "gpt-5.4"\n');
+    fs.writeFileSync(path.join(tmpDir, 'settings.json'), JSON.stringify({
+      hooks: {
+        Stop: [{
+          hooks: [{ type: 'command', command: `node "${tmpDir}/hooks/nf-stop.js"` }],
+        }],
+      },
+      statusLine: {
+        type: 'command',
+        command: `node "${tmpDir}/hooks/nf-statusline.js"`,
+      },
+    }, null, 2) + '\n');
+    fs.writeFileSync(path.join(tmpDir, 'hooks.json'), JSON.stringify({
+      hooks: {
+        SessionStart: [
+          { hooks: [{ type: 'command', command: `node "${tmpDir}/hooks/nf-session-start.js"` }] },
+          { hooks: [{ type: 'command', command: `node "${tmpDir}/hooks/nf-slot-health-probe.js"` }] },
+        ],
+      },
+    }, null, 2) + '\n');
+
+    runInstall(tmpDir, 'codex', homeDir);
+  });
+
+  after(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  test('installs command workflows in the native Codex skill discovery location', () => {
+    const officialDir = path.join(homeDir, '.agents', 'skills');
+    assert.ok(countFiles(officialDir, 'SKILL.md') >= 60);
+    assert.ok(!fs.existsSync(path.join(tmpDir, 'skills')), 'legacy .codex/skills mirror must not be installed');
+    assert.ok(!fs.existsSync(path.join(tmpDir, 'commands', 'nf')), 'legacy commands/nf must not be installed');
+
+    const newProject = readIfExists(path.join(officialDir, 'nf-new-project', 'SKILL.md'));
+    assert.ok(newProject, 'nf:new-project must be installed as a skill');
+    assert.match(newProject, /name: "nf:new-project"/);
+    assert.match(newProject, /native Codex subagent delegation/);
+    assert.ok(!newProject.includes('/nf:'), 'Codex skills must use $nf: references');
+  });
+
+  test('installs native TOML custom agents', () => {
+    const agentsDir = path.join(tmpDir, 'agents');
+    assert.ok(countFiles(agentsDir, '.toml') >= 17);
+    assert.equal(countFiles(agentsDir, '.md'), 0);
+    const planner = readIfExists(path.join(agentsDir, 'nf-planner.toml'));
+    assert.match(planner, /^name = "nf-planner"$/m);
+    assert.match(planner, /^description = "/m);
+    assert.match(planner, /^developer_instructions = "/m);
+  });
+
+  test('writes hooks.json instead of Claude settings.json', () => {
+    const hooks = JSON.parse(readIfExists(path.join(tmpDir, 'hooks.json')));
+    assert.ok(hooks.hooks.SessionStart);
+    assert.ok(hooks.hooks.UserPromptSubmit);
+    assert.ok(hooks.hooks.Stop);
+    assert.ok(hooks.hooks.PreToolUse);
+    assert.ok(!fs.existsSync(path.join(tmpDir, 'settings.json')));
+    assert.ok(!JSON.stringify(hooks).includes('"async"'), 'unsupported async hooks must be removed');
+    const hookCommands = Object.values(hooks.hooks)
+      .flatMap(groups => groups)
+      .flatMap(group => group.hooks || [])
+      .map(hook => hook.command || '');
+    assert.ok(!hookCommands.some(command => command.includes('nf-session-start')), 'Claude secret sync must not run in Codex');
+    assert.ok(!hookCommands.some(command => command.includes('nf-slot-health-probe')), 'Claude MCP health probe must not run in Codex');
+    assert.ok(!hookCommands.some(command => command.includes('nf-stop.js')), 'Claude transcript gate must not run in Codex');
+    const configLoader = readIfExists(path.join(tmpDir, 'hooks', 'config-loader.js'));
+    assert.match(configLoader, /replace\(\/\^nforma-\//, 'Codex hook tool lookup must understand managed MCP names');
+    const promptHook = readIfExists(path.join(tmpDir, 'hooks', 'nf-prompt.js'));
+    assert.match(promptHook, /CodexSubagent\(agent=/);
+    assert.ok(!promptHook.includes('~/.claude/'));
+  });
+
+  test('$nf planning prompts receive Codex-native quorum context', () => {
+    const output = execFileSync(process.execPath, [path.join(tmpDir, 'hooks', 'nf-prompt.js')], {
+      input: JSON.stringify({
+        hook_event_name: 'UserPromptSubmit',
+        prompt: '$nf:plan-phase 1',
+        cwd: tmpRoot,
+        session_id: 'codex-hook-test',
+      }),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: homeDir,
+        USERPROFILE: homeDir,
+        NF_SKIP_PREFLIGHT: '1',
+      },
+    });
+    const parsed = JSON.parse(output);
+    const context = parsed.hookSpecificOutput.additionalContext;
+    assert.match(context, /CodexSubagent\(agent="nf-quorum-slot-worker"/);
+    assert.ok(!context.includes('~/.claude/'));
+    assert.ok(!context.includes("Claude's vote"));
+  });
+
+  test('preserves user config.toml and adds managed MCP servers', () => {
+    const config = readIfExists(path.join(tmpDir, 'config.toml'));
+    assert.match(config, /model = "gpt-5\.4"/);
+    assert.match(config, /# BEGIN nForma managed MCP servers/);
+    assert.match(config, /\[mcp_servers\."nforma-gemini-1"\]/);
+    assert.match(config, /UNIFIED_PROVIDERS_CONFIG/);
+
+    const nfConfig = JSON.parse(readIfExists(path.join(tmpDir, 'nf.json')));
+    assert.equal(nfConfig.required_models.gemini.tool_prefix, 'mcp__nforma-gemini-1__');
+    assert.ok(nfConfig.quorum_active.includes('nforma-gemini-1'));
+    assert.ok(!Object.hasOwn(nfConfig, 'quorum_instructions'), 'Codex must use native subagent quorum dispatch');
+  });
+
+  test('re-install is idempotent across native files and managed TOML', () => {
+    const officialSkillsBefore = countFiles(path.join(homeDir, '.agents', 'skills'), 'SKILL.md');
+    const agentsBefore = countFiles(path.join(tmpDir, 'agents'), '.toml');
+
+    runInstall(tmpDir, 'codex', homeDir);
+
+    assert.equal(countFiles(path.join(homeDir, '.agents', 'skills'), 'SKILL.md'), officialSkillsBefore);
+    assert.equal(countFiles(path.join(tmpDir, 'agents'), '.toml'), agentsBefore);
+    const config = readIfExists(path.join(tmpDir, 'config.toml'));
+    assert.equal(config.split('# BEGIN nForma managed MCP servers').length - 1, 1);
+  });
+
+  test('uninstall removes native Codex integration while preserving user TOML', () => {
+    runUninstall(tmpDir, 'codex', homeDir);
+
+    assert.equal(countFiles(path.join(homeDir, '.agents', 'skills'), 'SKILL.md'), 0);
+    assert.equal(countFiles(path.join(tmpDir, 'agents'), '.toml'), 0);
+    assert.ok(!fs.existsSync(path.join(tmpDir, 'hooks.json')));
+    const config = readIfExists(path.join(tmpDir, 'config.toml'));
+    assert.match(config, /model = "gpt-5\.4"/);
+    assert.ok(!config.includes('# BEGIN nForma managed MCP servers'));
+  });
+});
+
+test('optional dependency failures do not abort multi-runtime installation', () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-optional-fail-open-'));
+  const homeDir = path.join(tmpRoot, 'home');
+  const cachedCoderlm = path.join(homeDir, '.claude', 'nf-bin', 'coderlm');
+  fs.mkdirSync(path.dirname(cachedCoderlm), { recursive: true });
+  fs.writeFileSync(cachedCoderlm, '');
+  fs.chmodSync(cachedCoderlm, 0o755);
+
+  try {
+    execFileSync(process.execPath, [
+      INSTALL_SCRIPT,
+      '--claude',
+      '--codex',
+      '--global',
+    ], {
+      stdio: 'pipe',
+      timeout: 120000,
+      env: {
+        ...process.env,
+        HOME: homeDir,
+        USERPROFILE: homeDir,
+        PATH: '',
+        CLAUDE_CONFIG_DIR: undefined,
+        CODEX_HOME: undefined,
+        CODEX_CONFIG_DIR: undefined,
+        NF_INSTALL_SKIP_OPTIONAL: undefined,
+        NF_INSTALL_SKIP_FORMAL: '1',
+      },
+    });
+
+    assert.ok(fs.existsSync(path.join(homeDir, '.claude', 'settings.json')));
+    assert.ok(fs.existsSync(path.join(homeDir, '.codex', 'hooks.json')));
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
 });
 
 // ── OpenCode Runtime ────────────────────────────────────────────────────────
