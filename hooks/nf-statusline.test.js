@@ -41,22 +41,6 @@ function makeTempDir(suffix) {
   return dir;
 }
 
-// Helper: create a temp HOME dir with a fake nf-python-env that passes `import river`.
-// Returns { tempHome, cleanup } — call cleanup() in finally block.
-// River indicator tests MUST use this to work in CI (runner has no ~/.claude/nf-python-env).
-function makeRiverHome(suffix) {
-  const tempHome = makeTempDir(suffix + '-home');
-  const binDir = path.join(tempHome, '.claude', 'nf-python-env', 'bin');
-  fs.mkdirSync(binDir, { recursive: true });
-  fs.writeFileSync(path.join(binDir, 'python'), '#!/bin/sh\nexit 0\n', 'utf8');
-  fs.chmodSync(path.join(binDir, 'python'), 0o755);
-  return {
-    tempHome,
-    env: { HOME: tempHome },
-    cleanup: () => fs.rmSync(tempHome, { recursive: true, force: true }),
-  };
-}
-
 // --- Test Cases ---
 
 // TC1: Minimal payload — stdout contains model name and directory basename
@@ -259,12 +243,11 @@ test('TC14: 200K session with 15K tokens shows green (below 20K threshold)', () 
   assert.ok(stdout.includes('\x1b[32m'), 'stdout must include green ANSI code');
 });
 
-// --- River ML Phase Indicator Tests ---
+// --- Bandit (JS Q-learning) Phase Indicator Tests ---
 
-// TC15: River exploring — arm with visits below minExplore
-test('TC15: River exploring when arm visits below minExplore', () => {
+// TC15: bandit exploring — arm with visits below minExplore
+test('TC15: bandit exploring when arm visits below minExplore', () => {
   const tempDir = makeTempDir('tc15');
-  const river = makeRiverHome('tc15');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   const nowIso = new Date().toISOString();
   fs.writeFileSync(stateFile, JSON.stringify({
@@ -280,20 +263,18 @@ test('TC15: River exploring when arm visits below minExplore', () => {
     const { stdout, exitCode } = runHook({
       model: { display_name: 'M' },
       workspace: { current_dir: tempDir },
-    }, river.env);
+    });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● River'), 'stdout must include "● River"');
+    assert.ok(stdout.includes('● bandit'), 'stdout must include "● bandit"');
     assert.ok(stdout.includes('\x1b[36m'), 'stdout must include cyan ANSI code');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    river.cleanup();
   }
 });
 
-// TC16: River active — all arms above minExplore
-test('TC16: River active when all arms above minExplore', () => {
+// TC16: bandit active — all arms above minExplore
+test('TC16: bandit active when all arms above minExplore', () => {
   const tempDir = makeTempDir('tc16');
-  const river = makeRiverHome('tc16');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   const nowIso = new Date().toISOString();
   fs.writeFileSync(stateFile, JSON.stringify({
@@ -309,38 +290,35 @@ test('TC16: River active when all arms above minExplore', () => {
     const { stdout, exitCode } = runHook({
       model: { display_name: 'M' },
       workspace: { current_dir: tempDir },
-    }, river.env);
+    });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● River'), 'stdout must include "● River"');
+    assert.ok(stdout.includes('● bandit'), 'stdout must include "● bandit"');
     assert.ok(stdout.includes('\x1b[32m'), 'stdout must include green ANSI code');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    river.cleanup();
   }
 });
 
-// TC16b: River has visits but learned long ago → idle ○, NOT active ● (recency fix)
-test('TC16b: stale River (old lastUpdate) shows idle, not active', () => {
+// TC16b: bandit has visits but learned long ago → idle ·, NOT active ● (recency fix)
+test('TC16b: stale bandit (old lastUpdate) shows idle, not active', () => {
   const tempDir = makeTempDir('tc16b');
-  const river = makeRiverHome('tc16b');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   const oldIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days ago
   fs.writeFileSync(stateFile, JSON.stringify({
     qTable: { implement: { 'codex-1': { q: 0.8, visits: 25, lastUpdate: oldIso } } },
   }), 'utf8');
   try {
-    const { stdout, exitCode } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } }, river.env);
+    const { stdout, exitCode } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } });
     assert.strictEqual(exitCode, 0);
-    assert.ok(stdout.includes('○ River'), `stale River must show idle ○; got: ${JSON.stringify(stdout)}`);
-    assert.ok(!stdout.includes('● River'), `stale River must NOT show active ●; got: ${JSON.stringify(stdout)}`);
+    assert.ok(stdout.includes('· bandit'), `stale bandit must show idle ·; got: ${JSON.stringify(stdout)}`);
+    assert.ok(!stdout.includes('● bandit'), `stale bandit must NOT show active ●; got: ${JSON.stringify(stdout)}`);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    river.cleanup();
   }
 });
 
-// TC17: No state file — idle River indicator (tools line shows dim · River)
-test('TC17: No state file shows idle River (no active indicator form)', () => {
+// TC17: No state file — idle bandit indicator (tools line shows dim · bandit)
+test('TC17: No state file shows idle bandit (no active indicator form)', () => {
   const tempDir = makeTempDir('tc17');
 
   try {
@@ -349,36 +327,29 @@ test('TC17: No state file shows idle River (no active indicator form)', () => {
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    // stdout must NOT include 'River:' shadow form — tools line shows dim · River not ● River
-    assert.ok(!stdout.includes('River:'), 'stdout must NOT include "River:"');
+    // stdout must NOT include 'bandit:' shadow form — tools line shows dim · bandit not ● bandit
+    assert.ok(!stdout.includes('bandit:'), 'stdout must NOT include "bandit:"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-// TC18: Malformed state file — idle River indicator (fail-open fallback)
-test('TC18: Malformed state file shows idle River (fail-open fallback)', () => {
-  const tempHome = makeTempDir('tc18-home');
-  const tempDir = makeTempDir('tc18-dir');
-  // Create nf-python-env so River indicator is shown
-  const nfPython = path.join(tempHome, '.claude', 'nf-python-env', 'bin');
-  fs.mkdirSync(nfPython, { recursive: true });
-  fs.writeFileSync(path.join(nfPython, 'python'), '#!/bin/sh\nexit 0\n', 'utf8');
-  fs.chmodSync(path.join(nfPython, 'python'), 0o755);
+// TC18: Malformed state file — idle bandit indicator (fail-open fallback)
+test('TC18: Malformed state file shows idle bandit (fail-open fallback)', () => {
+  const tempDir = makeTempDir('tc18');
   // Write malformed state file
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   fs.writeFileSync(stateFile, 'not valid json', 'utf8');
 
   try {
-    const { stdout, exitCode } = runHook(
-      { model: { display_name: 'M' }, workspace: { current_dir: tempDir } },
-      { HOME: tempHome }
-    );
+    const { stdout, exitCode } = runHook({
+      model: { display_name: 'M' },
+      workspace: { current_dir: tempDir },
+    });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(!stdout.includes('River:'), 'stdout must NOT include "River:"');
-    assert.ok(stdout.includes('River'), 'stdout must include River as fail-open fallback');
+    assert.ok(!stdout.includes('bandit:'), 'stdout must NOT include "bandit:"');
+    assert.ok(stdout.includes('bandit'), 'stdout must include bandit as fail-open fallback');
   } finally {
-    fs.rmSync(tempHome, { recursive: true, force: true });
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
@@ -386,7 +357,6 @@ test('TC18: Malformed state file shows idle River (fail-open fallback)', () => {
 // TC19: Mixed task types — one exploring, one active
 test('TC19: Mixed task types shows exploring when any arm below minExplore', () => {
   const tempDir = makeTempDir('tc19');
-  const river = makeRiverHome('tc19');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   const nowIso = new Date().toISOString();
   fs.writeFileSync(stateFile, JSON.stringify({
@@ -405,17 +375,16 @@ test('TC19: Mixed task types shows exploring when any arm below minExplore', () 
     const { stdout, exitCode } = runHook({
       model: { display_name: 'M' },
       workspace: { current_dir: tempDir },
-    }, river.env);
+    });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● River'), 'stdout must include "● River"');
+    assert.ok(stdout.includes('● bandit'), 'stdout must include "● River"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    river.cleanup();
   }
 });
 
-// TC20: Empty qTable — no River indicator
-test('TC20: Empty qTable produces no River indicator', () => {
+// TC20: Empty qTable — no bandit indicator
+test('TC20: Empty qTable produces no bandit indicator', () => {
   const tempDir = makeTempDir('tc20');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   fs.writeFileSync(stateFile, JSON.stringify({ qTable: {} }), 'utf8');
@@ -426,7 +395,7 @@ test('TC20: Empty qTable produces no River indicator', () => {
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(!stdout.includes('River:'), 'stdout must NOT include "River:"');
+    assert.ok(!stdout.includes('bandit:'), 'stdout must NOT include "River:"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -437,7 +406,6 @@ test('TC20: Empty qTable produces no River indicator', () => {
 // TC21: Shadow recommendation displayed when lastShadow present
 test('TC21: Shadow recommendation displayed when lastShadow present', () => {
   const tempDir = makeTempDir('tc21');
-  const river = makeRiverHome('tc21');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   fs.writeFileSync(stateFile, JSON.stringify({
     qTable: {
@@ -457,13 +425,12 @@ test('TC21: Shadow recommendation displayed when lastShadow present', () => {
     const { stdout, exitCode } = runHook({
       model: { display_name: 'M' },
       workspace: { current_dir: tempDir },
-    }, river.env);
+    });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● River: gemini-1'), 'stdout must include "● River: gemini-1"');
+    assert.ok(stdout.includes('● bandit: gemini-1'), 'stdout must include "● bandit: gemini-1"');
     assert.ok(stdout.includes('\x1b[33m'), 'stdout must include yellow ANSI code');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    river.cleanup();
   }
 });
 
@@ -471,7 +438,6 @@ test('TC21: Shadow recommendation displayed when lastShadow present', () => {
 // form — an old lastShadow lingering in state file should not keep River green.
 test('TC21b: stale shadow (old timestamp) does not show shadow recommendation', () => {
   const tempDir = makeTempDir('tc21b');
-  const river = makeRiverHome('tc21b');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days ago
   fs.writeFileSync(stateFile, JSON.stringify({
@@ -493,20 +459,18 @@ test('TC21b: stale shadow (old timestamp) does not show shadow recommendation', 
     const { stdout, exitCode } = runHook({
       model: { display_name: 'M' },
       workspace: { current_dir: tempDir },
-    }, river.env);
+    });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(!stdout.includes('River: gemini-1'), 'stale shadow must NOT render "River: gemini-1"');
-    assert.ok(stdout.includes('○ River'), 'stale state shows idle ○ River');
+    assert.ok(!stdout.includes('bandit: gemini-1'), 'stale shadow must NOT render "bandit: gemini-1"');
+    assert.ok(stdout.includes('· bandit'), 'stale state shows idle · bandit');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    river.cleanup();
   }
 });
 
-// TC22: No shadow — falls back to River: active
-test('TC22: No shadow falls back to River: active', () => {
+// TC22: No shadow — falls back to bandit: active
+test('TC22: No shadow falls back to bandit: active', () => {
   const tempDir = makeTempDir('tc22');
-  const river = makeRiverHome('tc22');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   fs.writeFileSync(stateFile, JSON.stringify({
     qTable: {
@@ -521,20 +485,18 @@ test('TC22: No shadow falls back to River: active', () => {
     const { stdout, exitCode } = runHook({
       model: { display_name: 'M' },
       workspace: { current_dir: tempDir },
-    }, river.env);
+    });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● River'), 'stdout must include "● River" (not shadow)');
+    assert.ok(stdout.includes('● bandit'), 'stdout must include "● River" (not shadow)');
     assert.ok(!stdout.includes('shadow'), 'stdout must NOT include "shadow"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    river.cleanup();
   }
 });
 
 // TC23: Shadow with empty recommendation falls back to normal indicator
 test('TC23: Shadow with null recommendation falls back to normal indicator', () => {
   const tempDir = makeTempDir('tc23');
-  const river = makeRiverHome('tc23');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   fs.writeFileSync(stateFile, JSON.stringify({
     qTable: {
@@ -550,14 +512,13 @@ test('TC23: Shadow with null recommendation falls back to normal indicator', () 
     const { stdout, exitCode } = runHook({
       model: { display_name: 'M' },
       workspace: { current_dir: tempDir },
-    }, river.env);
+    });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● River'),
+    assert.ok(stdout.includes('● bandit'),
       'stdout must include "● River" (not shadow)');
     assert.ok(!stdout.includes('shadow'), 'stdout must NOT include "shadow"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    river.cleanup();
   }
 });
 
@@ -814,7 +775,7 @@ test('TC35: providers.json absent → no slots line', () => {
     );
     assert.strictEqual(exitCode, 0);
     // No slot tokens (·, ●, ⊘, ○) should appear before the existing tools-line indicators.
-    // Tools line still renders coderlm/River/embed — that's fine.
+    // Tools line still renders coderlm/bandit/embed — that's fine.
     // The slots line is preceded/followed by the same separator as tools line (\x1b[2m│\x1b[0m).
     // Strategy: check that the FIRST line after the main statusline doesn't have any slot glyphs
     // alongside tool glyphs (slot indicators include actual slot names, never "coderlm"/"River"/"embed").
@@ -891,7 +852,7 @@ test('TC37: malformed slot-health.json falls back to ○ (fail-open)', () => {
   }
 });
 
-// TC38: tools (coderlm/River/embed) now render on LINE 1 (visible even on short
+// TC38: tools (coderlm/bandit/embed) now render on LINE 1 (visible even on short
 // terminals); the per-slot quorum detail moved to line 2 below them.
 test('TC38: tools render on line 1, per-slot quorum detail on line 2 below', () => {
   const tempHome = setupSlotsHome('tc38', {

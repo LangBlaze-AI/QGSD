@@ -3014,54 +3014,16 @@ function install(isGlobal, runtime = 'claude') {
     }
   }
 
-  // Optional heavy installs: River ML and @huggingface/transformers.
+  // Optional heavy installs: @huggingface/transformers (embed model).
   // Skipped when NF_INSTALL_SKIP_OPTIONAL=1 (set by install tests to avoid network timeouts).
+  //
+  // NOTE: The Python `river` ML library was previously installed here. It was scoped
+  // out on 2026-07-30 — the canonical Tier-1 bandit is the JS Q-learning in
+  // bin/routing-policy.cjs (see doctrine at ~/.claude/goals/river-finalization.md).
+  // The Python bridge would add 50-200ms of subprocess overhead per routing decision
+  // and the JS implementation already covers the use case (Bellman updates,
+  // epsilon-greedy, confidence gating, incumbent bias, cooldown, shadow mode).
   if (!process.env.NF_INSTALL_SKIP_OPTIONAL) {
-    // Install River ML library into dedicated uv-managed venv (fail-open)
-    // Venv lives at ~/.claude/nf-python-env — avoids PEP 668 Homebrew conflicts
-    {
-      const { spawnSync: _spawnRiver } = require('child_process');
-      const nfPythonEnv = path.join(os.homedir(), '.claude', 'nf-python-env');
-      const nfPython = path.join(nfPythonEnv, 'bin', 'python');
-      try {
-        // Check uv availability first — install it if missing
-        const uvCheck = _spawnRiver('which', ['uv'], { timeout: 3000 });
-        if (uvCheck.status !== 0) {
-          log(`  ${cyan}↓${reset} Installing uv...`);
-          const uvInstall = _spawnRiver('curl', ['-sSL', 'https://astral.sh/uv/install.sh'], { timeout: 30000 });
-          if (uvInstall.status !== 0) {
-            log(`  ${yellow}⚠${reset} uv install failed — skipping River ML`);
-            return;
-          }
-          // Reload PATH so uv is found immediately after install
-          const newPath = [...new Set([path.join(os.homedir(), '.local', 'bin'), ...process.env.PATH.split(':')])].join(':');
-          const uvPathCheck = _spawnRiver('which', ['uv'], { timeout: 3000, env: { ...process.env, PATH: newPath } });
-          if (uvPathCheck.status !== 0) {
-            log(`  ${yellow}⚠${reset} uv not in PATH after install — skipping River ML`);
-            return;
-          }
-        }
-        // Create venv first if missing — River needs the file to be active
-        if (!fs.existsSync(nfPythonEnv)) {
-          _spawnRiver('uv', ['venv', nfPythonEnv], { timeout: 30000 });
-        }
-        const riverCheck = _spawnRiver(nfPython, ['-c', 'import river'], { timeout: 3000 });
-        if (riverCheck.status !== 0) {
-          console.log(`  ${cyan}↓${reset} Installing River ML (uv)...`);
-          const riverInstall = _spawnRiver('uv', ['pip', 'install', '--python', nfPythonEnv, 'river'], { timeout: 60000 });
-          if (riverInstall.status === 0) {
-            console.log(`  ${green}✓${reset} River ML installed`);
-          } else {
-            const errOut = riverInstall.stderr ? riverInstall.stderr.toString().slice(0, 120) : '';
-            console.log(`  ${yellow}⚠${reset} River ML install skipped: uv returned non-zero${errOut ? ' (' + errOut + ')' : ''}`);
-          }
-        }
-        // status === 0: River already importable — skip silently
-      } catch (e) {
-        // uv or nfPython not found or timed out — skip silently (fail-open)
-      }
-    }
-
     // Install @huggingface/transformers to nf-bin if not already present (fail-open)
     {
       const { spawnSync: _spawnEmbed } = require('child_process');
