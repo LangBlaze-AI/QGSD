@@ -192,7 +192,15 @@ function buildSlotsLine(homeDir, ctx) {
     } else {
       glyph = '○'; color = '\x1b[2m'; // dim — configured, no fresh data yet
     }
-    parts.push(`${color}${glyph} ${p.name}\x1b[0m`);
+    // Sanitize p.name for display: strip ANSI/terminal-control characters (ESC,
+    // CR, LF, other C0/C1 controls). p.name is read from providers.json, which
+    // is user-editable — without sanitization, a malicious entry could spoof
+    // the statusline or alter terminal state. Keep the raw p.name for MCP/cache
+    // lookups; only sanitize for rendering. If sanitization strips everything,
+    // skip the slot (it's malformed config anyway).
+    const displayName = p.name.replace(/[\x00-\x1f\x7f-\x9f]/g, '');
+    if (!displayName) continue;
+    parts.push(`${color}${glyph} ${displayName}\x1b[0m`);
   }
   return parts.length > 0 ? parts.join(' \x1b[2m│\x1b[0m ') : null;
 }
