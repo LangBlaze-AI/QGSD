@@ -642,11 +642,14 @@ function setupSlotsHome(suffix, opts) {
   return tempHome;
 }
 
-// TC30: provider in providers.json but NOT in mcpServers → dim · indicator
-test('TC30: provider not in mcpServers → dim · indicator', () => {
+// TC30: provider in providers.json but NOT in mcpServers → NOT rendered at all
+// (slots listed but not MCP-registered are dead config — e.g. gemini-1, opencode-1,
+// kimi-1 after removal/deactivation. They must not appear in the statusline,
+// not even as dim dots.)
+test('TC30: provider not in mcpServers is filtered out of the slots line', () => {
   const tempHome = setupSlotsHome('tc30', {
     providers: [{ name: 'codex-1' }],
-    mcpServers: {}, // not registered
+    mcpServers: {}, // not registered → must NOT render
   });
   const tempDir = makeTempDir('tc30-dir');
   try {
@@ -655,8 +658,8 @@ test('TC30: provider not in mcpServers → dim · indicator', () => {
       { HOME: tempHome }
     );
     assert.strictEqual(exitCode, 0);
-    assert.ok(stdout.includes('\x1b[2m· codex-1\x1b[0m'),
-      `stdout must include dim · codex-1 when not in mcpServers; got: ${JSON.stringify(stdout)}`);
+    assert.ok(!stdout.includes('codex-1'),
+      `stdout must NOT include codex-1 when not in mcpServers; got: ${JSON.stringify(stdout)}`);
   } finally {
     fs.rmSync(tempHome, { recursive: true, force: true });
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -1031,7 +1034,8 @@ test('SL-1: non-string model.display_name with context_window still renders (no 
   assert.ok(stdout.includes('projA'), `must still show directory basename; got: ${JSON.stringify(stdout)}`);
 });
 
-// SL-2: provider name colliding with Object.prototype member must not be falsely MCP-registered
+// SL-2: provider name colliding with Object.prototype member must not be falsely MCP-registered,
+// AND must not appear in the statusline (filtered out, same as any unregistered slot).
 test('SL-2: provider name colliding with Object.prototype (toString) is not falsely MCP-registered', () => {
   const tempHome = setupSlotsHome('sl2-proto', {
     providers: [{ name: 'toString' }],
@@ -1044,8 +1048,10 @@ test('SL-2: provider name colliding with Object.prototype (toString) is not fals
       { HOME: tempHome }
     );
     assert.strictEqual(exitCode, 0);
-    assert.ok(stdout.includes('\x1b[2m· toString\x1b[0m'),
-      `unregistered slot must render dim ·; got: ${JSON.stringify(stdout)}`);
+    // Unregistered slots are filtered out of the statusline entirely
+    // (including those whose names collide with Object.prototype members).
+    assert.ok(!stdout.includes('toString'),
+      `unregistered slot must NOT appear in statusline; got: ${JSON.stringify(stdout)}`);
     assert.ok(!stdout.includes('quorum'),
       `must not count an unregistered (inherited-name) slot toward quorum; got: ${JSON.stringify(stdout)}`);
   } finally {
