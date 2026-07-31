@@ -245,8 +245,8 @@ test('TC14: 200K session with 15K tokens shows green (below 20K threshold)', () 
 
 // --- Bandit (JS Q-learning) Phase Indicator Tests ---
 
-// TC15: bandit exploring — arm with visits below minExplore
-test('TC15: bandit exploring when arm visits below minExplore', () => {
+// TC15: Q-Learn exploring — arm with visits below minExplore
+test('TC15: Q-Learn exploring when arm visits below minExplore', () => {
   const tempDir = makeTempDir('tc15');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   const nowIso = new Date().toISOString();
@@ -265,15 +265,15 @@ test('TC15: bandit exploring when arm visits below minExplore', () => {
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● bandit'), 'stdout must include "● bandit"');
+    assert.ok(stdout.includes('● Q-Learn'), 'stdout must include "● Q-Learn"');
     assert.ok(stdout.includes('\x1b[36m'), 'stdout must include cyan ANSI code');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-// TC16: bandit active — all arms above minExplore
-test('TC16: bandit active when all arms above minExplore', () => {
+// TC16: Q-Learn active — all arms above minExplore
+test('TC16: Q-Learn active when all arms above minExplore', () => {
   const tempDir = makeTempDir('tc16');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   const nowIso = new Date().toISOString();
@@ -292,15 +292,15 @@ test('TC16: bandit active when all arms above minExplore', () => {
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● bandit'), 'stdout must include "● bandit"');
+    assert.ok(stdout.includes('● Q-Learn'), 'stdout must include "● Q-Learn"');
     assert.ok(stdout.includes('\x1b[32m'), 'stdout must include green ANSI code');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-// TC16b: bandit has visits but learned long ago → idle ·, NOT active ● (recency fix)
-test('TC16b: stale bandit (old lastUpdate) shows idle, not active', () => {
+// TC16b: Q-Learn has visits but learned long ago → idle ·, NOT active ● (recency fix)
+test('TC16b: stale Q-Learn (old lastUpdate) shows idle, not active', () => {
   const tempDir = makeTempDir('tc16b');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   const oldIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days ago
@@ -310,15 +310,15 @@ test('TC16b: stale bandit (old lastUpdate) shows idle, not active', () => {
   try {
     const { stdout, exitCode } = runHook({ model: { display_name: 'M' }, workspace: { current_dir: tempDir } });
     assert.strictEqual(exitCode, 0);
-    assert.ok(stdout.includes('· bandit'), `stale bandit must show idle ·; got: ${JSON.stringify(stdout)}`);
-    assert.ok(!stdout.includes('● bandit'), `stale bandit must NOT show active ●; got: ${JSON.stringify(stdout)}`);
+    assert.ok(stdout.includes('· Q-Learn'), `stale Q-Learn must show idle ·; got: ${JSON.stringify(stdout)}`);
+    assert.ok(!stdout.includes('● Q-Learn'), `stale Q-Learn must NOT show active ●; got: ${JSON.stringify(stdout)}`);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-// TC17: No state file — idle bandit indicator (tools line shows dim · bandit)
-test('TC17: No state file shows idle bandit (no active indicator form)', () => {
+// TC17: No state file — idle Q-Learn indicator (tools line shows dim · Q-Learn)
+test('TC17: No state file shows idle Q-Learn (no active indicator form)', () => {
   const tempDir = makeTempDir('tc17');
 
   try {
@@ -327,15 +327,15 @@ test('TC17: No state file shows idle bandit (no active indicator form)', () => {
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    // stdout must NOT include 'bandit:' shadow form — tools line shows dim · bandit not ● bandit
-    assert.ok(!stdout.includes('bandit:'), 'stdout must NOT include "bandit:"');
+    // stdout must NOT include 'Q-Learn:' shadow form — tools line shows dim · Q-Learn not ● Q-Learn
+    assert.ok(!stdout.includes('Q-Learn:'), 'stdout must NOT include "Q-Learn:"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-// TC18: Malformed state file — idle bandit indicator (fail-open fallback)
-test('TC18: Malformed state file shows idle bandit (fail-open fallback)', () => {
+// TC18: Malformed state file — idle Q-Learn indicator (fail-open fallback)
+test('TC18: Malformed state file shows idle Q-Learn (fail-open fallback)', () => {
   const tempDir = makeTempDir('tc18');
   // Write malformed state file
   const stateFile = path.join(tempDir, '.nf-river-state.json');
@@ -347,8 +347,8 @@ test('TC18: Malformed state file shows idle bandit (fail-open fallback)', () => 
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(!stdout.includes('bandit:'), 'stdout must NOT include "bandit:"');
-    assert.ok(stdout.includes('bandit'), 'stdout must include bandit as fail-open fallback');
+    assert.ok(!stdout.includes('Q-Learn:'), 'stdout must NOT include "Q-Learn:"');
+    assert.ok(stdout.includes('Q-Learn'), 'stdout must include Q-Learn as fail-open fallback');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -377,14 +377,14 @@ test('TC19: Mixed task types shows exploring when any arm below minExplore', () 
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● bandit'), 'stdout must include "● River"');
+    assert.ok(stdout.includes('● Q-Learn'), 'stdout must include "● Q-Learn"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-// TC20: Empty qTable — no bandit indicator
-test('TC20: Empty qTable produces no bandit indicator', () => {
+// TC20: Empty qTable — no Q-Learn indicator
+test('TC20: Empty qTable produces no Q-Learn indicator', () => {
   const tempDir = makeTempDir('tc20');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   fs.writeFileSync(stateFile, JSON.stringify({ qTable: {} }), 'utf8');
@@ -395,7 +395,7 @@ test('TC20: Empty qTable produces no bandit indicator', () => {
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(!stdout.includes('bandit:'), 'stdout must NOT include "River:"');
+    assert.ok(!stdout.includes('Q-Learn:'), 'stdout must NOT include "Q-Learn:"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -427,7 +427,7 @@ test('TC21: Shadow recommendation displayed when lastShadow present', () => {
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● bandit: gemini-1'), 'stdout must include "● bandit: gemini-1"');
+    assert.ok(stdout.includes('● Q-Learn: gemini-1'), 'stdout must include "● Q-Learn: gemini-1"');
     assert.ok(stdout.includes('\x1b[33m'), 'stdout must include yellow ANSI code');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -461,15 +461,15 @@ test('TC21b: stale shadow (old timestamp) does not show shadow recommendation', 
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(!stdout.includes('bandit: gemini-1'), 'stale shadow must NOT render "bandit: gemini-1"');
-    assert.ok(stdout.includes('· bandit'), 'stale state shows idle · bandit');
+    assert.ok(!stdout.includes('Q-Learn: gemini-1'), 'stale shadow must NOT render "Q-Learn: gemini-1"');
+    assert.ok(stdout.includes('· Q-Learn'), 'stale state shows idle · Q-Learn');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-// TC22: No shadow — falls back to bandit: active
-test('TC22: No shadow falls back to bandit: active', () => {
+// TC22: No shadow — falls back to Q-Learn: active
+test('TC22: No shadow falls back to Q-Learn: active', () => {
   const tempDir = makeTempDir('tc22');
   const stateFile = path.join(tempDir, '.nf-river-state.json');
   fs.writeFileSync(stateFile, JSON.stringify({
@@ -487,7 +487,7 @@ test('TC22: No shadow falls back to bandit: active', () => {
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● bandit'), 'stdout must include "● River" (not shadow)');
+    assert.ok(stdout.includes('● Q-Learn'), 'stdout must include "● Q-Learn" (not shadow)');
     assert.ok(!stdout.includes('shadow'), 'stdout must NOT include "shadow"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -514,8 +514,8 @@ test('TC23: Shadow with null recommendation falls back to normal indicator', () 
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● bandit'),
-      'stdout must include "● River" (not shadow)');
+    assert.ok(stdout.includes('● Q-Learn'),
+      'stdout must include "● Q-Learn" (not shadow)');
     assert.ok(!stdout.includes('shadow'), 'stdout must NOT include "shadow"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -775,7 +775,7 @@ test('TC35: providers.json absent → no slots line', () => {
     );
     assert.strictEqual(exitCode, 0);
     // No slot tokens (·, ●, ⊘, ○) should appear before the existing tools-line indicators.
-    // Tools line still renders coderlm/bandit/embed — that's fine.
+    // Tools line still renders coderlm/Q-Learn/embed — that's fine.
     // The slots line is preceded/followed by the same separator as tools line (\x1b[2m│\x1b[0m).
     // Strategy: check that the FIRST line after the main statusline doesn't have any slot glyphs
     // alongside tool glyphs (slot indicators include actual slot names, never "coderlm"/"River"/"embed").
@@ -852,7 +852,7 @@ test('TC37: malformed slot-health.json falls back to ○ (fail-open)', () => {
   }
 });
 
-// TC38: tools (coderlm/bandit/embed) now render on LINE 1 (visible even on short
+// TC38: tools (coderlm/Q-Learn/embed) now render on LINE 1 (visible even on short
 // terminals); the per-slot quorum detail moved to line 2 below them.
 test('TC38: tools render on line 1, per-slot quorum detail on line 2 below', () => {
   const tempHome = setupSlotsHome('tc38', {
