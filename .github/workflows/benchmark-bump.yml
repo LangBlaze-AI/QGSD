@@ -9,6 +9,11 @@ name: Benchmark bump
 # score during refactor; the bump only fires when the score exceeds what
 # main currently advertises. PRs that drop the score below the current
 # floor are still blocked by benchmark-gate.yml / benchmark-fixtures.yml.
+#
+# Architecture: two parallel benchmark jobs measure scores and write to
+# candidate files in artifacts. A single downstream writer job downloads
+# both artifacts, applies only the eligible bumps, and pushes one commit
+# to main. This avoids two jobs racing on push (CodeRabbit thread on PR #382).
 
 on:
   push:
@@ -18,17 +23,14 @@ permissions:
   contents: write
 
 jobs:
-  bump-solve:
-    name: Bump solve-smoke baseline if improved
+  measure-solve:
+    name: Measure solve-smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # We need to push back. persist-credentials:false is the default
-          # for checkout, but GITHUB_TOKEN still has push via permissions:
-          # contents: write above.
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -37,59 +39,27 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm ci --ignore-scripts || npm install --ignore-scripts
+        # Lockfile-defined dep graph only — npm install would resolve a
+        # different graph and produce non-reproducible benchmark scores.
+        run: npm ci --ignore-scripts
 
       - name: Build artifacts
         run: npm run build:hooks && npm run build:machines
 
       - name: Run solve smoke benchmark
-        id: bench
         run: |
-          node bin/nf-benchmark-solve.cjs --json --track=smoke > bench-solve-output.json 2>&1 || true
-          cat bench-solve-output.json
+          node bin/nf-benchmark-solve.cjs --json --track=smoke > solve-candidate.json 2>&1 || true
+          cat solve-candidate.json
 
-      - name: Bump baseline if score > floor
-        env:
-          BASELINE_PATH: benchmarks/solve-baseline.json
-          OUTPUT_PATH: bench-solve-output.json
-        run: |
-          node << 'NF_EVAL'
-          const fs = require('fs');
-          const output = JSON.parse(fs.readFileSync(process.env.OUTPUT_PATH, 'utf8'));
-          const baselinePath = process.env.BASELINE_PATH;
-          const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
-          const score = Number(output.pass_rate);
-          const floor = Number(baseline.pass_rate);
-          console.log('Score: ' + score + '%, floor: ' + floor + '%');
-          if (typeof score !== 'number' || isNaN(score)) {
-            console.error('No numeric pass_rate in benchmark output — skipping bump');
-            process.exit(0);
-          }
-          if (score > floor) {
-            const prev = baseline.pass_rate;
-            baseline.pass_rate = score;
-            baseline.updated_at = new Date().toISOString().slice(0, 10);
-            fs.writeFileSync(baselinePath, JSON.stringify(baseline, null, 2) + '\n');
-            console.log('Bumped baseline: ' + prev + '% -> ' + score + '%');
-          } else {
-            console.log('No improvement (score ' + score + ' <= floor ' + floor + ') — no commit');
-          }
-          NF_EVAL
+      - name: Upload candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: solve-candidate
+          path: solve-candidate.json
+          retention-days: 1
 
-      - name: Commit bumped baseline
-        run: |
-          git config user.name 'nForma benchmark bot'
-          git config user.email 'bot@nforma.ai'
-          git add benchmarks/solve-baseline.json
-          if git diff --cached --quiet; then
-            echo "No baseline change to commit"
-            exit 0
-          fi
-          git commit -m "bench(solve): auto-bump baseline to current CI score"
-          git push origin HEAD:main
-
-  bump-debug-smoke:
-    name: Bump debug-smoke baseline if improved
+  measure-debug-smoke:
+    name: Measure debug-smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -104,7 +74,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm ci --ignore-scripts || npm install --ignore-scripts
+        run: npm ci --ignore-scripts
 
       - name: Build artifacts
         run: npm run build:hooks && npm run build:machines
@@ -115,52 +85,118 @@ jobs:
         run: |
           if [ -z "$ANTHROPIC_API_KEY" ]; then
             echo "ANTHROPIC_API_KEY not set — skipping"
-            echo '{"score":100,"pass_rate":100,"total":5,"fixed":5,"passed":5,"track":"smoke","skipped":true}' > bench-debug-smoke.json
+            echo '{"score":100,"pass_rate":100,"total":5,"fixed":5,"passed":5,"track":"smoke","skipped":true}' > debug-smoke-candidate.json
           else
-            node bin/nf-benchmark-debug.cjs --json --track smoke > bench-debug-smoke.json 2>&1 || true
+            node bin/nf-benchmark-debug.cjs --json --track smoke > debug-smoke-candidate.json 2>&1 || true
           fi
-          cat bench-debug-smoke.json
+          cat debug-smoke-candidate.json
 
-      - name: Bump baseline if score > floor
-        env:
-          BASELINE_PATH: benchmarks/debug/smoke-baseline.json
-          OUTPUT_PATH: bench-debug-smoke.json
+      - name: Upload candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-smoke-candidate
+          path: debug-smoke-candidate.json
+          retention-days: 1
+
+  # Single serialized writer — reads both candidates, applies eligible bumps,
+  # pushes one commit. This is the only place that touches main.
+  apply-and-push:
+    name: Apply eligible bumps + push
+    runs-on: ubuntu-latest
+    needs: [measure-solve, measure-debug-smoke]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Persist credentials so the push at the bottom works.
+          persist-credentials: true
+
+      - name: Download solve candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: solve-candidate
+          path: .candidates/
+
+      - name: Download debug-smoke candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: debug-smoke-candidate
+          path: .candidates/
+
+      - name: Apply eligible bumps
         run: |
           node << 'NF_EVAL'
           const fs = require('fs');
-          const output = JSON.parse(fs.readFileSync(process.env.OUTPUT_PATH, 'utf8'));
-          if (output.skipped) {
-            console.log('Benchmark was skipped (no API key) — no bump');
-            process.exit(0);
+          const path = require('path');
+
+          const cases = [
+            { candidate: '.candidates/solve-candidate.json',
+              baseline: 'benchmarks/solve-baseline.json',
+              label: 'solve' },
+            { candidate: '.candidates/debug-smoke-candidate.json',
+              baseline: 'benchmarks/debug/smoke-baseline.json',
+              label: 'debug-smoke' },
+          ];
+
+          let bumped = 0;
+          for (const { candidate, baseline, label } of cases) {
+            if (!fs.existsSync(candidate)) {
+              console.log(`[${label}] no candidate file — skipping`);
+              continue;
+            }
+            const output = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+            if (output.skipped) {
+              console.log(`[${label}] benchmark skipped (no API key) — no bump`);
+              continue;
+            }
+            const baselinePath = path.resolve(baseline);
+            const b = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+            const score = Number(output.pass_rate);
+            const floor = Number(b.pass_rate);
+            console.log(`[${label}] score=${score}% floor=${floor}%`);
+            if (typeof score !== 'number' || isNaN(score)) {
+              console.log(`[${label}] no numeric score — skipping`);
+              continue;
+            }
+            if (score > floor) {
+              const prev = b.pass_rate;
+              b.pass_rate = score;
+              b.updated_at = new Date().toISOString().slice(0, 10);
+              fs.writeFileSync(baselinePath, JSON.stringify(b, null, 2) + '\n');
+              console.log(`[${label}] bumped ${prev}% → ${score}%`);
+              bumped++;
+            } else {
+              console.log(`[${label}] no improvement — no bump`);
+            }
           }
-          const baselinePath = process.env.BASELINE_PATH;
-          const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
-          const score = Number(output.pass_rate);
-          const floor = Number(baseline.pass_rate);
-          console.log('Score: ' + score + '%, floor: ' + floor + '%');
-          if (typeof score !== 'number' || isNaN(score)) {
-            console.error('No numeric pass_rate in benchmark output — skipping bump');
-            process.exit(0);
-          }
-          if (score > floor) {
-            const prev = baseline.pass_rate;
-            baseline.pass_rate = score;
-            baseline.updated_at = new Date().toISOString().slice(0, 10);
-            fs.writeFileSync(baselinePath, JSON.stringify(baseline, null, 2) + '\n');
-            console.log('Bumped baseline: ' + prev + '% -> ' + score + '%');
-          } else {
-            console.log('No improvement — no commit');
-          }
+          console.log(`Bumped ${bumped} baseline(s)`);
           NF_EVAL
 
-      - name: Commit bumped baseline
+      - name: Commit and push (single commit, single push)
         run: |
           git config user.name 'nForma benchmark bot'
           git config user.email 'bot@nforma.ai'
-          git add benchmarks/debug/smoke-baseline.json
+          git add benchmarks/
           if git diff --cached --quiet; then
             echo "No baseline change to commit"
             exit 0
           fi
-          git commit -m "bench(debug-smoke): auto-bump baseline to current CI score"
-          git push origin HEAD:main
+          git commit -m "bench: auto-bump baselines to current CI scores
+
+          Triggered by push to main. See workflow run for the measured scores.
+          Generated by .github/workflows/benchmark-bump.yml."
+          # Push with retry on transient non-fast-forward (the previous run
+          # may have pushed first; rebase onto origin/main and try once more).
+          for i in 1 2 3; do
+            if git push origin HEAD:main; then
+              echo "Pushed on attempt $i"
+              exit 0
+            fi
+            echo "Push attempt $i failed; fetching origin/main and rebasing..."
+            git fetch origin main
+            git rebase origin/main || { echo "Rebase failed — manual intervention needed"; exit 1; }
+          done
+          echo "Push failed after 3 attempts"
+          exit 1
