@@ -163,6 +163,14 @@ function readSlotHealth(homeDir) {
 
 // Build the detailed per-slot row (line 2). `ctx` is the shared readSlotHealth()
 // result so a render doesn't re-read the same files three times.
+//
+// Slot render policy:
+//   - Listed in providers.json but NOT in ~/.claude.json mcpServers → SKIP.
+//     Removed/deactivated slots (gemini-1, opencode-1, kimi-1) must not appear
+//     at all in the statusline, even as dim dots — they are dead config.
+//   - MCP-registered + recent probe OK    → green ●
+//   - MCP-registered + recent probe FAIL  → red ⊘
+//   - MCP-registered + no fresh probe     → dim ○ (configured, awaiting probe)
 function buildSlotsLine(homeDir, ctx) {
   const h = ctx || readSlotHealth(homeDir);
   if (!h) return null;
@@ -171,20 +179,30 @@ function buildSlotsLine(homeDir, ctx) {
   const parts = [];
   for (const p of providers) {
     const inMcp = Object.prototype.hasOwnProperty.call(mcpServers, p.name);
+    // Hard filter: a slot is shown ONLY if it is registered as an MCP server.
+    // Removed/deactivated slots in providers.json must not appear at all.
+    if (!inMcp) continue;
+
     const entry = cache && cache.slots && Object.prototype.hasOwnProperty.call(cache.slots, p.name) ? cache.slots[p.name] : undefined;
     let glyph, color;
-    if (!inMcp) {
-      glyph = '·'; color = '\x1b[2m'; // dim — listed but not MCP-registered
-    } else if (fresh && entry && entry.ok) {
+    if (fresh && entry && entry.ok) {
       glyph = '●'; color = '\x1b[32m'; // green — recent OK
     } else if (fresh && entry && !entry.ok) {
       glyph = '⊘'; color = '\x1b[31m'; // red — recent failure
     } else {
-      glyph = '○'; color = ''; // configured, no fresh data
+      glyph = '○'; color = '\x1b[2m'; // dim — configured, no fresh data yet
     }
-    parts.push(`${color}${glyph} ${p.name}\x1b[0m`);
+    // Sanitize p.name for display: strip ANSI/terminal-control characters (ESC,
+    // CR, LF, other C0/C1 controls). p.name is read from providers.json, which
+    // is user-editable — without sanitization, a malicious entry could spoof
+    // the statusline or alter terminal state. Keep the raw p.name for MCP/cache
+    // lookups; only sanitize for rendering. If sanitization strips everything,
+    // skip the slot (it's malformed config anyway).
+    const displayName = p.name.replace(/[\x00-\x1f\x7f-\x9f]/g, '');
+    if (!displayName) continue;
+    parts.push(`${color}${glyph} ${displayName}\x1b[0m`);
   }
-  return parts.join(' \x1b[2m│\x1b[0m ');
+  return parts.length > 0 ? parts.join(' \x1b[2m│\x1b[0m ') : null;
 }
 
 // Compact one-line quorum indicator for line 1, so quorum health is visible even
