@@ -57,22 +57,22 @@ function buildToolsLine(homeDir, dir) {
     }
   } catch (_e) { parts.push('\x1b[2m· coderlm\x1b[0m'); }
 
-  // 2. JS bandit indicator — always shown. The canonical Tier-1 bandit is the
+  // 2. JS Q-Learn indicator — always shown. The canonical Tier-1 Q-Learn is the
   //    pure-JS Q-learning in bin/routing-policy.cjs (RiverPolicy class). The
   //    Python `river` library was previously installed here but is unused
   //    (see doctrine at ~/.claude/goals/river-finalization.md). The badge is
   //    driven off the Q-table state file (.nf-river-state.json), not a Python
   //    import check.
   try {
-    let toolsRiver = '\x1b[2m· bandit\x1b[0m'; // not yet learned
+    let toolsRiver = '\x1b[2m· Q-Learn\x1b[0m'; // not yet learned
     try {
       const riverPath = path.join(dir, '.nf-river-state.json');
       if (fs.existsSync(riverPath)) {
         const riverState = JSON.parse(fs.readFileSync(riverPath, 'utf8'));
         const qTable = riverState && riverState.qTable;
         if (qTable && typeof qTable === 'object') {
-          // The bandit learns slowly (only during Mode C coding-task delegation),
-          // so "active" must mean RECENTLY active — otherwise a bandit that learned
+          // The Q-Learn learns slowly (only during Mode C coding-task delegation),
+          // so "active" must mean RECENTLY active — otherwise a Q-Learn that learned
           // months ago would show green forever. Require a qTable update within the
           // window below (or a live lastShadow). Stale visits → ○ idle, not ●.
           const RIVER_MIN_EXPLORE = 20;
@@ -94,11 +94,11 @@ function buildToolsLine(homeDir, dir) {
               }
             }
           }
-          // Has learned but not recently → idle (honest: the bandit isn't doing anything now).
+          // Has learned but not recently → idle (honest: the Q-Learn isn't doing anything now).
           if (hasArms && hasVisits && recentlyActive) {
             toolsRiver = allAbove
-              ? '\x1b[32m● bandit\x1b[0m'   // trained & recently active
-              : '\x1b[36m● bandit\x1b[0m';   // exploring (recent learning, not all trained)
+              ? '\x1b[32m● Q-Learn\x1b[0m'   // trained & recently active
+              : '\x1b[36m● Q-Learn\x1b[0m';   // exploring (recent learning, not all trained)
           }
           // A shadow recommendation counts as active only when it's RECENT —
           // routing-policy stamps lastShadow.timestamp on every write, so an old
@@ -109,14 +109,14 @@ function buildToolsLine(homeDir, dir) {
             const sts = Date.parse(riverState.lastShadow.timestamp);
             const shadowRecent = Number.isNaN(sts) || (Date.now() - sts) < RIVER_ACTIVE_MS;
             if (shadowRecent) {
-              toolsRiver = `\x1b[33m● bandit: ${riverState.lastShadow.recommendation}\x1b[0m`;
+              toolsRiver = `\x1b[33m● Q-Learn: ${riverState.lastShadow.recommendation}\x1b[0m`;
             }
           }
         }
       }
     } catch (_e) {}
     parts.push(toolsRiver);
-  } catch (_e) { parts.push('\x1b[2m· bandit\x1b[0m'); }
+  } catch (_e) { parts.push('\x1b[2m· Q-Learn\x1b[0m'); }
 
   // 3. embed indicator — always shown
   try {
@@ -411,7 +411,7 @@ process.stdin.on('end', () => {
       if (q) quorumTag = ` \x1b[2m│\x1b[0m ${q}`;
     } catch (_e) {}
 
-    // Tools (coderlm/bandit/embed) on LINE 1 too — they used to live on a separate
+    // Tools (coderlm/Q-Learn/embed) on LINE 1 too — they used to live on a separate
     // bottom row that terminals with little vertical space never paint, so they were
     // effectively invisible. Surface them next to the quorum indicator instead.
     let toolsTag = '';
