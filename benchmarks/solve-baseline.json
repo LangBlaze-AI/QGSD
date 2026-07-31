@@ -1,5 +1,5 @@
 {
-  "pass_rate": 25,
-  "updated_at": "2026-04-17",
-  "note": "Floor for the solve smoke benchmark. A release PR is blocked if its pass_rate < this value. Run scripts/update-benchmark-baseline.sh after each successful release to advance the floor."
+  "pass_rate": 100,
+  "updated_at": "2026-07-31",
+  "note": "Floor for the solve smoke benchmark. A release PR is blocked if its pass_rate < this value. Re-baselined to the current CI score (100% / 7-of-7 passed) on 2026-07-31 — the previous floor of 25% was set in April 2026 and never advanced. The benchmark-bump workflow now keeps this floor current on every push to main."
 }

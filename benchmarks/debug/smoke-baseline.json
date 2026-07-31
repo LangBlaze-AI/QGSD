@@ -1,6 +1,6 @@
 {
-  "pass_rate": 80,
+  "pass_rate": 100,
   "total_stubs": 5,
-  "updated_at": "2026-04-19",
-  "note": "Smoke baseline: 5 easy stubs (filter, sum-array, factorial, starts-with, clamp). Floor at 80% (4/5) to tolerate 1 flaky failure from API variance. Score below 80% indicates pipeline regression."
+  "updated_at": "2026-07-31",
+  "note": "Smoke baseline: 5 easy stubs (filter, sum-array, factorial, starts-with, clamp). Re-baselined to 100% (5/5) on 2026-07-31 — the previous floor of 80% (4/5) was set in April 2026 and never advanced. The benchmark-bump workflow now keeps this floor current on every push to main."
 }
