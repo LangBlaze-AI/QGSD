@@ -169,6 +169,22 @@ class RewardRecorder {
  *     lastProcessedIdx: { "<taskType>": number },
  *     promotions: { ... }
  *   }
+ *
+ * ─── Decision record (2026-07-30, river-finalization session) ─────────────
+ * This pure-JS Q-learning IS the canonical Tier-1 bandit for nForma routing.
+ * The Python `river` ML library was previously installed in bin/install.js but
+ * never called by any JS code — the install path was a stub. The Python bridge
+ * would add 50-200ms of subprocess overhead per routing decision, and the JS
+ * surface already covers the use case (Bellman updates, epsilon-greedy,
+ * confidence gating, incumbent bias, cooldown, shadow mode).
+ *
+ * If a future need arises for capabilities the JS implementation does not have
+ * (e.g., drift detection on slot quality, contextual bandits with feature
+ * vectors, Hoeffding trees), open a separate, scoped, quorum-ratified goal.
+ * Do NOT re-introduce the Python bridge ad-hoc.
+ *
+ * See ~/.claude/goals/river-finalization.md for the full doctrine and
+ * bin/install.js for the install-path cleanup.
  */
 class RiverPolicy {
   /**
