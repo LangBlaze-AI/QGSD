@@ -377,7 +377,7 @@ test('TC19: Mixed task types shows exploring when any arm below minExplore', () 
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● Q-Learn'), 'stdout must include "● River"');
+    assert.ok(stdout.includes('● Q-Learn'), 'stdout must include "● Q-Learn"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -395,7 +395,7 @@ test('TC20: Empty qTable produces no Q-Learn indicator', () => {
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(!stdout.includes('Q-Learn:'), 'stdout must NOT include "River:"');
+    assert.ok(!stdout.includes('Q-Learn:'), 'stdout must NOT include "Q-Learn:"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -487,7 +487,7 @@ test('TC22: No shadow falls back to Q-Learn: active', () => {
       workspace: { current_dir: tempDir },
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
-    assert.ok(stdout.includes('● Q-Learn'), 'stdout must include "● River" (not shadow)');
+    assert.ok(stdout.includes('● Q-Learn'), 'stdout must include "● Q-Learn" (not shadow)');
     assert.ok(!stdout.includes('shadow'), 'stdout must NOT include "shadow"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -515,7 +515,7 @@ test('TC23: Shadow with null recommendation falls back to normal indicator', () 
     });
     assert.strictEqual(exitCode, 0, 'exit code must be 0');
     assert.ok(stdout.includes('● Q-Learn'),
-      'stdout must include "● River" (not shadow)');
+      'stdout must include "● Q-Learn" (not shadow)');
     assert.ok(!stdout.includes('shadow'), 'stdout must NOT include "shadow"');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
