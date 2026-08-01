@@ -24,7 +24,17 @@ commands.html
 .claude/circuit-breaker-state.json
 
 # Build artifacts (committed to npm, not git)
-hooks/dist/
+# hooks/dist/ is intentionally COMMITTED, not ignored.
+#
+# The installer ships hooks/dist/ (package.json "files"), and `git clone` +
+# `node bin/install.js` reads it directly. An ignore rule here was misleading:
+# the files were already tracked (indexed before the rule was added), so the
+# rule had no effect except to make `git checkout hooks/dist/` look like a safe
+# "clean up ignored artifacts" step — when it actually reverts the build to
+# whatever was last committed, silently installing stale hooks.
+#
+# scripts/verify-hooks-sync.cjs now gates both working-tree and committed dist
+# against hooks/ source, so a stale commit fails CI.
 
 # Animation assets
 animation/
