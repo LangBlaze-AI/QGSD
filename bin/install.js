@@ -1002,7 +1002,9 @@ const explicitConfigDir = parseConfigDirArg();
 const hasHelp = args.includes('--help') || args.includes('-h');
 const forceStatusline = args.includes('--force-statusline');
 
-console.log(banner);
+// Only when run as a CLI. Requiring install.js as a library (tests, tooling —
+// see the require-safety note above the main block) must not write to stdout.
+if (require.main === module) console.log(banner);
 
 // Show help if requested
 if (hasHelp) {
@@ -2230,18 +2232,61 @@ function configureOpencodePermissions(isGlobal = true) {
 }
 
 /**
- * Auto-rebuild hooks/dist/ if missing by running scripts/build-hooks.js.
- * Preserves idempotency: if dist/ already exists, returns immediately.
+ * Is hooks/dist/ complete — does it contain every entry build-hooks.js would
+ * produce (restricted to entries that actually exist in hooks/)?
+ *
+ * Fails OPEN (returns true) when the build script's list cannot be read, so an
+ * unexpected packaging layout degrades to the previous existence-only behavior
+ * rather than forcing a rebuild loop.
+ *
+ * @param {string} distDir - path to hooks/dist/
+ * @param {string} buildScriptPath - path to scripts/build-hooks.js
+ * @param {string} hooksDir - path to hooks/ source directory
+ * @returns {boolean}
+ */
+function isDistComplete(distDir, buildScriptPath, hooksDir) {
+  let expected;
+  try {
+    ({ HOOKS_TO_COPY: expected } = require(buildScriptPath));
+  } catch (_) {
+    return true; // cannot determine → preserve prior behavior
+  }
+  if (!Array.isArray(expected) || expected.length === 0) return true;
+
+  for (const hook of expected) {
+    // build-hooks.js skips entries with no source file, so dist legitimately
+    // lacks them — don't treat that as incomplete.
+    if (!fs.existsSync(path.join(hooksDir, hook))) continue;
+    if (!fs.existsSync(path.join(distDir, hook))) return false;
+  }
+  return true;
+}
+
+/**
+ * Auto-rebuild hooks/dist/ if missing OR INCOMPLETE by running
+ * scripts/build-hooks.js.
+ *
+ * Completeness matters, not just existence: only some hooks/dist/ files are
+ * tracked in git, so a fresh `git clone` yields a dist directory that EXISTS but
+ * is missing entries (including shared deps like nf-resolve-bin.js and
+ * conformance-schema.cjs that other hooks require). An existence-only check
+ * returns early there and the installer silently ships fewer hooks than the
+ * product needs. Comparing against build-hooks.js's own HOOKS_TO_COPY closes
+ * that hole without duplicating the list.
+ *
+ * Preserves idempotency: a complete dist/ still returns immediately.
  * @param {string} hooksDir - path to hooks/ source directory
  * @param {string} distDir - path to hooks/dist/ output directory
  * @returns {{ rebuilt: boolean, success: boolean, error?: string }}
  */
 function buildHooksIfMissing(hooksDir, distDir) {
-  if (fs.existsSync(distDir)) {
+  const buildScriptPath = path.join(path.dirname(hooksDir), 'scripts', 'build-hooks.js');
+
+  if (fs.existsSync(distDir) && isDistComplete(distDir, buildScriptPath, hooksDir)) {
     return { rebuilt: false, success: true };
   }
 
-  const buildScript = path.join(path.dirname(hooksDir), 'scripts', 'build-hooks.js');
+  const buildScript = buildScriptPath;
   if (!fs.existsSync(buildScript)) {
     return { rebuilt: false, success: false, error: `build script not found: ${buildScript}` };
   }
@@ -4433,4 +4478,4 @@ if (hasGlobal && hasLocal) {
 
 // Export for testing. Reached whether run directly or required; the guard above ensures
 // requiring this file exposes these helpers WITHOUT running the installer.
-module.exports = { validateStructuralIntegrity, validateHookPaths, fileHash, generateManifest, saveLocalPatches, reportLocalPatches, PATCHES_DIR_NAME, MANIFEST_NAME, classifyProviders, detectExternalClis, shouldCopyToNfBin, isUnderInstallDir, synthesizeMcpEntry, installedUnifiedMcpPath, NF_BIN_RUNTIME_MJS };
+module.exports = { validateStructuralIntegrity, validateHookPaths, fileHash, generateManifest, saveLocalPatches, reportLocalPatches, PATCHES_DIR_NAME, MANIFEST_NAME, classifyProviders, detectExternalClis, shouldCopyToNfBin, isUnderInstallDir, synthesizeMcpEntry, installedUnifiedMcpPath, NF_BIN_RUNTIME_MJS, isDistComplete };

@@ -35,6 +35,13 @@ const HOOKS_TO_COPY = [
   'conformance-schema.cjs', // shared conformance schema (required by nf-prompt, nf-stop, nf-circuit-breaker)
 ];
 
+// Exported so bin/install.js can check dist COMPLETENESS (not just existence)
+// without duplicating this list. See buildHooksIfMissing() — a partially
+// populated hooks/dist/ (e.g. a fresh clone where only some dist files are
+// tracked) must trigger a rebuild, or the installer silently ships fewer hooks
+// than the product needs.
+module.exports = { HOOKS_TO_COPY };
+
 function build() {
   // Ensure dist directory exists
   if (!fs.existsSync(DIST_DIR)) {
@@ -59,4 +66,9 @@ function build() {
   console.log('\nBuild complete.');
 }
 
-build();
+// Only build when invoked directly (`node scripts/build-hooks.js`). Requiring
+// this module — bin/install.js does, to read HOOKS_TO_COPY — must not have the
+// side effect of writing to hooks/dist/.
+if (require.main === module) {
+  build();
+}

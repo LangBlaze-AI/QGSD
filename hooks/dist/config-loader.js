@@ -144,6 +144,7 @@ const DEFAULT_CONFIG = {
     min_live_voters: 2,  // minimum live voters for valid consensus (issue #170)
     full_convergence: true,  // CE-5: loop until unanimous AND no new improvements (all reviewed by all)
     max_rounds: 10,  // R3.3: total rounds (incl. Round 1) before escalate. Backstop for CE-5 convergence; raise for "round until dry".
+    persistent_threads: false,  // opt-in: if true, the quorum reuses each slot's CLI session across rounds via --resume / -c. Default false preserves current stateless CE-5 semantics.
   },
   // agent_config: per-slot metadata.
   //   auth_type: "sub" (subscription, flat-fee) | "api" (pay-per-token)
@@ -449,6 +450,15 @@ function validateConfig(config) {
     // upper bound — a dropped or garbage max_rounds must never mean "loop forever".
     if (!Number.isInteger(config.quorum.max_rounds) || config.quorum.max_rounds < 1) {
       config.quorum.max_rounds = DEFAULT_CONFIG.quorum.max_rounds;
+    }
+    // Same partial-merge pattern for the opt-in thread-persistence flag: an absent
+    // value is a partial-merge drop (NOT a user error), restore silently. A garbage
+    // explicit value (`"yes"`, `1`) is a real error — coerce to the default.
+    if (typeof config.quorum.persistent_threads !== 'boolean') {
+      if (config.quorum.persistent_threads !== undefined) {
+        process.stderr.write('[nf] WARNING: nf.json: quorum.persistent_threads must be boolean; defaulting to false\n');
+      }
+      config.quorum.persistent_threads = DEFAULT_CONFIG.quorum.persistent_threads;
     }
   }
 
