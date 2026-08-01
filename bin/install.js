@@ -1002,7 +1002,9 @@ const explicitConfigDir = parseConfigDirArg();
 const hasHelp = args.includes('--help') || args.includes('-h');
 const forceStatusline = args.includes('--force-statusline');
 
-console.log(banner);
+// Only when run as a CLI. Requiring install.js as a library (tests, tooling —
+// see the require-safety note above the main block) must not write to stdout.
+if (require.main === module) console.log(banner);
 
 // Show help if requested
 if (hasHelp) {
