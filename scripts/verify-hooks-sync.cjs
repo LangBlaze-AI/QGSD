@@ -130,12 +130,15 @@ for (const hook of hooksToCopy) {
   //    build:hooks' before this gate runs — so check 3 is always satisfied in CI
   //    and cannot see staleness that is committed to git. That blind spot is
   //    reachable: `git clone` + `node bin/install.js` installs hooks/dist/ as
-  //    committed, and install.js only rebuilds when dist is MISSING (see
-  //    buildHooksIfMissing), not when it is stale. A fresh-clone install would
-  //    therefore silently ship outdated hook code.
+  //    committed, and install.js rebuilds only when dist is MISSING or
+  //    INCOMPLETE (see buildHooksIfMissing / isDistComplete) — never when it is
+  //    merely STALE, since a stale file is present and therefore looks complete.
+  //    A fresh-clone install would silently ship outdated hook code, so staleness
+  //    has to be caught here at commit time instead.
   //
-  //    Skipped outside a git work tree (npm tarball, vendored copy) and for any
-  //    path git cannot resolve — "cannot determine" must never fail the build.
+  //    Skipped outside a git work tree (npm tarball, vendored copy) and whenever
+  //    either blob cannot be resolved at HEAD — untracked path, unreadable HEAD,
+  //    or any git failure. "Cannot determine" must never fail the build.
   if (inWorkTree) {
     const committedSrc = gitShowAtHead(`hooks/${hook}`);
     const committedDist = gitShowAtHead(`hooks/dist/${hook}`);
@@ -164,7 +167,7 @@ if (errors.length > 0) {
   const committedNote = !inWorkTree
     ? 'committed-dist check skipped (not a git work tree)'
     : `${committedChecked} committed blob(s) verified` +
-      (committedSkipped > 0 ? `, ${committedSkipped} skipped (untracked)` : '');
+      (committedSkipped > 0 ? `, ${committedSkipped} unresolvable at HEAD (skipped)` : '');
   console.log(
     `hooks-sync OK: ${hooksToCopy.size} hooks in build list, ` +
     `${installerHooks.size} registered by installer, dist in sync; ${committedNote}`
