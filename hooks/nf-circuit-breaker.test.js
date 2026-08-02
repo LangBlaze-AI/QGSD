@@ -655,6 +655,7 @@ test('CB-TC18: Project config oscillation_depth:2 triggers oscillation detection
 
 const {
   buildBlockReason,
+  buildWarningNotice,
   writeEvidenceSignature,
   checkPreemptiveEvidence,
   markEvidenceResolved,
@@ -2202,4 +2203,23 @@ test('CB-TC-BR4: Deny message surfaces --disable-breaker and the installed workf
   // P3: point at the installed location, not the dev-only core/workflows path
   assert.ok(reason.includes('~/.claude/nf/workflows/oscillation-resolution-mode.md'), 'deny reason must reference the installed workflow path');
   assert.ok(!reason.includes('core/workflows/oscillation-resolution-mode.md'), 'deny reason must NOT reference the dev-only core/workflows path');
+});
+
+// CB-TC-WN1: regression coverage for buildWarningNotice (the first-detection allow
+// notice) — mirrors CB-TC-BR4's assertions so the priority notice cannot regress
+// independently of buildBlockReason.
+test('CB-TC-WN1: Warning notice references the installed workflow path and dismiss commands', () => {
+  const state = {
+    active: true,
+    file_set: ['any.js'],
+    activated_at: '2026-01-01T00:00:00Z',
+    commit_window_snapshot: [['any.js']],
+  };
+  const notice = buildWarningNotice(state);
+  assert.ok(notice.includes('OSCILLATION DETECTED — PRIORITY NOTICE'), 'warning notice must carry its header');
+  assert.ok(notice.includes('Oscillation Resolution Mode per R5'), 'warning notice must retain the R5 reference');
+  assert.ok(notice.includes('~/.claude/nf/workflows/oscillation-resolution-mode.md'), 'warning notice must reference the installed workflow path');
+  assert.ok(!notice.includes('core/workflows/oscillation-resolution-mode.md'), 'warning notice must NOT reference the dev-only core/workflows path');
+  assert.ok(notice.includes('npx nforma --reset-breaker'), 'warning notice must include reset-breaker');
+  assert.ok(notice.includes('npx nforma --disable-breaker'), 'warning notice must include disable-breaker');
 });

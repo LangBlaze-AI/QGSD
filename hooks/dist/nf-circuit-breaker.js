@@ -802,10 +802,9 @@ function buildBlockReason(state) {
     'Invoke Oscillation Resolution Mode per R5 — see ~/.claude/nf/workflows/oscillation-resolution-mode.md for the full procedure.',
     '',
     'Read-only operations are still allowed (e.g. git log --oneline to review the commit history).',
-    'You must manually commit a root-cause fix before write operations are unblocked.',
-    '',
-    "After committing the fix, run 'npx nforma --reset-breaker' to clear the circuit breaker state.",
-    "If this was deliberate iterative work rather than a bug loop, run 'npx nforma --disable-breaker' to dismiss and continue; re-enable with 'npx nforma --enable-breaker' when done.",
+    'Write operations are blocked until you do ONE of the following:',
+    "- Commit a root-cause fix manually, then run 'npx nforma --reset-breaker' to clear this state; OR",
+    "- If this was deliberate iterative work rather than a bug loop, run 'npx nforma --disable-breaker' to dismiss and continue (re-enable later with 'npx nforma --enable-breaker').",
   );
   return lines.join('\n');
 }
