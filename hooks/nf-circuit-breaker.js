@@ -390,6 +390,14 @@ function detectOscillation(fileSets, depth, hashes, gitRoot, options) {
     if (keyRunList.length >= depth) {
       const files = key.split('\0').filter(f => f.length > 0);
 
+      // An empty file-set key arises from merge commits: `git diff-tree` (no `-m`)
+      // attributes no files to a merge, so N interleaved merges in a one-PR-per-commit
+      // workflow produce N empty run-groups that exactly satisfy depth/min_cycles — a
+      // phantom "(unknown)" oscillation with no real file set. The reversion second-pass
+      // can't redeem it either (it diffs `files=[]` → the whole repo between merges).
+      // Never treat the empty set as an oscillation candidate.
+      if (files.length === 0) continue;
+
       // Second-pass reversion check (if hashes and gitRoot provided)
       if (hashes && gitRoot && hashes.length > 0) {
         // Collect all hashes from the oscillating run-groups (newest-first order preserved)
@@ -791,12 +799,13 @@ function buildBlockReason(state) {
     lines.push('');
   }
   lines.push(
-    'Invoke Oscillation Resolution Mode per R5 in CLAUDE.md — see core/workflows/oscillation-resolution-mode.md for the full procedure.',
+    'Invoke Oscillation Resolution Mode per R5 — see ~/.claude/nf/workflows/oscillation-resolution-mode.md for the full procedure.',
     '',
     'Read-only operations are still allowed (e.g. git log --oneline to review the commit history).',
     'You must manually commit a root-cause fix before write operations are unblocked.',
     '',
     "After committing the fix, run 'npx nforma --reset-breaker' to clear the circuit breaker state.",
+    "If this was deliberate iterative work rather than a bug loop, run 'npx nforma --disable-breaker' to dismiss and continue; re-enable with 'npx nforma --enable-breaker' when done.",
   );
   return lines.join('\n');
 }
@@ -828,7 +837,7 @@ function buildWarningNotice(state) {
   }
 
   lines.push(
-    'Invoke Oscillation Resolution Mode per R5 in CLAUDE.md — see core/workflows/oscillation-resolution-mode.md for the full procedure.',
+    'Invoke Oscillation Resolution Mode per R5 — see ~/.claude/nf/workflows/oscillation-resolution-mode.md for the full procedure.',
     '',
     'After committing the fix, run \'npx nforma --reset-breaker\' to clear the circuit breaker state.',
     'To temporarily disable the circuit breaker for deliberate iterative work, run \'npx nforma --disable-breaker\'.',

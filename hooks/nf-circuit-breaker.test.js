@@ -2107,3 +2107,99 @@ test('CB-ADV-DASH: size-alternating oscillation on "--"-prefixed lines is caught
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });
+
+// ── Merge-commit phantom-oscillation regression guards (CB-FP10 / CB-FP11) ──────
+// `git diff-tree` (no -m) attributes NO files to a merge commit, so three interleaved
+// --no-ff merges in a one-PR-per-commit workflow yield three EMPTY file-set run-groups
+// that exactly satisfy depth=3 and min_cycles=2. Pre-fix the breaker tripped on the
+// empty set and reported "Oscillating file set: (unknown)". The empty file-set must
+// never be an oscillation candidate. Reported as a false positive against nForma v0.44.1.
+
+// CB-FP10: end-to-end — real --no-ff merge commits interleaved with distinct-file
+// feature commits. The 6-commit window becomes [merge,feat,merge,feat,merge,feat];
+// the empty (merge) key forms 3 run-groups. Must NOT activate the breaker.
+test('CB-FP10: interleaved --no-ff merge commits do NOT trigger a phantom "(unknown)" oscillation', () => {
+  const repoDir = createTempGitRepo();
+  const run = (args) => spawnSync('git', args, { cwd: repoDir, encoding: 'utf8' });
+  // Force a deterministic identity (createTempGitRepo's space-split helper mangles quoted values).
+  run(['config', 'user.name', 'CB Test']);
+  run(['config', 'user.email', 'cb@example.com']);
+  try {
+    // Root commit — kept outside the commit_window=6 by the 6 commits below.
+    commitInRepo(repoDir, 'README.md', 'init\n', 'root');
+    const mainBranch = run(['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim();
+
+    // Three one-commit PRs merged with --no-ff, each touching a DISTINCT file so the
+    // feature commits form distinct file-set keys (only the merges share the empty key).
+    const prs = [
+      { branch: 'b1', file: 'explore_loop.sh', feat: 'feat: fix explore drip', merge: 'merge #1' },
+      { branch: 'b2', file: 'supervisor.sh', feat: 'feat: de-nest supervisor', merge: 'merge #2' },
+      { branch: 'b3', file: 'health_check.py', feat: 'feat: retire v2 drips', merge: 'merge #3' },
+    ];
+    for (const pr of prs) {
+      run(['checkout', '-b', pr.branch]);
+      commitInRepo(repoDir, pr.file, `${pr.file} content\n`, pr.feat);
+      run(['checkout', mainBranch]);
+      run(['merge', '--no-ff', '-m', pr.merge, pr.branch]);
+    }
+
+    const statePath = writeBreakerConfig(repoDir); // haiku off → detection is purely algorithmic
+
+    const { stdout, exitCode } = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo write > output.txt', description: 'test', timeout: 5000 },
+      cwd: repoDir,
+      hook_event_name: 'PreToolUse',
+      tool_use_id: 'test-id',
+      session_id: 'test-session',
+      transcript_path: '/tmp/test.jsonl',
+      permission_mode: 'default',
+    });
+    assert.strictEqual(exitCode, 0, 'exit code must be 0');
+    assert.strictEqual(stdout, '', 'stdout must be empty — no oscillation detected');
+    assert(!fs.existsSync(statePath), 'state file must NOT be written — empty merge-derived file-set is not an oscillation candidate (CB-FP10)');
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+// CB-FP11: unit-level pin on detectOscillation — the synthetic interleaved-merge window
+// returns detected:false at depth=3 / min_cycles=2. Fast and git-free (gitRoot=null skips
+// the second pass; the primary gate is where the empty-set bug lived).
+test('CB-FP11: detectOscillation skips the empty (merge-derived) file-set as a candidate', () => {
+  // Newest→oldest: merge(empty) | featC | merge(empty) | featB | merge(empty) | featA(6 files)
+  const fileSets = [
+    [],
+    ['explore_loop.sh'],
+    [],
+    ['supervisor.sh'],
+    [],
+    ['explore_loop.sh', 'health_check.py', 'supervisor.sh', 'a', 'b', 'c', 'd'],
+  ];
+  const hashes = fileSets.map((_, i) => 'h' + i);
+  // Pre-fix the empty key had 3 run-groups (depth 3) and 2 cycles (min_cycles 2) → detected:true.
+  const res = detectOscillation(fileSets, 3, hashes, null, { minCycles: 2, rollbackDetection: true });
+  assert.strictEqual(res.detected, false, 'empty file-set from merge commits must not be an oscillation candidate (CB-FP11)');
+  assert.deepStrictEqual(res.fileSet, [], 'no file set should be reported for an all-merge window');
+});
+
+// CB-TC-BR4: the deny/block message must surface the legitimate-dismiss escape hatch
+// (--disable-breaker) so the agent is not pressured toward fabricating a "root-cause fix"
+// commit when the oscillation was iterative work. Also pins the corrected workflow doc path.
+test('CB-TC-BR4: Deny message surfaces --disable-breaker and the installed workflow path', () => {
+  const state = {
+    active: true,
+    file_set: ['any.js'],
+    activated_at: '2026-01-01T00:00:00Z',
+    commit_window_snapshot: [['any.js']],
+  };
+  const reason = buildBlockReason(state);
+  assert.ok(reason.includes('npx nforma --disable-breaker'), 'deny reason must surface --disable-breaker (legitimate-dismiss escape hatch)');
+  assert.ok(reason.includes('npx nforma --enable-breaker'), 'deny reason must mention how to re-enable');
+  // Existing pinned substrings must survive (CB-TC17 / CB-TC-BR1 / CB-TC-BR3 depend on these):
+  assert.ok(reason.includes('Oscillation Resolution Mode per R5'), 'deny reason must retain the R5 reference');
+  assert.ok(reason.includes('npx nforma --reset-breaker'), 'deny reason must retain --reset-breaker');
+  // P3: point at the installed location, not the dev-only core/workflows path
+  assert.ok(reason.includes('~/.claude/nf/workflows/oscillation-resolution-mode.md'), 'deny reason must reference the installed workflow path');
+  assert.ok(!reason.includes('core/workflows/oscillation-resolution-mode.md'), 'deny reason must NOT reference the dev-only core/workflows path');
+});
