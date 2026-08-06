@@ -1571,23 +1571,30 @@ function captureStderr(fn) {
   finally { process.stderr.write = real; }
 }
 
-function tmpRoot(t) {
+// Cleanup on process exit rather than TestContext.after: `t.after` landed in Node
+// 18.8, and package.json declares engines.node ">=18.0.0".
+const PREC_TMP_DIRS = [];
+process.on('exit', () => {
+  for (const d of PREC_TMP_DIRS) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} }
+});
+
+function tmpRoot() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-prec-'));
-  t.after(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {} });
+  PREC_TMP_DIRS.push(dir);
   return dir;
 }
 
-test('QSD-PREC-ENOENT-1: a missing precedents.json returns [] SILENTLY', (t) => {
+test('QSD-PREC-ENOENT-1: a missing precedents.json returns [] SILENTLY', () => {
   assert.ok(mod, 'module not loaded');
-  const root = tmpRoot(t); // no .planning/quorum/precedents.json
+  const root = tmpRoot(); // no .planning/quorum/precedents.json
   const { value, stderr } = captureStderr(() => mod.loadPrecedents(root));
   assert.deepStrictEqual(value, [], 'must still fail open to an empty list');
   assert.strictEqual(stderr, '', `must not warn about a file that was never recorded (got: ${stderr})`);
 });
 
-test('QSD-PREC-ENOENT-2: a MALFORMED precedents.json still warns', (t) => {
+test('QSD-PREC-ENOENT-2: a MALFORMED precedents.json still warns', () => {
   assert.ok(mod, 'module not loaded');
-  const root = tmpRoot(t);
+  const root = tmpRoot();
   fs.mkdirSync(path.join(root, '.planning', 'quorum'), { recursive: true });
   fs.writeFileSync(path.join(root, '.planning', 'quorum', 'precedents.json'), '{ not json', 'utf8');
   const { value, stderr } = captureStderr(() => mod.loadPrecedents(root));

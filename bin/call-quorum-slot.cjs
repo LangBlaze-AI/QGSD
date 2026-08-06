@@ -698,7 +698,7 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     // slow, not stalled — so they need a longer threshold to avoid being false-killed.
     // The caller resolves this once per dispatch and passes it in; the fallback keeps
     // direct callers (tests, ad-hoc invocations) on the same rules.
-    const STALL_TIMEOUT_MS = toPositiveMs(stallTimeoutMs) ?? stallTimeoutFor(provider);
+    const STALL_TIMEOUT_MS = toPositiveMs(stallTimeoutMs) ?? stallTimeoutFor(provider, idleTimeoutMs);
     const STALL_BYTE_THRESHOLD = 500; // below this = "just a header, probably stalled"
 
     child.stdout.on('data', d => {

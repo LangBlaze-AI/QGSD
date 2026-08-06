@@ -144,9 +144,16 @@ setTimeout(() => {
 }, Number(process.env.NF_FAKE_PAUSE_MS || 900));
 `;
 
-function makeFakeSlotDir(t) {
+// Cleanup on process exit rather than TestContext.after: `t.after` landed in Node
+// 18.8, and package.json declares engines.node ">=18.0.0".
+const TMP_DIRS = [];
+process.on('exit', () => {
+  for (const d of TMP_DIRS) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} }
+});
+
+function makeFakeSlotDir() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-stall-'));
-  t.after(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {} });
+  TMP_DIRS.push(dir);
   // findProjectRoot() walks up to the nearest .planning/ — without one here it would
   // find the real repo and write this test's telemetry into it.
   fs.mkdirSync(path.join(dir, '.planning'), { recursive: true });
@@ -156,8 +163,8 @@ function makeFakeSlotDir(t) {
 }
 
 describe('LIVE PATH: the resolved stall window drives the real timer (#385)', () => {
-  it('kills a quiet sub-500-byte slot at the window it was given, not the 30s constant', async (t) => {
-    const { cli } = makeFakeSlotDir(t);
+  it('kills a quiet sub-500-byte slot at the window it was given, not the 30s constant', async () => {
+    const { cli } = makeFakeSlotDir();
     const provider = {
       name: 'fake-slow', type: 'subprocess', mainTool: 'node', cli: 'node',
       args_template: [cli, '{prompt}'],
@@ -170,8 +177,8 @@ describe('LIVE PATH: the resolved stall window drives the real timer (#385)', ()
     );
   });
 
-  it('lets that same slot finish when the window covers its pause', async (t) => {
-    const { cli } = makeFakeSlotDir(t);
+  it('lets that same slot finish when the window covers its pause', async () => {
+    const { cli } = makeFakeSlotDir();
     const provider = {
       name: 'fake-slow', type: 'subprocess', mainTool: 'node', cli: 'node',
       args_template: [cli, '{prompt}'],
@@ -180,8 +187,8 @@ describe('LIVE PATH: the resolved stall window drives the real timer (#385)', ()
     assert.match(out, /verdict: APPROVE/);
   });
 
-  it('falls back to the provider-derived window when handed a garbage one', async (t) => {
-    const { cli } = makeFakeSlotDir(t);
+  it('falls back to the provider-derived window when handed a garbage one', async () => {
+    const { cli } = makeFakeSlotDir();
     // Number(true) === 1 → a 1ms stall timer would false-kill this slot instantly.
     const provider = {
       name: 'fake-slow', type: 'subprocess', mainTool: 'node', cli: 'node',
@@ -190,14 +197,21 @@ describe('LIVE PATH: the resolved stall window drives the real timer (#385)', ()
     const out = await runSubprocess(provider, 'q', 10000, 15000, null, {}, true);
     assert.match(out, /verdict: APPROVE/);
   });
+
 });
+
+// The direct-caller fallback inside runSubprocess (`stallTimeoutFor(provider,
+// idleTimeoutMs)`) applies the same rule main() does — a caller idle budget caps the
+// window, floored at 30s. Its semantics are pinned at the resolver above rather than
+// behaviorally: every value that branch can produce is ≥ 30s, so telling them apart
+// through a live subprocess would need a >30s pause per case.
 
 describe('LIVE PATH: the child derives and reports the stall window (#385)', () => {
   // Runs the real child end-to-end against a temp providers.json, so the derivation
   // in main() — not just the helper — is under test, along with the log line that
   // makes the window diagnosable from run output (suggestion 3).
-  function dispatch(t, providerExtras, extraArgv = []) {
-    const { dir, cli } = makeFakeSlotDir(t);
+  function dispatch(providerExtras, extraArgv = []) {
+    const { dir, cli } = makeFakeSlotDir();
     const providersPath = path.join(dir, 'providers.json');
     fs.writeFileSync(providersPath, JSON.stringify({
       providers: [{
@@ -214,28 +228,45 @@ describe('LIVE PATH: the child derives and reports the stall window (#385)', () 
     return res.stderr || '';
   }
 
-  it('derives the window from a preset that sets idle_timeout_ms but no stall_timeout_ms', (t) => {
+  it('derives the window from a preset that sets idle_timeout_ms but no stall_timeout_ms', () => {
     // The exact shipped shape of claude-z-ai / claude-minimax / claude-kimi.
-    const stderr = dispatch(t, { idle_timeout_ms: 90000 });
+    const stderr = dispatch({ idle_timeout_ms: 90000 });
     assert.match(stderr, /stall=90000ms \(idle\)/);
   });
 
-  it('keeps the 30s default — labelled as such — for a slot that configures nothing', (t) => {
-    const stderr = dispatch(t, {});
+  it('keeps the 30s default — labelled as such — for a slot that configures nothing', () => {
+    const stderr = dispatch({});
     assert.match(stderr, /stall=30000ms \(default\)/);
   });
 
-  it('reproduces the #385 dispatch (--timeout 300000) without inflating the window to 5min', (t) => {
-    const stderr = dispatch(t, { idle_timeout_ms: 90000 }, ['--timeout', '300000']);
+  it('reproduces the #385 dispatch (--timeout 300000) without inflating the window to 5min', () => {
+    const stderr = dispatch({ idle_timeout_ms: 90000 }, ['--timeout', '300000']);
     assert.match(stderr, /idle=300000ms hard=300000ms stall=90000ms \(idle\)/);
   });
 
-  it('does not warn about the parent dispatcher\'s own flags on a clean child dispatch', (t) => {
-    // #385: quorum-slot-dispatch.cjs require()s this module, which ran the argv check
-    // against the PARENT's argv and warned on every dispatch about flags that do reach
-    // the CLI. A clean child dispatch must be silent.
-    const stderr = dispatch(t, {});
-    assert.doesNotMatch(stderr, /unrecognized dispatch flag/);
+  it('does not warn about the parent dispatcher\'s own flags when the PARENT requires it', () => {
+    // #385: quorum-slot-dispatch.cjs require()s this module for parseVerdictLine, which
+    // ran the #202 argv check against the PARENT's argv — so every dispatch warned that
+    // the parent's own flags were "ignored", flags that do reach the CLI. Direct child
+    // execution can't catch this (its argv is clean and the old code passed too); the
+    // regression only reproduces through a require() with dispatcher flags in argv.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-stall-req-'));
+    TMP_DIRS.push(dir);
+    const parent = path.join(dir, 'fake-parent.cjs');
+    fs.writeFileSync(parent,
+      `require(${JSON.stringify(path.join(__dirname, 'call-quorum-slot.cjs'))});\n`, 'utf8');
+    const res = spawnSync(process.execPath, [
+      parent, '--mode', 'deliberate', '--question', 'q', '--artifact-path', '/tmp/a',
+      '--review-context', 'ctx', '--request-improvements',
+    ], { cwd: dir, encoding: 'utf8', timeout: 30000, input: '' });
+    assert.doesNotMatch(res.stderr || '', /unrecognized dispatch flag/);
+  });
+
+  it('still warns about a genuinely unknown flag on a real child dispatch (#202 intact)', () => {
+    // The guard must narrow WHERE the check runs, not disable it: parent→child contract
+    // drift is exactly what it exists to catch.
+    const stderr = dispatch({}, ['--not-a-real-flag', 'x']);
+    assert.match(stderr, /unrecognized dispatch flag\(s\) ignored: --not-a-real-flag/);
   });
 });
 
