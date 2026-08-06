@@ -175,7 +175,12 @@ function loadPrecedents(projectRoot) {
     precedentsCache.set(projectRoot, precedents);
     return precedents;
   } catch (e) {
-    process.stderr.write(`[quorum-slot-dispatch] precedents load failed (fail-open): ${e.message}\n`);
+    // #385: "no precedents file" is the normal state for a repo that has never
+    // recorded one — warning about it on every dispatch is noise that buries the
+    // real failures (malformed JSON, unreadable file), which still warn.
+    if (e && e.code !== 'ENOENT') {
+      process.stderr.write(`[quorum-slot-dispatch] precedents load failed (fail-open): ${e.message}\n`);
+    }
     precedentsCache.set(projectRoot, []);
     return [];
   }

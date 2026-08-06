@@ -1554,3 +1554,50 @@ test('QSD-DIAG-2: formatDiagnosticForPrompt must fail-open when trace_alignment.
   const out = mod.formatDiagnosticForPrompt({ mismatch_diff: 'm', correction_proposals: [], trace_alignment: { diverged_fields: ['x', 'y'] } });
   assert.ok(out.includes('x, y'), 'array diverged_fields must still be joined');
 });
+
+// ── loadPrecedents: missing file is not a failure (#385) ─────────────────────
+// Every dispatch in a repo that has never recorded a precedent printed
+// `precedents load failed (fail-open): ENOENT …`. Fail-open is right; warning about
+// the normal state on every single call is noise that buries the real failures.
+
+const fs = require('node:fs');
+const os = require('node:os');
+
+function captureStderr(fn) {
+  const chunks = [];
+  const real = process.stderr.write;
+  process.stderr.write = (chunk, ...rest) => { chunks.push(String(chunk)); return true; };
+  try { return { value: fn(), stderr: chunks.join('') }; }
+  finally { process.stderr.write = real; }
+}
+
+// Cleanup on process exit rather than TestContext.after: `t.after` landed in Node
+// 18.8, and package.json declares engines.node ">=18.0.0".
+const PREC_TMP_DIRS = [];
+process.on('exit', () => {
+  for (const d of PREC_TMP_DIRS) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} }
+});
+
+function tmpRoot() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-prec-'));
+  PREC_TMP_DIRS.push(dir);
+  return dir;
+}
+
+test('QSD-PREC-ENOENT-1: a missing precedents.json returns [] SILENTLY', () => {
+  assert.ok(mod, 'module not loaded');
+  const root = tmpRoot(); // no .planning/quorum/precedents.json
+  const { value, stderr } = captureStderr(() => mod.loadPrecedents(root));
+  assert.deepStrictEqual(value, [], 'must still fail open to an empty list');
+  assert.strictEqual(stderr, '', `must not warn about a file that was never recorded (got: ${stderr})`);
+});
+
+test('QSD-PREC-ENOENT-2: a MALFORMED precedents.json still warns', () => {
+  assert.ok(mod, 'module not loaded');
+  const root = tmpRoot();
+  fs.mkdirSync(path.join(root, '.planning', 'quorum'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.planning', 'quorum', 'precedents.json'), '{ not json', 'utf8');
+  const { value, stderr } = captureStderr(() => mod.loadPrecedents(root));
+  assert.deepStrictEqual(value, [], 'must fail open to an empty list');
+  assert.match(stderr, /precedents load failed/, 'a corrupt file is a real failure and must stay visible');
+});
