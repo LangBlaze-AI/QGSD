@@ -29,9 +29,9 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const REPO = path.resolve(__dirname, '..');
-const pkg = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8'));
 
 // Top-level keys that mean "this file IS someone's fleet/quorum config", not code.
 const USER_CONFIG_KEYS = [
@@ -44,21 +44,25 @@ const USER_CONFIG_KEYS = [
 ];
 
 // The ONLY shipped file allowed to carry one of those keys, and only while empty.
-const ALLOWED = new Map([['bin/providers.json', 'must be an empty provider list']]);
+const ALLOWED = new Set(['bin/providers.json']);
 
-// Positive entries of package.json `files` (the "!"-prefixed ones are exclusions).
-const SHIPPED_ROOTS = (pkg.files || []).filter(f => !f.startsWith('!'));
-
-function walkJson(dir, acc = []) {
-  let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return acc; }
-  for (const e of entries) {
-    if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) walkJson(full, acc);
-    else if (e.name.endsWith('.json') && !/\.test\./.test(e.name)) acc.push(full);
-  }
-  return acc;
+// The packaged file list comes from npm itself, not from re-deriving package.json
+// `files`. Re-deriving means reimplementing npm's glob/negation/ignore-file
+// precedence, and any entry the reimplementation can't resolve (a glob like
+// `config/**`) gets silently skipped — a gate that quietly stops looking is worse
+// than no gate. `--ignore-scripts` keeps prepack/prepublishOnly (which runs
+// build:hooks) from firing during a test. Takes ~1s.
+function packagedFiles() {
+  const res = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+    cwd: REPO, encoding: 'utf8', timeout: 180000, maxBuffer: 32 * 1024 * 1024,
+  });
+  assert.ok(
+    res.status === 0 && res.stdout,
+    `npm pack --dry-run failed (status=${res.status}); this gate needs npm's own file ` +
+    `list to be authoritative — do not fall back to walking package.json "files".\n${res.stderr || ''}`,
+  );
+  // npm prints notices on stderr; --json puts the payload on stdout.
+  return JSON.parse(res.stdout)[0].files.map(f => f.path);
 }
 
 test('SHIPCFG-1: bin/providers.json ships EMPTY — the user\'s slots are built on their machine', () => {
@@ -80,39 +84,36 @@ test('SHIPCFG-2: templates/nf.json is not resurrected', () => {
   );
 });
 
-test('SHIPCFG-3: no packaged file carries user quorum/provider config as data', () => {
+test('SHIPCFG-3: no file in the npm tarball carries user quorum/provider config as data', () => {
   const offenders = [];
-  for (const root of SHIPPED_ROOTS) {
-    const abs = path.join(REPO, root);
-    let stat;
-    try { stat = fs.statSync(abs); } catch (_) { continue; } // a `files` entry may be a glob
-    const files = stat.isDirectory() ? walkJson(abs) : [abs];
-    for (const f of files) {
-      const rel = path.relative(REPO, f).split(path.sep).join('/');
-      let data;
-      try { data = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { continue; }
-      if (!data || typeof data !== 'object' || Array.isArray(data)) continue;
-      const hit = USER_CONFIG_KEYS.filter(k => Object.prototype.hasOwnProperty.call(data, k));
-      if (hit.length > 0 && !ALLOWED.has(rel)) offenders.push(`${rel} (${hit.join(', ')})`);
-    }
+  for (const rel of packagedFiles()) {
+    if (!rel.endsWith('.json') || /\.test\./.test(rel)) continue;
+    let data;
+    try { data = JSON.parse(fs.readFileSync(path.join(REPO, rel), 'utf8')); } catch (_) { continue; }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) continue;
+    const hit = USER_CONFIG_KEYS.filter(k => Object.prototype.hasOwnProperty.call(data, k));
+    if (hit.length > 0 && !ALLOWED.has(rel)) offenders.push(`${rel} (${hit.join(', ')})`);
   }
   assert.deepStrictEqual(
     offenders, [],
-    'These packaged files carry user config as data:\n  ' + offenders.join('\n  ') +
+    'These files in the npm tarball carry user config as data:\n  ' + offenders.join('\n  ') +
     '\nnForma must not ship a fleet config. Generate it at install from what the user ' +
     'actually has (see buildRequiredModelsFromMcp in bin/install.js), or put behavior ' +
     'defaults in DEFAULT_CONFIG (hooks/config-loader.js) where they are code, not data.',
   );
 });
 
-test('SHIPCFG-4: the gate actually inspects the packaged tree (non-vacuous)', () => {
-  // Guards the sweep itself: if `files` were renamed or the walker silently returned
-  // nothing, SHIPCFG-3 would pass by finding no files at all.
-  assert.ok(SHIPPED_ROOTS.includes('bin'), 'package.json files must still ship bin/');
-  const scanned = walkJson(path.join(REPO, 'bin'));
-  assert.ok(scanned.length > 0, 'the JSON walker found no files under bin/ — the sweep is vacuous');
+test('SHIPCFG-4: the gate actually inspects the tarball (non-vacuous)', () => {
+  // Guards the sweep itself: if npm's output shape changed or the list came back
+  // empty, SHIPCFG-3 would pass by scanning nothing.
+  const files = packagedFiles();
+  assert.ok(files.length > 100, `npm resolved only ${files.length} packaged files — the sweep is vacuous`);
   assert.ok(
-    scanned.some(f => f.endsWith(`${path.sep}providers.json`)),
+    files.includes('bin/providers.json'),
     'the sweep must reach bin/providers.json, the one file the allowlist covers',
+  );
+  assert.ok(
+    files.some(f => f.endsWith('.json') && f !== 'bin/providers.json' && f !== 'package.json'),
+    'the sweep must see JSON files beyond the allowlisted one',
   );
 });
