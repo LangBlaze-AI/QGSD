@@ -392,7 +392,13 @@ try { sessionStore.gcStale(repoDir); } catch (_) { /* fail-open */ }
 
 // #202: warn (stderr) on any --flag this child does not parse, so future
 // parent→child dispatch-argv contract drift is visible instead of silent.
-warnUnknownDispatchFlags(argv);
+// #385: only when this file IS the child. quorum-slot-dispatch.cjs (the PARENT)
+// require()s this module for parseVerdictLine/VERDICTS, which ran this check against
+// the PARENT's argv — so every single dispatch warned that the parent's own flags
+// (--mode --question --artifact-path --review-context --request-improvements) were
+// "ignored", flags that do reach the CLI. A false alarm on the happy path trains the
+// reader to ignore the warning that exists to catch real contract drift.
+if (require.main === module) warnUnknownDispatchFlags(argv);
 
 // Defense-in-depth: write result file from child process (Haiku can't modify child argv)
 function writeInnerOutputFile(result) {
@@ -533,19 +539,65 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag, opts) {
 // Node's setTimeout clamps delays above 2^31-1 ms and fires them IMMEDIATELY, so a
 // nonsensically large stall_timeout_ms would silently disable the stall timer. Cap
 // at TIMEOUT_MAX to keep the timer well-formed.
+//
+// STALL-TIMEOUT-02 (issue #385): requiring `stall_timeout_ms` to be set explicitly
+// made the escape hatch useless in practice — the slots that need it (claude-z-ai,
+// claude-minimax, claude-kimi and any other third-party Anthropic-compatible route)
+// are created by preset import / manual add, which sets `idle_timeout_ms` but never
+// `stall_timeout_ms`. They declared a 90s idle tolerance and were still killed at 30s
+// in their first 500 bytes, every round. So a slot's CONFIGURED `idle_timeout_ms`,
+// when larger than the default stall window, now derives the stall window too: a slot
+// that says "I may go quiet for 90s" does not want a 30s kill on its preamble. The
+// 30s default still applies to every slot that configured nothing, so fast-fail on a
+// genuinely hung slot is unchanged fleet-wide.
 const TIMEOUT_MAX = 2147483647; // 2^31 - 1
-function stallTimeoutFor(provider) {
-  const raw = provider && provider.stall_timeout_ms;
-  // Only coerce real numbers / numeric strings. Without this, Number(true) === 1
-  // would pass the `> 0` guard and yield a 1ms stall timer that instantly false-kills
-  // every slot. Booleans/objects/etc. fall back to the default.
-  if (typeof raw !== 'number' && typeof raw !== 'string') return 30000;
+const STALL_TIMEOUT_DEFAULT_MS = 30000;
+
+// Coerce a duration config value to a positive number of ms, or null.
+// Only real numbers / numeric strings count. Without this, Number(true) === 1 would
+// pass the `> 0` guard and yield a 1ms timer that instantly false-kills every slot.
+function toPositiveMs(raw) {
+  if (typeof raw !== 'number' && typeof raw !== 'string') return null;
   const v = Number(raw);
-  if (!(v > 0)) return 30000;
+  if (!(v > 0)) return null;
   return Math.min(v, TIMEOUT_MAX);
 }
 
-function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts) {
+/**
+ * Resolve the header-only stall window and where it came from (the `source` is what
+ * the dispatch log prints, so this is diagnosable from run output instead of by
+ * reading this file — issue #385, suggestion 3).
+ *
+ * The derivation reads the slot's CONFIGURED `idle_timeout_ms` — a property of the
+ * provider ("this route is slow-bursty") — never the 90s built-in fallback (that
+ * would disable the stall timer for every unconfigured slot) and never a caller's
+ * `--timeout` alone (the orchestrator passes 300000 for its own reasons; inflating
+ * the stall window to 5 minutes would make a dead slot cost 5 minutes per retry).
+ * A caller that LOWERS the idle budget below the configured value still wins — its
+ * budget caps the derived window.
+ *
+ * @param {object} provider  providers.json entry
+ * @param {number|string} [effectiveIdleMs]  the idle timeout actually in force for
+ *   this dispatch, used only as a ceiling. Omit when there is no caller budget.
+ * @returns {{ms: number, source: 'per-slot'|'idle'|'default'}}
+ */
+function resolveStallTimeout(provider, effectiveIdleMs) {
+  const explicit = toPositiveMs(provider && provider.stall_timeout_ms);
+  if (explicit !== null) return { ms: explicit, source: 'per-slot' };
+  const configuredIdle = toPositiveMs(provider && provider.idle_timeout_ms);
+  if (configuredIdle !== null) {
+    const ceiling = toPositiveMs(effectiveIdleMs);
+    const bounded = ceiling === null ? configuredIdle : Math.min(configuredIdle, ceiling);
+    if (bounded > STALL_TIMEOUT_DEFAULT_MS) return { ms: bounded, source: 'idle' };
+  }
+  return { ms: STALL_TIMEOUT_DEFAULT_MS, source: 'default' };
+}
+
+function stallTimeoutFor(provider, effectiveIdleMs) {
+  return resolveStallTimeout(provider, effectiveIdleMs).ms;
+}
+
+function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts, stallTimeoutMs) {
   const { args, useStdinPrompt, isCcr, promptMutated } = buildSpawnArgs(provider, prompt, allowedToolsFlag, resumeOpts);
   if (promptMutated) {
     // CCR-MUTATE-01: warn that the prompt was neutralized for CCR's shell re-spawn.
@@ -640,11 +692,13 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     let totalBytesReceived = 0;
     // Tighter idle timeout when the CLI has produced < STALL_BYTE_THRESHOLD bytes
     // (header-only → probably hung). Per-slot override via providers.json
-    // `stall_timeout_ms` (see stallTimeoutFor): slow models (e.g. GLM-5.2[1m],
-    // MiniMax-M3) legitimately emit a small preamble then pause >30s mid-generation
-    // — they are slow, not stalled — so they need a longer threshold to avoid being
-    // false-killed.
-    const STALL_TIMEOUT_MS = stallTimeoutFor(provider);
+    // `stall_timeout_ms`, else derived from an explicitly configured idle timeout
+    // (see resolveStallTimeout): slow models (e.g. GLM-5.2[1m], MiniMax-M3)
+    // legitimately emit a small preamble then pause >30s mid-generation — they are
+    // slow, not stalled — so they need a longer threshold to avoid being false-killed.
+    // The caller resolves this once per dispatch and passes it in; the fallback keeps
+    // direct callers (tests, ad-hoc invocations) on the same rules.
+    const STALL_TIMEOUT_MS = toPositiveMs(stallTimeoutMs) ?? stallTimeoutFor(provider);
     const STALL_BYTE_THRESHOLD = 500; // below this = "just a header, probably stalled"
 
     child.stdout.on('data', d => {
@@ -765,7 +819,7 @@ function spawnRotateCmd(cmdArray) {
   });
 }
 
-async function runSubprocessWithRotation(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts) {
+async function runSubprocessWithRotation(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts, stallTimeoutMs) {
   const rot      = provider.oauth_rotation;
   const max      = rot.max_retries ?? 3;
   const patterns = rot.retry_on_patterns ?? ['quota', 'resource_exhausted', 'unauthorized', '401', '403'];
@@ -779,7 +833,7 @@ async function runSubprocessWithRotation(provider, prompt, idleTimeoutMs, hardTi
     }
     try {
       // Wrap inner call with retry-with-backoff (each oauth attempt gets retry protection)
-      const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts), provider.name);
+      const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts, stallTimeoutMs), provider.name);
       const out = retryResult.result;
       totalRetryCount = attempt + retryResult.retryCount;
       if (matchesRotationPattern(out, patterns) && attempt < max) {
@@ -1030,7 +1084,11 @@ async function main() {
   // Hard cap must be >= idle timeout (otherwise idle never fires)
   effectiveHardTimeout = Math.max(effectiveHardTimeout, effectiveIdleTimeout);
 
-  process.stderr.write(`[call-quorum-slot] Timeouts: idle=${effectiveIdleTimeout}ms hard=${effectiveHardTimeout}ms for slot ${slot}\n`);
+  // STALL-TIMEOUT-02 (#385): the header-only stall window, derived from this slot's
+  // configured idle tolerance and capped by the idle budget actually in force.
+  const stall = resolveStallTimeout(provider, effectiveIdleTimeout);
+
+  process.stderr.write(`[call-quorum-slot] Timeouts: idle=${effectiveIdleTimeout}ms hard=${effectiveHardTimeout}ms stall=${stall.ms}ms (${stall.source}) for slot ${slot}\n`);
 
   const startMs = Date.now();
 
@@ -1043,11 +1101,11 @@ async function main() {
       // thread-persistence semantics are identical for the rotation and non-rotation paths.
       const resumeOpts = { persistentThreads, repoDir, slotName: slot, invocationId };
       if (provider.oauth_rotation?.enabled) {
-        const retryResult = await runSubprocessWithRotation(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools, resumeOpts);
+        const retryResult = await runSubprocessWithRotation(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools, resumeOpts, stall.ms);
         result = retryResult.result;
         retryCount = retryResult.retryCount;
       } else {
-        const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools, resumeOpts), slot);
+        const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools, resumeOpts, stall.ms), slot);
         result = retryResult.result;
         retryCount = retryResult.retryCount;
       }
@@ -1169,4 +1227,4 @@ if (require.main === module) {
 }
 
 // ─── Test exports (SHELL-ESCAPE-01, TRUNC-01, INFRA-367) ───────────────────────
-module.exports = { buildSpawnArgs, stallTimeoutFor, recordTelemetry, findProjectRoot, writeFailureLog, atomicUpdateJson, VERDICTS, VERDICT_LINE_RE, parseVerdictLine };
+module.exports = { buildSpawnArgs, stallTimeoutFor, resolveStallTimeout, runSubprocess, recordTelemetry, findProjectRoot, writeFailureLog, atomicUpdateJson, VERDICTS, VERDICT_LINE_RE, parseVerdictLine };

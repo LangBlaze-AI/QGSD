@@ -1554,3 +1554,43 @@ test('QSD-DIAG-2: formatDiagnosticForPrompt must fail-open when trace_alignment.
   const out = mod.formatDiagnosticForPrompt({ mismatch_diff: 'm', correction_proposals: [], trace_alignment: { diverged_fields: ['x', 'y'] } });
   assert.ok(out.includes('x, y'), 'array diverged_fields must still be joined');
 });
+
+// ── loadPrecedents: missing file is not a failure (#385) ─────────────────────
+// Every dispatch in a repo that has never recorded a precedent printed
+// `precedents load failed (fail-open): ENOENT …`. Fail-open is right; warning about
+// the normal state on every single call is noise that buries the real failures.
+
+const fs = require('node:fs');
+const os = require('node:os');
+
+function captureStderr(fn) {
+  const chunks = [];
+  const real = process.stderr.write;
+  process.stderr.write = (chunk, ...rest) => { chunks.push(String(chunk)); return true; };
+  try { return { value: fn(), stderr: chunks.join('') }; }
+  finally { process.stderr.write = real; }
+}
+
+function tmpRoot(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-prec-'));
+  t.after(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {} });
+  return dir;
+}
+
+test('QSD-PREC-ENOENT-1: a missing precedents.json returns [] SILENTLY', (t) => {
+  assert.ok(mod, 'module not loaded');
+  const root = tmpRoot(t); // no .planning/quorum/precedents.json
+  const { value, stderr } = captureStderr(() => mod.loadPrecedents(root));
+  assert.deepStrictEqual(value, [], 'must still fail open to an empty list');
+  assert.strictEqual(stderr, '', `must not warn about a file that was never recorded (got: ${stderr})`);
+});
+
+test('QSD-PREC-ENOENT-2: a MALFORMED precedents.json still warns', (t) => {
+  assert.ok(mod, 'module not loaded');
+  const root = tmpRoot(t);
+  fs.mkdirSync(path.join(root, '.planning', 'quorum'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.planning', 'quorum', 'precedents.json'), '{ not json', 'utf8');
+  const { value, stderr } = captureStderr(() => mod.loadPrecedents(root));
+  assert.deepStrictEqual(value, [], 'must fail open to an empty list');
+  assert.match(stderr, /precedents load failed/, 'a corrupt file is a real failure and must stay visible');
+});

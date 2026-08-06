@@ -8,7 +8,11 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { stallTimeoutFor, parseVerdictLine } = require('./call-quorum-slot.cjs');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const { stallTimeoutFor, resolveStallTimeout, runSubprocess, parseVerdictLine } = require('./call-quorum-slot.cjs');
 
 describe('stallTimeoutFor — per-slot stall timeout override', () => {
   it('defaults to 30000ms when stall_timeout_ms is absent', () => {
@@ -51,6 +55,187 @@ describe('stallTimeoutFor — per-slot stall timeout override', () => {
     // yields a 1ms stall timeout — every slot is instantly false-killed as STALLed.
     // A non-numeric type like a boolean is not a valid duration and must fall back.
     assert.equal(stallTimeoutFor({ stall_timeout_ms: true }), 30000);
+  });
+});
+
+// ─── STALL-TIMEOUT-02 (issue #385) ────────────────────────────────────────────
+// The per-slot escape hatch existed but nothing set it: claude-z-ai / claude-minimax
+// / claude-kimi ship `idle_timeout_ms: 90000` and no `stall_timeout_ms`, so all three
+// were killed at 30s inside their 217–420-byte preamble, every round. An explicitly
+// configured idle tolerance now derives the stall window.
+describe('resolveStallTimeout — idle-derived stall window (#385)', () => {
+  it('derives the stall window from the slot\'s configured idle timeout', () => {
+    // The exact shape of the three false-killed slots.
+    const zai = { name: 'claude-z-ai', idle_timeout_ms: 90000 };
+    assert.deepEqual(resolveStallTimeout(zai, 90000), { ms: 90000, source: 'idle' });
+    assert.deepEqual(resolveStallTimeout(zai), { ms: 90000, source: 'idle' });
+  });
+
+  it('keeps the 30s default when nothing is configured', () => {
+    // Fast-fail on genuinely hung slots must survive this fix — deriving from the
+    // built-in 90s idle FALLBACK would silently disable the stall timer fleet-wide.
+    assert.deepEqual(resolveStallTimeout({ name: 'codex-1' }, 90000), { ms: 30000, source: 'default' });
+    assert.deepEqual(resolveStallTimeout({ name: 'codex-1' }), { ms: 30000, source: 'default' });
+  });
+
+  it('a caller-supplied idle budget cannot INFLATE the window past the slot config', () => {
+    // The run in #385 dispatched with --timeout 300000 (idle=300000ms in the log).
+    // Deriving from that would make a genuinely dead slot cost 5 minutes per retry;
+    // the slot's own 90s declaration is the claim about how slow it is.
+    assert.deepEqual(resolveStallTimeout({ idle_timeout_ms: 90000 }, 300000), { ms: 90000, source: 'idle' });
+    // …and a slot that declared nothing gets no window from --timeout at all.
+    assert.deepEqual(resolveStallTimeout({}, 300000), { ms: 30000, source: 'default' });
+  });
+
+  it('a caller that LOWERS the idle budget caps the derived window', () => {
+    // latency_budget_ms / --timeout below the configured idle: the caller's budget wins.
+    assert.deepEqual(resolveStallTimeout({ idle_timeout_ms: 90000 }, 45000), { ms: 45000, source: 'idle' });
+    // Clamped all the way down to the floor → indistinguishable from the default.
+    assert.deepEqual(resolveStallTimeout({ idle_timeout_ms: 90000 }, 10000), { ms: 30000, source: 'default' });
+  });
+
+  it('an explicit stall_timeout_ms still wins over the idle timeout', () => {
+    const p = { stall_timeout_ms: 45000, idle_timeout_ms: 300000 };
+    assert.deepEqual(resolveStallTimeout(p, 300000), { ms: 45000, source: 'per-slot' });
+  });
+
+  it('does not LOWER the stall window below 30s for a short idle timeout', () => {
+    // codex-1 configures idle=30000; a slot with idle=5000 must not get a 5s stall
+    // timer — the derivation only ever raises the window.
+    assert.deepEqual(resolveStallTimeout({ idle_timeout_ms: 30000 }, 30000), { ms: 30000, source: 'default' });
+    assert.deepEqual(resolveStallTimeout({ idle_timeout_ms: 5000 }, 5000), { ms: 30000, source: 'default' });
+  });
+
+  it('ignores a garbage idle timeout instead of deriving a nonsense window', () => {
+    assert.equal(resolveStallTimeout({ idle_timeout_ms: 'soon' }).ms, 30000);
+    assert.equal(resolveStallTimeout({ idle_timeout_ms: true }).ms, 30000);
+    assert.equal(resolveStallTimeout({ idle_timeout_ms: -1 }).ms, 30000);
+    assert.equal(resolveStallTimeout({ idle_timeout_ms: 0 }).ms, 30000);
+  });
+
+  it('clamps an oversized derived window to TIMEOUT_MAX (Node fires >2^31-1ms timers immediately)', () => {
+    assert.equal(resolveStallTimeout({ idle_timeout_ms: 3e9 }).ms, 2147483647);
+  });
+
+  it('reports a source label for every branch (so the dispatch log is diagnosable)', () => {
+    // Suggestion 3 in #385: the run output must say WHERE the window came from,
+    // instead of requiring a source read to tell 30s-default from 30s-configured.
+    assert.equal(resolveStallTimeout({ stall_timeout_ms: 90000 }).source, 'per-slot');
+    assert.equal(resolveStallTimeout({ idle_timeout_ms: 90000 }).source, 'idle');
+    assert.equal(resolveStallTimeout({}).source, 'default');
+  });
+});
+
+// ─── LIVE PATH ────────────────────────────────────────────────────────────────
+// A resolver that returns the right number is worth nothing if the number never
+// reaches the timer, or reaches the timer but not the slot that needed it. These
+// two tests exercise the real dispatch: a spawned CLI that emits a sub-500-byte
+// preamble and then goes quiet — exactly the shape that false-killed the three
+// third-party slots — and the real `node call-quorum-slot.cjs --slot …` child.
+
+// A stand-in CLI: prints a short preamble (well under the 500-byte stall
+// threshold), pauses, then answers. NF_FAKE_PAUSE_MS controls the silence.
+const FAKE_CLI = `
+'use strict';
+process.stdout.write('thinking...\\n');
+setTimeout(() => {
+  process.stdout.write('verdict: APPROVE\\n');
+  process.exit(0);
+}, Number(process.env.NF_FAKE_PAUSE_MS || 900));
+`;
+
+function makeFakeSlotDir(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-stall-'));
+  t.after(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {} });
+  // findProjectRoot() walks up to the nearest .planning/ — without one here it would
+  // find the real repo and write this test's telemetry into it.
+  fs.mkdirSync(path.join(dir, '.planning'), { recursive: true });
+  const cli = path.join(dir, 'fake-cli.cjs');
+  fs.writeFileSync(cli, FAKE_CLI, 'utf8');
+  return { dir, cli };
+}
+
+describe('LIVE PATH: the resolved stall window drives the real timer (#385)', () => {
+  it('kills a quiet sub-500-byte slot at the window it was given, not the 30s constant', async (t) => {
+    const { cli } = makeFakeSlotDir(t);
+    const provider = {
+      name: 'fake-slow', type: 'subprocess', mainTool: 'node', cli: 'node',
+      args_template: [cli, '{prompt}'],
+    };
+    // 400ms window vs a 900ms pause: the 30s default would have let this finish, so a
+    // STALL here proves the passed window — not the constant — armed the timer.
+    await assert.rejects(
+      () => runSubprocess(provider, 'q', 10000, 15000, null, {}, 400),
+      /STALL: only \d+ bytes received then silence for 400ms/,
+    );
+  });
+
+  it('lets that same slot finish when the window covers its pause', async (t) => {
+    const { cli } = makeFakeSlotDir(t);
+    const provider = {
+      name: 'fake-slow', type: 'subprocess', mainTool: 'node', cli: 'node',
+      args_template: [cli, '{prompt}'],
+    };
+    const out = await runSubprocess(provider, 'q', 10000, 15000, null, {}, 3000);
+    assert.match(out, /verdict: APPROVE/);
+  });
+
+  it('falls back to the provider-derived window when handed a garbage one', async (t) => {
+    const { cli } = makeFakeSlotDir(t);
+    // Number(true) === 1 → a 1ms stall timer would false-kill this slot instantly.
+    const provider = {
+      name: 'fake-slow', type: 'subprocess', mainTool: 'node', cli: 'node',
+      args_template: [cli, '{prompt}'],
+    };
+    const out = await runSubprocess(provider, 'q', 10000, 15000, null, {}, true);
+    assert.match(out, /verdict: APPROVE/);
+  });
+});
+
+describe('LIVE PATH: the child derives and reports the stall window (#385)', () => {
+  // Runs the real child end-to-end against a temp providers.json, so the derivation
+  // in main() — not just the helper — is under test, along with the log line that
+  // makes the window diagnosable from run output (suggestion 3).
+  function dispatch(t, providerExtras, extraArgv = []) {
+    const { dir, cli } = makeFakeSlotDir(t);
+    const providersPath = path.join(dir, 'providers.json');
+    fs.writeFileSync(providersPath, JSON.stringify({
+      providers: [{
+        name: 'fake-slot', type: 'subprocess', mainTool: 'node', cli: 'node',
+        args_template: [cli, '{prompt}'], ...providerExtras,
+      }],
+    }), 'utf8');
+    const res = spawnSync(process.execPath, [
+      path.join(__dirname, 'call-quorum-slot.cjs'), '--slot', 'fake-slot', '--cwd', dir, ...extraArgv,
+    ], {
+      cwd: dir, input: 'question\n', encoding: 'utf8', timeout: 30000,
+      env: { ...process.env, UNIFIED_PROVIDERS_CONFIG: providersPath, NF_FAKE_PAUSE_MS: '150' },
+    });
+    return res.stderr || '';
+  }
+
+  it('derives the window from a preset that sets idle_timeout_ms but no stall_timeout_ms', (t) => {
+    // The exact shipped shape of claude-z-ai / claude-minimax / claude-kimi.
+    const stderr = dispatch(t, { idle_timeout_ms: 90000 });
+    assert.match(stderr, /stall=90000ms \(idle\)/);
+  });
+
+  it('keeps the 30s default — labelled as such — for a slot that configures nothing', (t) => {
+    const stderr = dispatch(t, {});
+    assert.match(stderr, /stall=30000ms \(default\)/);
+  });
+
+  it('reproduces the #385 dispatch (--timeout 300000) without inflating the window to 5min', (t) => {
+    const stderr = dispatch(t, { idle_timeout_ms: 90000 }, ['--timeout', '300000']);
+    assert.match(stderr, /idle=300000ms hard=300000ms stall=90000ms \(idle\)/);
+  });
+
+  it('does not warn about the parent dispatcher\'s own flags on a clean child dispatch', (t) => {
+    // #385: quorum-slot-dispatch.cjs require()s this module, which ran the argv check
+    // against the PARENT's argv and warned on every dispatch about flags that do reach
+    // the CLI. A clean child dispatch must be silent.
+    const stderr = dispatch(t, {});
+    assert.doesNotMatch(stderr, /unrecognized dispatch flag/);
   });
 });
 
