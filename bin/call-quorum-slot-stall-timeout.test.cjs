@@ -1,10 +1,15 @@
 'use strict';
 
-// STALL-TIMEOUT-01: the <500-byte "stall" timer was hardcoded to 30s, which
-// false-killed slow-bursty models (GLM-5.2[1m], MiniMax-M3 via a third-party
-// Anthropic-compatible API) — they emit a short preamble then pause >30s while
-// generating. `stall_timeout_ms` on the provider raises the threshold; absent /
-// invalid values fall back to the 30s default.
+// STALL-TIMEOUT-03 — the timer model a live quorum ruled on (2026-08-07).
+//
+// The old model asked "has this slot produced < 500 bytes?" and treated that as evidence
+// of a hang. A quorum run falsified it by killing three of its own five voters mid-answer:
+// they had emitted a ~200-byte preamble in under a second and were thinking in silence.
+// Byte count never measured liveness — STREAMING does. So there are now two windows:
+//   • before the first byte → ttfb_timeout_ms (default 30s), where fast-fail belongs
+//   • after the first byte  → inter_chunk_ceiling_ms, else the caller's idle budget
+// `stall_timeout_ms` survives as a legacy alias for the ceiling, because the values
+// already in that field were measured against post-preamble silence.
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -12,136 +17,95 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { stallTimeoutFor, resolveStallTimeout, runSubprocess, parseVerdictLine } = require('./call-quorum-slot.cjs');
+const { resolveTtfbTimeout, resolveInterChunkCeiling, runSubprocess, parseVerdictLine } = require('./call-quorum-slot.cjs');
 
-describe('stallTimeoutFor — per-slot stall timeout override', () => {
-  it('defaults to 30000ms when stall_timeout_ms is absent', () => {
-    assert.equal(stallTimeoutFor({ name: 'codex-1' }), 30000);
-    assert.equal(stallTimeoutFor({}), 30000);
+describe('resolveTtfbTimeout — the only window that may fast-fail', () => {
+  it('defaults to 30s', () => {
+    assert.deepEqual(resolveTtfbTimeout({ name: 'codex-1' }), { ms: 30000, source: 'default' });
+    assert.deepEqual(resolveTtfbTimeout({}), { ms: 30000, source: 'default' });
   });
 
-  it('honors a positive per-slot stall_timeout_ms (the GLM/MiniMax fix)', () => {
-    assert.equal(stallTimeoutFor({ name: 'claude-z-ai', stall_timeout_ms: 120000 }), 120000);
-    assert.equal(stallTimeoutFor({ stall_timeout_ms: 90000 }), 90000);
+  it('honors an explicit per-slot ttfb_timeout_ms', () => {
+    assert.deepEqual(resolveTtfbTimeout({ ttfb_timeout_ms: 120000 }), { ms: 120000, source: 'per-slot' });
+    assert.equal(resolveTtfbTimeout({ ttfb_timeout_ms: '45000' }).ms, 45000);
   });
 
-  it('accepts a numeric string value', () => {
-    assert.equal(stallTimeoutFor({ stall_timeout_ms: '120000' }), 120000);
+  it('is NOT derived from idle_timeout_ms — that derivation was the bug', () => {
+    // STALL-TIMEOUT-02 derived the kill window from idle_timeout_ms, which made that
+    // field mean "how long may this model think before output". For copilot-1 (30s) and
+    // claude-1 (90s) the configured value was far below real think time, so both were
+    // killed mid-answer. TTFB must ignore it entirely.
+    assert.deepEqual(resolveTtfbTimeout({ idle_timeout_ms: 90000 }), { ms: 30000, source: 'default' });
+    assert.deepEqual(resolveTtfbTimeout({ idle_timeout_ms: 30000 }), { ms: 30000, source: 'default' });
   });
 
-  it('falls back to 30000 for non-positive / NaN / null values', () => {
-    assert.equal(stallTimeoutFor({ stall_timeout_ms: 0 }), 30000);
-    assert.equal(stallTimeoutFor({ stall_timeout_ms: -5 }), 30000);
-    assert.equal(stallTimeoutFor({ stall_timeout_ms: 'nope' }), 30000);
-    assert.equal(stallTimeoutFor({ stall_timeout_ms: null }), 30000);
+  it('falls back to the default for garbage / non-numeric values', () => {
+    for (const bad of [0, -5, 'nope', null, true, {}, Infinity === 0]) {
+      assert.equal(resolveTtfbTimeout({ ttfb_timeout_ms: bad }).ms, 30000, `bad=${JSON.stringify(bad)}`);
+    }
   });
 
-  it('never returns the bare 30s default for a slot that configured a longer one', () => {
-    // Regression guard: before STALL-TIMEOUT-01 this was hardcoded 30000 regardless.
-    assert.notEqual(stallTimeoutFor({ stall_timeout_ms: 120000 }), 30000);
-  });
-
-  it('clamps oversized values to TIMEOUT_MAX (Node fires >2^31-1ms timers immediately)', () => {
-    const MAX = 2147483647;
-    assert.equal(stallTimeoutFor({ stall_timeout_ms: 3e9 }), MAX);
-    assert.equal(stallTimeoutFor({ stall_timeout_ms: MAX + 1 }), MAX);
-    assert.equal(stallTimeoutFor({ stall_timeout_ms: Infinity }), MAX);
-    assert.equal(stallTimeoutFor({ stall_timeout_ms: MAX }), MAX); // boundary, unchanged
-  });
-
-  // ─── ADVERSARIAL: type-coercion gap ──────────────────────────────────────────
-  it('falls back to 30000 for a boolean true instead of a 1ms stall timer (type-coercion gap)', () => {
-    // Number(true) === 1, which passes the `v > 0` guard, so a boolean config value
-    // yields a 1ms stall timeout — every slot is instantly false-killed as STALLed.
-    // A non-numeric type like a boolean is not a valid duration and must fall back.
-    assert.equal(stallTimeoutFor({ stall_timeout_ms: true }), 30000);
+  it('clamps an oversized value to TIMEOUT_MAX (Node fires >2^31-1ms timers immediately)', () => {
+    assert.equal(resolveTtfbTimeout({ ttfb_timeout_ms: 3e9 }).ms, 2147483647);
+    assert.equal(resolveTtfbTimeout({ ttfb_timeout_ms: Infinity }).ms, 2147483647);
   });
 });
 
-// ─── STALL-TIMEOUT-02 (issue #385) ────────────────────────────────────────────
-// The per-slot escape hatch existed but nothing set it: claude-z-ai / claude-minimax
-// / claude-kimi ship `idle_timeout_ms: 90000` and no `stall_timeout_ms`, so all three
-// were killed at 30s inside their 217–420-byte preamble, every round. An explicitly
-// configured idle tolerance now derives the stall window.
-describe('resolveStallTimeout — idle-derived stall window (#385)', () => {
-  it('derives the stall window from the slot\'s configured idle timeout', () => {
-    // The exact shape of the three false-killed slots.
-    const zai = { name: 'claude-z-ai', idle_timeout_ms: 90000 };
-    assert.deepEqual(resolveStallTimeout(zai, 90000), { ms: 90000, source: 'idle' });
-    assert.deepEqual(resolveStallTimeout(zai), { ms: 90000, source: 'idle' });
+describe('resolveInterChunkCeiling — a streaming slot is alive', () => {
+  it("defaults to the caller's idle budget once bytes are flowing", () => {
+    // This is the fix for the three killed voters: the caller had budgeted 300s while
+    // the derived window was 30s/90s.
+    assert.deepEqual(resolveInterChunkCeiling({ idle_timeout_ms: 90000 }, 300000), { ms: 300000, source: 'idle-budget' });
+    assert.deepEqual(resolveInterChunkCeiling({ idle_timeout_ms: 30000 }, 300000), { ms: 300000, source: 'idle-budget' });
   });
 
-  it('keeps the 30s default when nothing is configured', () => {
-    // Fast-fail on genuinely hung slots must survive this fix — deriving from the
-    // built-in 90s idle FALLBACK would silently disable the stall timer fleet-wide.
-    assert.deepEqual(resolveStallTimeout({ name: 'codex-1' }, 90000), { ms: 30000, source: 'default' });
-    assert.deepEqual(resolveStallTimeout({ name: 'codex-1' }), { ms: 30000, source: 'default' });
+  it('honors an explicit per-slot ceiling above the caller budget (kimi ~610s)', () => {
+    assert.deepEqual(
+      resolveInterChunkCeiling({ inter_chunk_ceiling_ms: 660000 }, 300000),
+      { ms: 660000, source: 'per-slot' },
+    );
   });
 
-  it('a caller-supplied idle budget cannot INFLATE the window past the slot config', () => {
-    // The run in #385 dispatched with --timeout 300000 (idle=300000ms in the log).
-    // Deriving from that would make a genuinely dead slot cost 5 minutes per retry;
-    // the slot's own 90s declaration is the claim about how slow it is.
-    assert.deepEqual(resolveStallTimeout({ idle_timeout_ms: 90000 }, 300000), { ms: 90000, source: 'idle' });
-    // …and a slot that declared nothing gets no window from --timeout at all.
-    assert.deepEqual(resolveStallTimeout({}, 300000), { ms: 30000, source: 'default' });
+  it('treats a legacy stall_timeout_ms as the ceiling, not as TTFB', () => {
+    // Values already in that field were measured against post-preamble silence, which
+    // is exactly what the ceiling governs — so the migration is semantics-preserving.
+    assert.deepEqual(resolveInterChunkCeiling({ stall_timeout_ms: 270000 }, 300000), { ms: 270000, source: 'legacy-stall' });
+    // The new field wins when both are present.
+    assert.equal(resolveInterChunkCeiling({ inter_chunk_ceiling_ms: 400000, stall_timeout_ms: 270000 }, 300000).ms, 400000);
   });
 
-  it('a caller that LOWERS the idle budget caps the derived window', () => {
-    // latency_budget_ms / --timeout below the configured idle: the caller's budget wins.
-    assert.deepEqual(resolveStallTimeout({ idle_timeout_ms: 90000 }, 45000), { ms: 45000, source: 'idle' });
-    // Clamped all the way down to the floor → indistinguishable from the default.
-    assert.deepEqual(resolveStallTimeout({ idle_timeout_ms: 90000 }, 10000), { ms: 30000, source: 'default' });
+  it('falls back to 90s only when the caller supplies no budget at all', () => {
+    assert.deepEqual(resolveInterChunkCeiling({}), { ms: 90000, source: 'default' });
+    assert.deepEqual(resolveInterChunkCeiling({}, 0), { ms: 90000, source: 'default' });
   });
 
-  it('an explicit stall_timeout_ms still wins over the idle timeout', () => {
-    const p = { stall_timeout_ms: 45000, idle_timeout_ms: 300000 };
-    assert.deepEqual(resolveStallTimeout(p, 300000), { ms: 45000, source: 'per-slot' });
-  });
-
-  it('does not LOWER the stall window below 30s for a short idle timeout', () => {
-    // codex-1 configures idle=30000; a slot with idle=5000 must not get a 5s stall
-    // timer — the derivation only ever raises the window.
-    assert.deepEqual(resolveStallTimeout({ idle_timeout_ms: 30000 }, 30000), { ms: 30000, source: 'default' });
-    assert.deepEqual(resolveStallTimeout({ idle_timeout_ms: 5000 }, 5000), { ms: 30000, source: 'default' });
-  });
-
-  it('ignores a garbage idle timeout instead of deriving a nonsense window', () => {
-    assert.equal(resolveStallTimeout({ idle_timeout_ms: 'soon' }).ms, 30000);
-    assert.equal(resolveStallTimeout({ idle_timeout_ms: true }).ms, 30000);
-    assert.equal(resolveStallTimeout({ idle_timeout_ms: -1 }).ms, 30000);
-    assert.equal(resolveStallTimeout({ idle_timeout_ms: 0 }).ms, 30000);
-  });
-
-  it('clamps an oversized derived window to TIMEOUT_MAX (Node fires >2^31-1ms timers immediately)', () => {
-    assert.equal(resolveStallTimeout({ idle_timeout_ms: 3e9 }).ms, 2147483647);
-  });
-
-  it('reports a source label for every branch (so the dispatch log is diagnosable)', () => {
-    // Suggestion 3 in #385: the run output must say WHERE the window came from,
-    // instead of requiring a source read to tell 30s-default from 30s-configured.
-    assert.equal(resolveStallTimeout({ stall_timeout_ms: 90000 }).source, 'per-slot');
-    assert.equal(resolveStallTimeout({ idle_timeout_ms: 90000 }).source, 'idle');
-    assert.equal(resolveStallTimeout({}).source, 'default');
+  it('reports a source for every branch, so the dispatch log is diagnosable', () => {
+    assert.equal(resolveInterChunkCeiling({ inter_chunk_ceiling_ms: 1 }, 5).source, 'per-slot');
+    assert.equal(resolveInterChunkCeiling({ stall_timeout_ms: 1 }, 5).source, 'legacy-stall');
+    assert.equal(resolveInterChunkCeiling({}, 5).source, 'idle-budget');
+    assert.equal(resolveInterChunkCeiling({}).source, 'default');
   });
 });
 
 // ─── LIVE PATH ────────────────────────────────────────────────────────────────
-// A resolver that returns the right number is worth nothing if the number never
-// reaches the timer, or reaches the timer but not the slot that needed it. These
-// two tests exercise the real dispatch: a spawned CLI that emits a sub-500-byte
-// preamble and then goes quiet — exactly the shape that false-killed the three
-// third-party slots — and the real `node call-quorum-slot.cjs --slot …` child.
+// A resolver returning the right number is worth nothing if the number never reaches
+// the timer. These spawn real CLIs shaped like the two failure modes.
 
-// A stand-in CLI: prints a short preamble (well under the 500-byte stall
-// threshold), pauses, then answers. NF_FAKE_PAUSE_MS controls the silence.
-const FAKE_CLI = `
+// Emits a short preamble immediately, then thinks in silence, then answers — the exact
+// shape of claude-1 / copilot-1 / claude-z-ai, which the old model killed mid-answer.
+const FAKE_BURSTY = `
 'use strict';
 process.stdout.write('thinking...\\n');
 setTimeout(() => {
   process.stdout.write('verdict: APPROVE\\n');
   process.exit(0);
 }, Number(process.env.NF_FAKE_PAUSE_MS || 900));
+`;
+
+// Emits NOTHING at all — the only shape that is genuinely indistinguishable from hung.
+const FAKE_SILENT = `
+'use strict';
+setTimeout(() => { process.stdout.write('too late\\n'); process.exit(0); }, 5000);
 `;
 
 // Cleanup on process exit rather than TestContext.after: `t.after` landed in Node
@@ -151,60 +115,61 @@ process.on('exit', () => {
   for (const d of TMP_DIRS) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} }
 });
 
-function makeFakeSlotDir() {
+function makeFakeSlotDir(body = FAKE_BURSTY) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-stall-'));
   TMP_DIRS.push(dir);
   // findProjectRoot() walks up to the nearest .planning/ — without one here it would
   // find the real repo and write this test's telemetry into it.
   fs.mkdirSync(path.join(dir, '.planning'), { recursive: true });
   const cli = path.join(dir, 'fake-cli.cjs');
-  fs.writeFileSync(cli, FAKE_CLI, 'utf8');
+  fs.writeFileSync(cli, body, 'utf8');
   return { dir, cli };
 }
 
-describe('LIVE PATH: the resolved stall window drives the real timer (#385)', () => {
-  it('kills a quiet sub-500-byte slot at the window it was given, not the 30s constant', async () => {
+function fakeProvider(cli) {
+  return { name: 'fake-slot', type: 'subprocess', mainTool: 'node', cli: 'node', args_template: [cli, '{prompt}'] };
+}
+
+describe('LIVE PATH: two windows, two failure modes', () => {
+  it('THE REGRESSION: a preamble then a long silence SURVIVES a short TTFB window', async () => {
+    // This is the whole point. Old model: 200 bytes < 500 → the tight window governs →
+    // killed at 400ms. New model: the first byte disarms TTFB and the inter-chunk
+    // ceiling (3s) governs the 900ms think. Three real voters died on exactly this.
+    // Margins are generous on purpose: a 400ms TTFB window made this test fail when node
+    // process startup itself crossed it under parallel load — that measures the machine,
+    // not the semantics. 1.5s TTFB vs a 4s silence cannot be crossed by startup jitter,
+    // and a still-armed TTFB would kill at 1.5s, well short of the 4s answer.
     const { cli } = makeFakeSlotDir();
-    const provider = {
-      name: 'fake-slow', type: 'subprocess', mainTool: 'node', cli: 'node',
-      args_template: [cli, '{prompt}'],
-    };
-    // 400ms window vs a 900ms pause: the 30s default would have let this finish, so a
-    // STALL here proves the passed window — not the constant — armed the timer.
+    const provider = { ...fakeProvider(cli), env: { NF_FAKE_PAUSE_MS: '4000' } };
+    const out = await runSubprocess(provider, 'q', 20000, 30000, null, {}, { ttfb: 1500, interChunk: 12000 });
+    assert.match(out, /verdict: APPROVE/, 'a streaming slot must not be killed by the TTFB window');
+  });
+
+  it('a slot that produces NOTHING is still killed fast, at the TTFB window', async () => {
+    // Fast-fail must survive the change, or a dead slot burns the full budget × retries.
+    const { cli } = makeFakeSlotDir(FAKE_SILENT);
     await assert.rejects(
-      () => runSubprocess(provider, 'q', 10000, 15000, null, {}, 400),
-      /STALL: only \d+ bytes received then silence for 400ms/,
+      () => runSubprocess(fakeProvider(cli), 'q', 30000, 40000, null, {}, { ttfb: 500, interChunk: 30000 }),
+      /STALL: no output at all for 500ms/,
     );
   });
 
-  it('lets that same slot finish when the window covers its pause', async () => {
+  it('a mid-stream gap beyond the ceiling is an IDLE kill, reporting bytes seen', async () => {
     const { cli } = makeFakeSlotDir();
-    const provider = {
-      name: 'fake-slow', type: 'subprocess', mainTool: 'node', cli: 'node',
-      args_template: [cli, '{prompt}'],
-    };
-    const out = await runSubprocess(provider, 'q', 10000, 15000, null, {}, 3000);
-    assert.match(out, /verdict: APPROVE/);
+    await assert.rejects(
+      () => runSubprocess(fakeProvider(cli), 'q', 10000, 15000, null, {}, { ttfb: 5000, interChunk: 300 }),
+      /IDLE_TIMEOUT after 300ms of inactivity \(\d+ bytes received before the gap\)/,
+    );
   });
 
-  it('falls back to the provider-derived window when handed a garbage one', async () => {
+  it('falls back to provider resolution when handed garbage timers', async () => {
+    // Number(true) === 1 would arm a 1ms timer and kill everything instantly.
     const { cli } = makeFakeSlotDir();
-    // Number(true) === 1 → a 1ms stall timer would false-kill this slot instantly.
-    const provider = {
-      name: 'fake-slow', type: 'subprocess', mainTool: 'node', cli: 'node',
-      args_template: [cli, '{prompt}'],
-    };
-    const out = await runSubprocess(provider, 'q', 10000, 15000, null, {}, true);
+    const out = await runSubprocess(fakeProvider(cli), 'q', 10000, 15000, null, {},
+      { ttfb: true, interChunk: 'nope' });
     assert.match(out, /verdict: APPROVE/);
   });
-
 });
-
-// The direct-caller fallback inside runSubprocess (`stallTimeoutFor(provider,
-// idleTimeoutMs)`) applies the same rule main() does — a caller idle budget caps the
-// window, floored at 30s. Its semantics are pinned at the resolver above rather than
-// behaviorally: every value that branch can produce is ≥ 30s, so telling them apart
-// through a live subprocess would need a >30s pause per case.
 
 describe('LIVE PATH: the child derives and reports the stall window (#385)', () => {
   // Runs the real child end-to-end against a temp providers.json, so the derivation
@@ -228,20 +193,25 @@ describe('LIVE PATH: the child derives and reports the stall window (#385)', () 
     return res.stderr || '';
   }
 
-  it('derives the window from a preset that sets idle_timeout_ms but no stall_timeout_ms', () => {
+  it('reports both windows and their sources', () => {
     // The exact shipped shape of claude-z-ai / claude-minimax / claude-kimi.
     const stderr = dispatch({ idle_timeout_ms: 90000 });
-    assert.match(stderr, /stall=90000ms \(idle\)/);
+    assert.match(stderr, /ttfb=30000ms \(default\)/, 'TTFB must not inherit idle_timeout_ms');
+    assert.match(stderr, /inter-chunk=90000ms \(idle-budget\)/);
   });
 
-  it('keeps the 30s default — labelled as such — for a slot that configures nothing', () => {
+  it('keeps the 30s TTFB default — labelled as such — for a slot that configures nothing', () => {
     const stderr = dispatch({});
-    assert.match(stderr, /stall=30000ms \(default\)/);
+    assert.match(stderr, /ttfb=30000ms \(default\)/);
   });
 
-  it('reproduces the #385 dispatch (--timeout 300000) without inflating the window to 5min', () => {
+  it('THE FIX: the #385 dispatch shape now gets the caller budget, not the 90s derivation', () => {
+    // Same dispatch that killed claude-1/copilot-1/claude-z-ai mid-answer. The caller
+    // budgeted 300s; the old model handed them 90s (or 30s) and killed them.
     const stderr = dispatch({ idle_timeout_ms: 90000 }, ['--timeout', '300000']);
-    assert.match(stderr, /idle=300000ms hard=300000ms stall=90000ms \(idle\)/);
+    assert.match(stderr, /ttfb=30000ms \(default\)/);
+    assert.match(stderr, /inter-chunk=300000ms \(idle-budget\)/);
+    assert.doesNotMatch(stderr, /inter-chunk=90000ms/, 'the killed-voter derivation must be gone');
   });
 
   it('does not warn about the parent dispatcher\'s own flags when the PARENT requires it', () => {

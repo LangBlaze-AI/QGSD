@@ -530,28 +530,43 @@ function buildSpawnArgs(provider, prompt, allowedToolsFlag, opts) {
 }
 
 // ─── Subprocess dispatch ───────────────────────────────────────────────────────
-// STALL-TIMEOUT-01: the "header-only stall" timer (used while a slot has produced
-// < 500 bytes) defaults to 30s — fine for fast slots, but slow-bursty models routed
-// via a third-party Anthropic-compatible API (GLM-5.2[1m], MiniMax-M3) emit a short
-// preamble then pause well past 30s while generating. They are slow, not hung. A
-// per-slot `stall_timeout_ms` in providers.json raises the threshold so they are not
-// false-killed. Any value ≤ 0 / NaN / absent falls back to the 30s default.
-// Node's setTimeout clamps delays above 2^31-1 ms and fires them IMMEDIATELY, so a
-// nonsensically large stall_timeout_ms would silently disable the stall timer. Cap
-// at TIMEOUT_MAX to keep the timer well-formed.
+// STALL-TIMEOUT-03 — the timer model, after a live multi-model quorum ruled on it.
 //
-// STALL-TIMEOUT-02 (issue #385): requiring `stall_timeout_ms` to be set explicitly
-// made the escape hatch useless in practice — the slots that need it (claude-z-ai,
-// claude-minimax, claude-kimi and any other third-party Anthropic-compatible route)
-// are created by preset import / manual add, which sets `idle_timeout_ms` but never
-// `stall_timeout_ms`. They declared a 90s idle tolerance and were still killed at 30s
-// in their first 500 bytes, every round. So a slot's CONFIGURED `idle_timeout_ms`,
-// when larger than the default stall window, now derives the stall window too: a slot
-// that says "I may go quiet for 90s" does not want a 30s kill on its preamble. The
-// 30s default still applies to every slot that configured nothing, so fast-fail on a
-// genuinely hung slot is unchanged fleet-wide.
+// History. STALL-TIMEOUT-01 used "totalBytesReceived < 500 → apply a tighter window"
+// as a proxy for "this slot is hung". STALL-TIMEOUT-02 (#385) kept that proxy and only
+// made the window configurable/derivable. A quorum run on 2026-08-07 falsified the
+// proxy empirically — and did it by killing three of its own five voters mid-answer:
+//
+//   claude-1     idle_timeout_ms=90000 → 90s window → KILLED at 90s, answer in flight
+//   copilot-1    idle_timeout_ms=30000 → 30s window → KILLED at 30s, answer in flight
+//   claude-z-ai  idle_timeout_ms=90000 → 90s window → KILLED at 90s
+//   codex-1 / antigravity-1                          → survived
+//
+// The discriminator was never byte count: it is whether a slot STREAMS. The survivors
+// emit continuously so every chunk rearms the timer; the killed slots emit a ~200-byte
+// preamble in <1s and then think in silence. Worse, deriving the window from
+// `idle_timeout_ms` made that field do double duty as "how long may this model think
+// before substantive output" — and for most slots the configured value (30s/90s) is far
+// SMALLER than real think time, while the caller had budgeted 300s.
+//
+// The model now matches the two failure modes directly:
+//   • BEFORE the first byte  → `ttfb_timeout_ms` (default 30s). Zero output is the only
+//     honest evidence of a hang, so this is where fast-fail belongs.
+//   • AFTER the first byte   → the inter-chunk ceiling: `inter_chunk_ceiling_ms` if the
+//     slot declares one, else the caller's idle budget. A slot that is mid-generation is
+//     alive; only the caller's budget (or an explicit per-slot ceiling for a known
+//     slow-bursty route like kimi at ~610s) should bound it.
+//
+// `stall_timeout_ms` is kept as a LEGACY ALIAS for the inter-chunk ceiling, because the
+// values already in the field were measured against post-preamble silence — which is
+// exactly what the ceiling governs. So no config surface is added: the second knob is
+// the old knob, renamed to say what it actually does.
+//
+// Node's setTimeout clamps delays above 2^31-1 ms and fires them IMMEDIATELY, so an
+// oversized value would silently DISABLE a timer. Cap at TIMEOUT_MAX.
 const TIMEOUT_MAX = 2147483647; // 2^31 - 1
-const STALL_TIMEOUT_DEFAULT_MS = 30000;
+const TTFB_TIMEOUT_DEFAULT_MS = 30000;
+const INTER_CHUNK_DEFAULT_MS  = 90000; // only when the caller supplies no budget
 
 // Coerce a duration config value to a positive number of ms, or null.
 // Only real numbers / numeric strings count. Without this, Number(true) === 1 would
@@ -564,40 +579,36 @@ function toPositiveMs(raw) {
 }
 
 /**
- * Resolve the header-only stall window and where it came from (the `source` is what
- * the dispatch log prints, so this is diagnosable from run output instead of by
- * reading this file — issue #385, suggestion 3).
- *
- * The derivation reads the slot's CONFIGURED `idle_timeout_ms` — a property of the
- * provider ("this route is slow-bursty") — never the 90s built-in fallback (that
- * would disable the stall timer for every unconfigured slot) and never a caller's
- * `--timeout` alone (the orchestrator passes 300000 for its own reasons; inflating
- * the stall window to 5 minutes would make a dead slot cost 5 minutes per retry).
- * A caller that LOWERS the idle budget below the configured value still wins — its
- * budget caps the derived window.
- *
- * @param {object} provider  providers.json entry
- * @param {number|string} [effectiveIdleMs]  the idle timeout actually in force for
- *   this dispatch, used only as a ceiling. Omit when there is no caller budget.
- * @returns {{ms: number, source: 'per-slot'|'idle'|'default'}}
+ * Time-to-first-byte window: how long a slot may produce NOTHING before it is treated
+ * as hung. Deliberately NOT derived from idle_timeout_ms — that derivation is the
+ * STALL-TIMEOUT-02 bug. A slot that needs to think a long time before its first token
+ * sets `ttfb_timeout_ms` explicitly.
+ * @returns {{ms: number, source: 'per-slot'|'default'}}
  */
-function resolveStallTimeout(provider, effectiveIdleMs) {
-  const explicit = toPositiveMs(provider && provider.stall_timeout_ms);
+function resolveTtfbTimeout(provider) {
+  const explicit = toPositiveMs(provider && provider.ttfb_timeout_ms);
   if (explicit !== null) return { ms: explicit, source: 'per-slot' };
-  const configuredIdle = toPositiveMs(provider && provider.idle_timeout_ms);
-  if (configuredIdle !== null) {
-    const ceiling = toPositiveMs(effectiveIdleMs);
-    const bounded = ceiling === null ? configuredIdle : Math.min(configuredIdle, ceiling);
-    if (bounded > STALL_TIMEOUT_DEFAULT_MS) return { ms: bounded, source: 'idle' };
-  }
-  return { ms: STALL_TIMEOUT_DEFAULT_MS, source: 'default' };
+  return { ms: TTFB_TIMEOUT_DEFAULT_MS, source: 'default' };
 }
 
-function stallTimeoutFor(provider, effectiveIdleMs) {
-  return resolveStallTimeout(provider, effectiveIdleMs).ms;
+/**
+ * Inter-chunk ceiling: once ANY byte has arrived the slot is alive, so inactivity is
+ * bounded by the caller's idle budget unless the slot declares a longer ceiling.
+ * @param {object} provider
+ * @param {number|string} [effectiveIdleMs] the caller's idle budget for this dispatch
+ * @returns {{ms: number, source: 'per-slot'|'legacy-stall'|'idle-budget'|'default'}}
+ */
+function resolveInterChunkCeiling(provider, effectiveIdleMs) {
+  const explicit = toPositiveMs(provider && provider.inter_chunk_ceiling_ms);
+  if (explicit !== null) return { ms: explicit, source: 'per-slot' };
+  const legacy = toPositiveMs(provider && provider.stall_timeout_ms);
+  if (legacy !== null) return { ms: legacy, source: 'legacy-stall' };
+  const caller = toPositiveMs(effectiveIdleMs);
+  if (caller !== null) return { ms: caller, source: 'idle-budget' };
+  return { ms: INTER_CHUNK_DEFAULT_MS, source: 'default' };
 }
 
-function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts, stallTimeoutMs) {
+function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts, timers) {
   const { args, useStdinPrompt, isCcr, promptMutated } = buildSpawnArgs(provider, prompt, allowedToolsFlag, resumeOpts);
   if (promptMutated) {
     // CCR-MUTATE-01: warn that the prompt was neutralized for CCR's shell re-spawn.
@@ -690,23 +701,31 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     let rateLimitHits = 0;
     const RATE_LIMIT_THRESHOLD = 2; // kill after 2 consecutive rate-limit messages
     let totalBytesReceived = 0;
-    // Tighter idle timeout when the CLI has produced < STALL_BYTE_THRESHOLD bytes
-    // (header-only → probably hung). Per-slot override via providers.json
-    // `stall_timeout_ms`, else derived from an explicitly configured idle timeout
-    // (see resolveStallTimeout): slow models (e.g. GLM-5.2[1m], MiniMax-M3)
-    // legitimately emit a small preamble then pause >30s mid-generation — they are
-    // slow, not stalled — so they need a longer threshold to avoid being false-killed.
-    // The caller resolves this once per dispatch and passes it in; the fallback keeps
-    // direct callers (tests, ad-hoc invocations) on the same rules.
-    const STALL_TIMEOUT_MS = toPositiveMs(stallTimeoutMs) ?? stallTimeoutFor(provider, idleTimeoutMs);
-    const STALL_BYTE_THRESHOLD = 500; // below this = "just a header, probably stalled"
+    // STALL-TIMEOUT-03: two windows, one per failure mode. `timers` is resolved once
+    // per dispatch by the caller; the fallback keeps direct callers on the same rules.
+    // The initial idleTimer above is REARMED to the TTFB window immediately below —
+    // until a byte arrives, zero output is the only honest evidence of a hang.
+    const TTFB_MS       = toPositiveMs(timers && timers.ttfb) ?? resolveTtfbTimeout(provider).ms;
+    const INTER_CHUNK_MS = toPositiveMs(timers && timers.interChunk)
+      ?? resolveInterChunkCeiling(provider, idleTimeoutMs).ms;
+    let firstByteSeen = false;
+
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      timedOut = true; timeoutType = 'STALL'; killGroup();
+    }, TTFB_MS);
+
+    // Every chunk rearms the inter-chunk timer. Byte COUNT is deliberately not consulted:
+    // a slot mid-generation is alive whether it has emitted 200 bytes or 200KB.
+    const rearm = () => {
+      firstByteSeen = true;
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => { timedOut = true; timeoutType = 'IDLE'; killGroup(); }, INTER_CHUNK_MS);
+    };
 
     child.stdout.on('data', d => {
       totalBytesReceived += d.length;
-      clearTimeout(idleTimer);
-      // Adaptive idle: use tighter 30s timeout when CLI has barely produced output (header-only stall)
-      const effectiveIdle = totalBytesReceived < STALL_BYTE_THRESHOLD ? STALL_TIMEOUT_MS : idleTimeoutMs;
-      idleTimer = setTimeout(() => { timedOut = true; timeoutType = totalBytesReceived < STALL_BYTE_THRESHOLD ? 'STALL' : 'IDLE'; killGroup(); }, effectiveIdle);
+      rearm();
       const chunk = d.toString();
       l1OriginalSize += chunk.length;
       if (stdout.length < MAX_BUF) {
@@ -732,9 +751,7 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     });
     child.stderr.on('data', d => {
       totalBytesReceived += d.length;
-      clearTimeout(idleTimer);
-      const effectiveIdle = totalBytesReceived < STALL_BYTE_THRESHOLD ? STALL_TIMEOUT_MS : idleTimeoutMs;
-      idleTimer = setTimeout(() => { timedOut = true; timeoutType = totalBytesReceived < STALL_BYTE_THRESHOLD ? 'STALL' : 'IDLE'; killGroup(); }, effectiveIdle);
+      rearm();
       const chunk = d.toString().slice(0, 4096);
       stderr += chunk;
       // Check stderr for rate-limit patterns too (gemini logs to stderr)
@@ -778,10 +795,10 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
           : timeoutType === 'QUOTA'
           ? `QUOTA: provider returned quota/billing error (${totalBytesReceived} bytes partial response)`
           : timeoutType === 'STALL'
-          ? `STALL: only ${totalBytesReceived} bytes received then silence for ${STALL_TIMEOUT_MS}ms — no recognizable error pattern in partial output`
+          ? `STALL: no output at all for ${TTFB_MS}ms (time-to-first-byte window) — slot produced nothing`
           : timeoutType === 'HARD'
           ? `HARD_TIMEOUT after ${hardTimeoutMs}ms total`
-          : `IDLE_TIMEOUT after ${idleTimeoutMs}ms of inactivity`;
+          : `IDLE_TIMEOUT after ${INTER_CHUNK_MS}ms of inactivity (${totalBytesReceived} bytes received before the gap)`;
         reject(new Error(label));
         return;
       }
@@ -819,7 +836,7 @@ function spawnRotateCmd(cmdArray) {
   });
 }
 
-async function runSubprocessWithRotation(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts, stallTimeoutMs) {
+async function runSubprocessWithRotation(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts, timers) {
   const rot      = provider.oauth_rotation;
   const max      = rot.max_retries ?? 3;
   const patterns = rot.retry_on_patterns ?? ['quota', 'resource_exhausted', 'unauthorized', '401', '403'];
@@ -833,7 +850,7 @@ async function runSubprocessWithRotation(provider, prompt, idleTimeoutMs, hardTi
     }
     try {
       // Wrap inner call with retry-with-backoff (each oauth attempt gets retry protection)
-      const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts, stallTimeoutMs), provider.name);
+      const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedToolsFlag, resumeOpts, timers), provider.name);
       const out = retryResult.result;
       totalRetryCount = attempt + retryResult.retryCount;
       if (matchesRotationPattern(out, patterns) && attempt < max) {
@@ -1086,9 +1103,14 @@ async function main() {
 
   // STALL-TIMEOUT-02 (#385): the header-only stall window, derived from this slot's
   // configured idle tolerance and capped by the idle budget actually in force.
-  const stall = resolveStallTimeout(provider, effectiveIdleTimeout);
+  const ttfb  = resolveTtfbTimeout(provider);
+  const chunk = resolveInterChunkCeiling(provider, effectiveIdleTimeout);
+  const timers = { ttfb: ttfb.ms, interChunk: chunk.ms };
+  // The hard cap must still cover the widest window a dispatch can legitimately use,
+  // or a slot with a long inter-chunk ceiling is killed by the hard timer instead.
+  effectiveHardTimeout = Math.max(effectiveHardTimeout, chunk.ms);
 
-  process.stderr.write(`[call-quorum-slot] Timeouts: idle=${effectiveIdleTimeout}ms hard=${effectiveHardTimeout}ms stall=${stall.ms}ms (${stall.source}) for slot ${slot}\n`);
+  process.stderr.write(`[call-quorum-slot] Timeouts: idle=${effectiveIdleTimeout}ms hard=${effectiveHardTimeout}ms ttfb=${ttfb.ms}ms (${ttfb.source}) inter-chunk=${chunk.ms}ms (${chunk.source}) for slot ${slot}\n`);
 
   const startMs = Date.now();
 
@@ -1101,11 +1123,11 @@ async function main() {
       // thread-persistence semantics are identical for the rotation and non-rotation paths.
       const resumeOpts = { persistentThreads, repoDir, slotName: slot, invocationId };
       if (provider.oauth_rotation?.enabled) {
-        const retryResult = await runSubprocessWithRotation(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools, resumeOpts, stall.ms);
+        const retryResult = await runSubprocessWithRotation(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools, resumeOpts, timers);
         result = retryResult.result;
         retryCount = retryResult.retryCount;
       } else {
-        const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools, resumeOpts, stall.ms), slot);
+        const retryResult = await retryWithBackoff(() => runSubprocess(provider, prompt, effectiveIdleTimeout, effectiveHardTimeout, allowedTools, resumeOpts, timers), slot);
         result = retryResult.result;
         retryCount = retryResult.retryCount;
       }
@@ -1227,4 +1249,4 @@ if (require.main === module) {
 }
 
 // ─── Test exports (SHELL-ESCAPE-01, TRUNC-01, INFRA-367) ───────────────────────
-module.exports = { buildSpawnArgs, stallTimeoutFor, resolveStallTimeout, runSubprocess, recordTelemetry, findProjectRoot, writeFailureLog, atomicUpdateJson, VERDICTS, VERDICT_LINE_RE, parseVerdictLine };
+module.exports = { buildSpawnArgs, resolveTtfbTimeout, resolveInterChunkCeiling, runSubprocess, recordTelemetry, findProjectRoot, writeFailureLog, atomicUpdateJson, VERDICTS, VERDICT_LINE_RE, parseVerdictLine };
