@@ -99,7 +99,7 @@ function appendTokenSentinel(slotName) {
 }
 
 // ─── Telemetry logging for quorum slot dispatch (OBS-01) ─────────────────────
-function recordTelemetry(slotName, round, verdict, latencyMs, provider, providerStatus, retryCount, errorType, truncated, truncationLayer, originalSizeBytes, outputPreview, outputLength, exitCode) {
+function recordTelemetry(slotName, round, verdict, latencyMs, provider, providerStatus, retryCount, errorType, truncated, truncationLayer, originalSizeBytes, outputPreview, outputLength, exitCode, timing) {
   try {
     const sessionId = process.env.CLAUDE_SESSION_ID || 'session-' + Date.now();
     const record = JSON.stringify({
@@ -119,6 +119,15 @@ function recordTelemetry(slotName, round, verdict, latencyMs, provider, provider
       output_preview: outputPreview || null,
       output_length: outputLength || null,
       exit_code: exitCode != null ? exitCode : null,
+      // STALL-TIMEOUT-03 observability: resolveTtfbTimeout/resolveInterChunkCeiling
+      // already compute a `source` for each window, and it was being dropped on the
+      // floor — so a timeout in the record could not be attributed to the config that
+      // caused it. Emitted unconditionally (null when unknown) to keep the schema
+      // stable for downstream analysis.
+      ttfb_timeout_ms: (timing && timing.ttfbMs) != null ? timing.ttfbMs : null,
+      ttfb_source: (timing && timing.ttfbSource) || null,
+      inter_chunk_ceiling_ms: (timing && timing.interChunkMs) != null ? timing.interChunkMs : null,
+      inter_chunk_source: (timing && timing.interChunkSource) || null,
     });
     const pp = require('./planning-paths.cjs');
     const logPath = pp.resolve(findProjectRoot(spawnCwd), 'quorum-rounds', { sessionId });
@@ -1126,6 +1135,7 @@ async function main() {
     process.stderr.write(`[call-quorum-slot] inter-chunk ceiling ${chunk.ms}ms capped to ${boundedChunk}ms by the hard/latency budget for slot ${slot}\n`);
   }
   const timers = { ttfb: Math.min(ttfb.ms, effectiveHardTimeout), interChunk: boundedChunk };
+  const timingMeta = { ttfbMs: timers.ttfb, ttfbSource: ttfb.source, interChunkMs: boundedChunk, interChunkSource: chunk.source };
 
   process.stderr.write(`[call-quorum-slot] Timeouts: idle=${effectiveIdleTimeout}ms hard=${effectiveHardTimeout}ms ttfb=${ttfb.ms}ms (${ttfb.source}) inter-chunk=${boundedChunk}ms (${chunk.source}) for slot ${slot}\n`);
 
@@ -1158,7 +1168,7 @@ async function main() {
       setScoreboardCooldown(slot, 'Unknown provider type: ' + provider.type);
       appendTokenSentinel(slot);
       const latencyMs = Date.now() - startMs;
-      recordTelemetry(slot, roundNum, 'FLAG', latencyMs, provider.provider || provider.name, 'unavailable', 0, 'UNKNOWN_TYPE', false, null, null, null, 0, null);
+      recordTelemetry(slot, roundNum, 'FLAG', latencyMs, provider.provider || provider.name, 'unavailable', 0, 'UNKNOWN_TYPE', false, null, null, null, 0, null, timingMeta);
       process.exit(1);
     }
 
@@ -1181,7 +1191,7 @@ async function main() {
         const verdict = parseVerdictLine(result) || 'UNKNOWN';
         const l1Detect = result.includes('[OUTPUT TRUNCATED at 10MB');
         process.stderr.write('[call-quorum-slot] WARNING: ' + slot + ' CLI exited non-zero (code ' + cliExitCode + ') but produced valid output -- treating as available\n');
-        recordTelemetry(slot, roundNum, verdict, latencyMs, providerName, 'available_with_warning', retryCount, null, l1Detect, l1Detect ? 'L1' : null, null, result.slice(0, 500), result.length, cliExitCode);
+        recordTelemetry(slot, roundNum, verdict, latencyMs, providerName, 'available_with_warning', retryCount, null, l1Detect, l1Detect ? 'L1' : null, null, result.slice(0, 500), result.length, cliExitCode, timingMeta);
         clearFailureOnSuccess(slot);
         writeInnerOutputFile(result);
         process.stdout.write(result);
@@ -1194,7 +1204,7 @@ async function main() {
       const latencyMs = Date.now() - startMs;
       const providerName = provider.provider || provider.name;
       const errorType = classifyErrorType(result);
-      recordTelemetry(slot, roundNum, 'FLAG', latencyMs, providerName, 'unavailable', retryCount, errorType, false, null, null, result.slice(0, 500), result.length, cliExitCode);
+      recordTelemetry(slot, roundNum, 'FLAG', latencyMs, providerName, 'unavailable', retryCount, errorType, false, null, null, result.slice(0, 500), result.length, cliExitCode, timingMeta);
       writeFailureLog(slot, result, '');
       setScoreboardCooldown(slot, result);
       // Still output the result so quorum-slot-dispatch can parse it
@@ -1210,7 +1220,7 @@ async function main() {
     const providerName = provider.provider || provider.name;
 
     const l1Detect = result.includes('[OUTPUT TRUNCATED at 10MB');
-    recordTelemetry(slot, roundNum, verdict, latencyMs, providerName, 'available', retryCount, null, l1Detect, l1Detect ? 'L1' : null, null, result.slice(0, 500), result.length, 0);
+    recordTelemetry(slot, roundNum, verdict, latencyMs, providerName, 'available', retryCount, null, l1Detect, l1Detect ? 'L1' : null, null, result.slice(0, 500), result.length, 0, timingMeta);
 
     // Slot succeeded — clear any failure records so next quorum run doesn't skip it
     clearFailureOnSuccess(slot);
@@ -1247,7 +1257,7 @@ async function main() {
 
     const errorType = classifyErrorType(err.message);
 
-    recordTelemetry(slot, roundNum, 'FLAG', latencyMs, providerName, 'unavailable', 0, errorType, false, null, null, err.message.slice(0, 500), 0, null);
+    recordTelemetry(slot, roundNum, 'FLAG', latencyMs, providerName, 'unavailable', 0, errorType, false, null, null, err.message.slice(0, 500), 0, null, timingMeta);
 
     process.stderr.write(`[call-quorum-slot] ${err.message}\n`);
     writeFailureLog(slot, err.message, '');
