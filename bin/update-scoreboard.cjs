@@ -728,6 +728,44 @@ function parseAvailabilityHint(message) {
     return { available_at: new Date(Date.now() + mins * 60_000), reason: 'unavailable' };
   }
 
+  // QUOTA-RESET-01: providers state their reset window in shapes the patterns above
+  // do not match, so a slot that is dead for DAYS fell through to the 5-minute default
+  // and was re-dispatched every 5 minutes until the quota actually returned. Both of
+  // these are verbatim from live slots:
+  //   antigravity  "Resets in 95h26m37s."
+  //   z-ai         "Your limit will reset at 2026-08-09 10:01:44"
+  // A compact duration first — "95h26m37s", "32h54m", "90s". Written as a two-step
+  // (locate the duration TOKEN, then decompose it) because a single pattern of all-
+  // optional unit groups matches the empty string: it "succeeds" with every capture
+  // undefined and silently falls through to the 5-minute default, which is exactly
+  // the failure it was meant to fix.
+  const durTok = message.match(/(?:reset|resets|available|retry)\w*[^0-9]{0,20}(\d+\s*h(?:\s*\d+\s*m)?(?:\s*\d+\s*s)?|\d+\s*m(?:\s*\d+\s*s)?|\d+\s*s)/i);
+  if (durTok) {
+    const tok = durTok[1];
+    const h = /(\d+)\s*h/i.exec(tok);
+    const m = /(\d+)\s*m/i.exec(tok);
+    const sec = /(\d+)\s*s/i.exec(tok);
+    const ms = (h ? parseInt(h[1], 10) * 3_600_000 : 0)
+             + (m ? parseInt(m[1], 10) * 60_000 : 0)
+             + (sec ? parseInt(sec[1], 10) * 1_000 : 0);
+    if (ms > 0) {
+      const reason = /quota/i.test(message) ? 'quota exceeded'
+                   : /rate.?limit|429/i.test(message) ? 'rate limit' : 'unavailable';
+      return { available_at: new Date(Date.now() + ms), reason };
+    }
+  }
+
+  // Then an absolute ISO-ish timestamp: "reset at 2026-08-09 10:01:44" (or "resets at").
+  const isoMatch = message.match(/reset(?:s)?\s+(?:at|on)\s+(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?)/i);
+  if (isoMatch) {
+    const when = new Date(isoMatch[1].replace(' ', 'T'));
+    if (!isNaN(when.getTime()) && when.getTime() > Date.now()) {
+      const reason = /limit.?exhausted|quota/i.test(message) ? 'quota exceeded'
+                   : /rate.?limit|429/i.test(message) ? 'rate limit' : 'unavailable';
+      return { available_at: when, reason };
+    }
+  }
+
   // Default cooldown for recognized failure patterns without explicit time hints.
   // These error types indicate the slot should be skipped for a few minutes.
   const DEFAULT_COOLDOWN_MS = 5 * 60_000; // 5 minutes
@@ -1207,7 +1245,7 @@ async function main() {
 
 // Guard pattern: only export when require()d by tests, not when run as a CLI script
 if (typeof module !== 'undefined') {
-  module.exports = { computeDeliveryStats, computeFlakiness, emptyData, loadScoreDeltas, DEFAULT_SCORE_DELTAS };
+  module.exports = { computeDeliveryStats, computeFlakiness, emptyData, loadScoreDeltas, DEFAULT_SCORE_DELTAS, parseAvailabilityHint };
 }
 
 // Only run main() when invoked as a script, not when require()d by tests
