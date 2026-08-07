@@ -159,7 +159,15 @@ jobs:
           echo "$TAGS"
           LATEST=$(printf '%s' "$TAGS" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).latest || ''")
           NEXT=$(printf '%s' "$TAGS" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).next || ''")
-          if [ "$LATEST" = "$NEXT" ]; then
+          # An unreadable registry response must NOT read as a pass. Without this,
+          # `npm view` failing leaves LATEST and NEXT both empty, they compare equal,
+          # and the step cheerfully prints "invariant OK — next == latest == " while
+          # having verified nothing at all.
+          if [ -z "$LATEST" ] || [ -z "$NEXT" ]; then
+            echo "::warning::could not read dist-tags (npm view failed, or the package has no latest/next tag) — the invariant was NOT verified. Check by hand: npm view @nforma.ai/nforma dist-tags"
+          elif [ "$LATEST" != "$VERSION" ]; then
+            echo "::warning::@latest is ${LATEST} but this run published ${VERSION} — publish did not land where expected; not asserting the alias invariant against a version we did not ship"
+          elif [ "$LATEST" = "$NEXT" ]; then
             echo "invariant OK — next == latest == ${LATEST}"
           else
             echo "::warning::DIST-TAG DRIFT — latest=${LATEST} next=${NEXT}. Anyone installing @next gets the older build. Fix: npm dist-tag add @nforma.ai/nforma@${VERSION} next"

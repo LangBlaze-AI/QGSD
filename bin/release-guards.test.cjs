@@ -219,3 +219,79 @@ describe('publish.yml — @next alignment actually authenticates (DIST-TAG-01)',
     assert.doesNotMatch(code, /NODE_AUTH_TOKEN/, 'NODE_AUTH_TOKEN defeats OIDC trusted publishing');
   });
 });
+
+// ── The verify step is EXECUTED here, not read ────────────────────────────────
+// Asserting that publish.yml contains the right strings proves nothing about what the
+// shell does with them. This extracts the step's actual script and runs it against a
+// stubbed `npm view`, one run per registry response the step can meet. The case that
+// matters most is the unreadable one: with `|| echo '{}'` upstream, both tags come back
+// empty, compare EQUAL, and a naive check prints "invariant OK — next == latest == "
+// while having verified nothing. A verification that cannot fail is not a verification.
+describe('publish.yml — the @next verification actually discriminates (executed)', () => {
+  const YML = fs.readFileSync(path.join(REPO, '.github/workflows/publish.yml'), 'utf8');
+
+  function verifyScript() {
+    const start = YML.indexOf('- name: Verify @next == @latest');
+    assert.ok(start !== -1, 'publish.yml lost its "Verify @next == @latest" step');
+    const runIdx = YML.indexOf('run: |', start);
+    assert.ok(runIdx !== -1, 'the verify step must use a `run: |` block');
+    const body = YML.slice(YML.indexOf('\n', runIdx) + 1);
+    const lines = [];
+    for (const line of body.split('\n')) {
+      if (line.trim() === '') { lines.push(''); continue; }
+      if (!/^ {10}/.test(line)) break;           // dedent marks the end of the block
+      lines.push(line.slice(10));
+    }
+    return lines.join('\n').replace(/\$\{\{ needs\.context\.outputs\.version \}\}/g, '0.44.3');
+  }
+
+  // Stub `npm view` so no test ever reaches the real registry.
+  function runWith(tagsJson) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-verify-'));
+    const file = path.join(dir, 'verify.sh');
+    fs.writeFileSync(file,
+      `npm() { if [ "$1" = "view" ]; then printf %s '${tagsJson}'; else command npm "$@"; fi; }\n` +
+      verifyScript());
+    const r = spawnSync('bash', [file], { encoding: 'utf8', timeout: 30000 });
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+    return { status: r.status, out: (r.stdout || '') + (r.stderr || '') };
+  }
+
+  it('reports OK only when both tags are present and equal', () => {
+    const r = runWith('{"latest":"0.44.3","next":"0.44.3"}');
+    assert.equal(r.status, 0);
+    assert.match(r.out, /invariant OK — next == latest == 0\.44\.3/);
+  });
+
+  it('reports DRIFT when the tags differ, naming the fix command', () => {
+    const r = runWith('{"latest":"0.44.3","next":"0.44.2"}');
+    assert.match(r.out, /DIST-TAG DRIFT/);
+    assert.match(r.out, /npm dist-tag add @nforma\.ai\/nforma@0\.44\.3 next/);
+    assert.doesNotMatch(r.out, /invariant OK/);
+  });
+
+  it('does NOT report OK when the registry response is unreadable', () => {
+    // The `|| echo '{}'` fallback: two empty strings compare equal.
+    const r = runWith('{}');
+    assert.doesNotMatch(r.out, /invariant OK/, 'an unverifiable state must never read as verified');
+    assert.match(r.out, /NOT verified/);
+  });
+
+  it('does NOT report OK when only one of the two tags exists', () => {
+    const r = runWith('{"latest":"0.44.3"}');
+    assert.doesNotMatch(r.out, /invariant OK/);
+    assert.match(r.out, /NOT verified/);
+  });
+
+  it('does not assert the invariant against a version this run did not publish', () => {
+    const r = runWith('{"latest":"0.44.1","next":"0.44.1"}');
+    assert.doesNotMatch(r.out, /invariant OK/, 'equal-but-wrong tags are not a passing publish');
+    assert.match(r.out, /did not land where expected/);
+  });
+
+  it('never fails the job — the package is already published by this point', () => {
+    for (const tags of ['{"latest":"0.44.3","next":"0.44.3"}', '{"latest":"0.44.3","next":"0.44.2"}', '{}']) {
+      assert.equal(runWith(tags).status, 0, `verify must exit 0 for ${tags}`);
+    }
+  });
+});
