@@ -152,3 +152,97 @@ test('MS-TC-POP-NULL: nf.json literal null is populated, not crashed', () => {
     cleanTmpDir(tmpDir);
   }
 });
+
+// ── MIGRATE-GUARD-01: preset slots must survive --migrate-slots ───────────────
+// SLOT_MIGRATION_MAP treats `claude-minimax` / `claude-kimi` / `claude-glm` as legacy
+// MODEL names, but that is also the shape /nf:link-daintree produces today
+// ({agentName}-{slug}). Renaming a live preset clone moves its mcpServers key to
+// `claude-2` while providers.json still says `claude-minimax` — the provider entry is
+// orphaned and `mcp__claude-minimax__…` stops existing.
+
+function writeFixture(dir, { servers, providers }) {
+  const claudeJson = path.join(dir, 'claude.json');
+  const providersJson = path.join(dir, 'providers.json');
+  fs.writeFileSync(claudeJson, JSON.stringify({ mcpServers: servers }, null, 2));
+  fs.writeFileSync(providersJson, JSON.stringify({ providers }, null, 2));
+  return { claudeJson, providersJson };
+}
+
+test('MS-TC-GUARD-1: a Daintree preset slot is NOT renamed', () => {
+  const dir = makeTmpDir();
+  try {
+    const { claudeJson, providersJson } = writeFixture(dir, {
+      servers: { 'claude-minimax': { command: 'claude' }, 'claude-kimi': { command: 'claude' } },
+      providers: [
+        { name: 'claude-minimax', daintree_preset_id: 'user-055f3ff8' },
+        { name: 'claude-kimi', daintree_preset_id: 'user-af326ff9' },
+      ],
+    });
+    const r = migrateClaudeJson(claudeJson, false, { providersPath: providersJson });
+
+    assert.equal(r.changed, 0, 'preset slots must not be migrated');
+    assert.equal(r.skipped.length, 2, 'both preset slots must be reported as skipped');
+    const after = JSON.parse(fs.readFileSync(claudeJson, 'utf8')).mcpServers;
+    assert.ok(after['claude-minimax'], 'claude-minimax must keep its name');
+    assert.ok(after['claude-kimi'], 'claude-kimi must keep its name');
+    assert.equal(after['claude-2'], undefined, 'no claude-2 may be created');
+    // providers.json untouched
+    const provs = JSON.parse(fs.readFileSync(providersJson, 'utf8')).providers;
+    assert.deepEqual(provs.map(p => p.name), ['claude-minimax', 'claude-kimi']);
+  } finally { cleanTmpDir(dir); }
+});
+
+test('MS-TC-GUARD-2: a genuinely legacy slot IS still renamed, in both files', () => {
+  // The guard must narrow the migration, not disable it. A pre-slot install whose
+  // provider entry carries no daintree_preset_id still migrates — and providers.json
+  // is renamed in lockstep so the pairing survives.
+  const dir = makeTmpDir();
+  try {
+    const { claudeJson, providersJson } = writeFixture(dir, {
+      servers: { 'claude-deepseek': { command: 'claude' } },
+      providers: [{ name: 'claude-deepseek', mainTool: 'claude' }],
+    });
+    const r = migrateClaudeJson(claudeJson, false, { providersPath: providersJson });
+
+    assert.equal(r.changed, 1);
+    assert.deepEqual(r.renamed, [{ from: 'claude-deepseek', to: 'claude-1' }]);
+    const after = JSON.parse(fs.readFileSync(claudeJson, 'utf8')).mcpServers;
+    assert.ok(after['claude-1'] && !after['claude-deepseek'], 'mcpServers key renamed');
+    const provs = JSON.parse(fs.readFileSync(providersJson, 'utf8')).providers;
+    assert.equal(provs[0].name, 'claude-1', 'providers.json must follow the rename');
+  } finally { cleanTmpDir(dir); }
+});
+
+test('MS-TC-GUARD-3: dryRun writes nothing to either file', () => {
+  const dir = makeTmpDir();
+  try {
+    const { claudeJson, providersJson } = writeFixture(dir, {
+      servers: { 'claude-deepseek': { command: 'claude' } },
+      providers: [{ name: 'claude-deepseek' }],
+    });
+    const before = [fs.readFileSync(claudeJson, 'utf8'), fs.readFileSync(providersJson, 'utf8')];
+    const r = migrateClaudeJson(claudeJson, true, { providersPath: providersJson });
+
+    assert.equal(r.changed, 1, 'dry run still reports what it would do');
+    assert.deepEqual(
+      [fs.readFileSync(claudeJson, 'utf8'), fs.readFileSync(providersJson, 'utf8')], before,
+      'dry run must not write either file',
+    );
+  } finally { cleanTmpDir(dir); }
+});
+
+test('MS-TC-GUARD-4: a missing/corrupt providers.json fails OPEN (legacy installs)', () => {
+  // The pre-slot world this migration exists for has no providers.json at all. Absent
+  // or unreadable means "nothing to protect, nothing to sync" — never a hard failure.
+  const dir = makeTmpDir();
+  try {
+    const claudeJson = path.join(dir, 'claude.json');
+    fs.writeFileSync(claudeJson, JSON.stringify({ mcpServers: { 'codex-cli': { command: 'codex' } } }));
+    const missing = path.join(dir, 'does-not-exist.json');
+    assert.equal(migrateClaudeJson(claudeJson, true, { providersPath: missing }).changed, 1);
+
+    const corrupt = path.join(dir, 'corrupt.json');
+    fs.writeFileSync(corrupt, '{ not json');
+    assert.equal(migrateClaudeJson(claudeJson, true, { providersPath: corrupt }).changed, 1);
+  } finally { cleanTmpDir(dir); }
+});

@@ -4339,6 +4339,11 @@ if (hasMigrateSlots) {
   const dryRun = args.includes('--dry-run');
   const r1 = migrateClaudeJson(claudeJsonPath, dryRun);
   const r2 = migrateNfJson(nfJsonPath, dryRun);
+  // MIGRATE-GUARD-01: names this map would rename but that are live Daintree preset
+  // slots. Silence here would read as "nothing to do" when we deliberately left a slot
+  // alone, so say so.
+  (r1.skipped || []).forEach(s =>
+    console.log(`  ${yellow}⚠${reset} Kept ${s.name} as-is — ${s.reason}`));
   if (r1.changed === 0 && r2.changed === 0) {
     console.log(`  ${green}✓${reset} Already migrated — no changes needed`);
   } else {

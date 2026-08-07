@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "generated": "2026-06-30T12:46:46.752Z",
+  "generated": "2026-07-31T21:41:47.596Z",
   "node_key_format": "type::id",
   "sources": {
     "scope.json:account-manager": {
@@ -88,31 +88,31 @@
       "hash": "76910c97"
     },
     "model-registry.json": {
-      "mtime": "2026-06-30T12:41:43.461Z",
-      "hash": "1f920dce"
+      "mtime": "2026-07-29T11:51:34.097Z",
+      "hash": "f9da6956"
     },
     "invariant-catalog.json": {
       "mtime": "2026-05-19T19:43:48.880Z",
       "hash": "e27072db"
     },
     "traceability-matrix.json": {
-      "mtime": "2026-06-30T12:46:29.136Z",
-      "hash": "7bb09cbb"
+      "mtime": "2026-07-05T17:31:29.882Z",
+      "hash": "dd8ff20c"
     },
     "unit-test-coverage.json": {
-      "mtime": "2026-06-30T12:35:17.347Z",
-      "hash": "87faf6cd"
+      "mtime": "2026-07-07T17:31:49.143Z",
+      "hash": "cb86a491"
     },
     "instrumentation-map.json": {
-      "mtime": "2026-06-30T12:17:12.638Z",
-      "hash": "1d762727"
+      "mtime": "2026-07-27T22:41:34.776Z",
+      "hash": "c02c84d6"
     },
     "event-vocabulary.json": {
       "mtime": "2026-05-19T19:43:48.799Z",
       "hash": "fa1b7cf9"
     },
     "observed-fsm.json": {
-      "mtime": "2026-06-28T14:55:41.820Z",
+      "mtime": "2026-07-06T22:06:59.926Z",
       "hash": "53b1c101"
     },
     "risk-heatmap.json": {
@@ -120,18 +120,18 @@
       "hash": "2df5c0d7"
     },
     "git-heatmap.json": {
-      "mtime": "2026-06-30T12:42:05.462Z",
-      "hash": "bf6a2941"
+      "mtime": "2026-06-30T12:59:25.433Z",
+      "hash": "a383c4a2"
     },
     "debt.json": {
       "mtime": "2026-05-19T19:43:48.793Z",
       "hash": "4f085cf2"
     },
     "source-annotations": {
-      "mtime": "2026-06-30T12:41:41.710Z"
+      "mtime": "2026-07-29T11:51:34.098Z"
     },
     "code-source-annotations": {
-      "mtime": "2026-06-30T07:48:45.698Z"
+      "mtime": "2026-07-31T20:10:56.268Z"
     }
   },
   "nodes": {
@@ -12886,9 +12886,7 @@
           "rel": "models",
           "source": "source-annotation"
         }
-      ],
-      "source_layer": "L3",
-      "gate_maturity": "SOFT_GATE"
+      ]
     },
     "formal_model::.planning/formal/alloy/readme-structure.als": {
       "type": "formal_model",
@@ -19879,9 +19877,7 @@
     "formal_model::.planning/formal/prism/quorum.pm": {
       "type": "formal_model",
       "id": ".planning/formal/prism/quorum.pm",
-      "edges": [],
-      "source_layer": "L3",
-      "gate_maturity": "SOFT_GATE"
+      "edges": []
     },
     "formal_model::.planning/formal/tla/NFAccountManager.tla": {
       "type": "formal_model",
@@ -21261,9 +21257,7 @@
           "rel": "models",
           "source": "source-annotation"
         }
-      ],
-      "source_layer": "L3",
-      "gate_maturity": "SOFT_GATE"
+      ]
     },
     "formal_model::.planning/formal/tla/NFQuorum_xstate.tla": {
       "type": "formal_model",

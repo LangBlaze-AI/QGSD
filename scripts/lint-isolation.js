@@ -141,6 +141,48 @@ function scanProvidersIsolation() {
   }
 }
 
+// --- Rule 8: machine-specific absolute paths in EXECUTED config ---------------
+// Rule 4 above catches `/Users/<name>/.claude` in skills, but only there and only for
+// home-config paths. The same class hides in files that are *executed as written*:
+// `scripts/tui-*.tape` shipped to npm with `cd /Users/jonathanborduas/code/QGSD`
+// hardcoded, and benchmark-sync.yml once broke CI the same way. These formats have no
+// comment-vs-code distinction to reason about and no reason to name anyone's home
+// directory — a repo-relative path or `$PWD`/`$HOME`/`${VAR:-default}` always works.
+// Scoped to .tape/.sh/.yml/.yaml so illustrative `/Users/foo/...` in JS comments
+// (bin/install.js, bin/call-quorum-slot.cjs) stays legal.
+const MACHINE_PATH_RE = /\/(?:Users|home)\/[A-Za-z0-9._-]+\//g;
+const MACHINE_PATH_DIRS = ['scripts', '.github/workflows'];
+const MACHINE_PATH_EXTS = /\.(tape|sh|ya?ml)$/;
+// Placeholder names that obviously stand in for a real user.
+const MACHINE_PATH_PLACEHOLDERS = /\/(?:Users|home)\/(?:foo|bar|baz|user|username|name|you|me|example|runner|<[^/]+>)\//;
+
+function scanMachinePaths() {
+  for (const dir of MACHINE_PATH_DIRS) {
+    const abs = path.join(ROOT, dir);
+    let entries;
+    try { entries = fs.readdirSync(abs, { withFileTypes: true }); } catch (_) { continue; }
+    for (const entry of entries) {
+      if (!entry.isFile() || !MACHINE_PATH_EXTS.test(entry.name)) continue;
+      const rel = path.posix.join(dir, entry.name);
+      const lines = fs.readFileSync(path.join(abs, entry.name), 'utf8').split('\n');
+      lines.forEach((line, i) => {
+        if (line.trim().startsWith('#')) return;          // comments
+        if (MACHINE_PATH_PLACEHOLDERS.test(line)) return; // documented placeholders
+        MACHINE_PATH_RE.lastIndex = 0;
+        if (MACHINE_PATH_RE.test(line)) {
+          violations.push({
+            rule: 'machine-specific-path',
+            message: "Machine-specific absolute path in an executed file — use a repo-relative path or $PWD/$HOME (e.g. `cd ${NF_REPO:-$PWD}`)",
+            file: rel,
+            line: i + 1,
+            text: line.trim(),
+          });
+        }
+      });
+    }
+  }
+}
+
 function scan(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
@@ -207,6 +249,7 @@ for (const dir of SCAN_DIRS) {
 }
 
 scanProvidersIsolation();
+scanMachinePaths();
 
 if (violations.length === 0) {
   console.log('✓ lint-isolation: all portable-path checks passed');
