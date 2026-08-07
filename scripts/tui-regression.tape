@@ -16,7 +16,7 @@ Set Padding 0
 Set TypingSpeed 0ms
 
 # ── Launch TUI ───────────────────────────────────────────────────────────────
-Type "cd ${NF_REPO:-$PWD} && node bin/nForma.cjs"
+Type `cd "${NF_REPO:-$PWD}" && node bin/nForma.cjs`
 Enter
 Sleep 6s
 

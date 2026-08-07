@@ -106,3 +106,41 @@ test('MPATH-5: the rule is wired into the real lint run, not just defined', () =
   const res = spawnSync(process.execPath, [LINT], { cwd: REPO, encoding: 'utf8', timeout: 60000 });
   assert.equal(res.status, 0, `the real tree must be clean:\n${res.stdout}${res.stderr}`);
 });
+
+// ── Review round 2: gaps the first implementation had ────────────────────────
+
+test('MPATH-6: a NESTED executable file is scanned (scripts/internal/deploy.sh)', () => {
+  // readdirSync on the immediate children only — `scripts/internal/deploy.sh` runs
+  // exactly like `scripts/deploy.sh` and must be held to the same rule.
+  const dir = makeFixture({ 'scripts/internal/deploy.sh': 'rsync -a . /Users/alice/deploy/\n' });
+  const { status, out } = runLint(dir);
+  assert.equal(status, 1, 'nested files must be scanned');
+  assert.match(out, /scripts\/internal\/deploy\.sh:1/);
+});
+
+test('MPATH-7: a path with NO trailing slash is still caught', () => {
+  // `/Users/alice` at end of line (or before a quote) is just as unrunnable as
+  // `/Users/alice/...`; the original regex required a trailing slash and missed it.
+  const eol = runLint(makeFixture({ 'scripts/a.sh': 'cd /Users/alice\n' }));
+  assert.equal(eol.status, 1, 'end-of-line path must be caught');
+  const quoted = runLint(makeFixture({ 'scripts/b.sh': 'DIR="/home/alice"\n' }));
+  assert.equal(quoted.status, 1, 'path before a closing quote must be caught');
+});
+
+test('MPATH-8: a placeholder earlier on a line does not excuse a real path later', () => {
+  // The original skipped the WHOLE line on any placeholder match, so this shipped clean.
+  const dir = makeFixture({
+    'scripts/c.sh': 'echo "installs to /Users/foo/.claude" && cp x /Users/alice/bin/\n',
+  });
+  const { status, out } = runLint(dir);
+  assert.equal(status, 1, 'the real path after a placeholder must still be reported');
+  assert.match(out, /scripts\/c\.sh:1/);
+});
+
+test('MPATH-9: a line with ONLY placeholders stays clean (no over-correction)', () => {
+  const dir = makeFixture({
+    'scripts/d.sh': 'echo "/Users/foo/.claude and /home/runner/work and /home/<name>/.config"\n',
+  });
+  const { status, out } = runLint(dir);
+  assert.equal(status, 0, `placeholders must stay legal, got:\n${out}`);
+});
