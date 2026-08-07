@@ -141,6 +141,69 @@ function scanProvidersIsolation() {
   }
 }
 
+// --- Rule 8: machine-specific absolute paths in EXECUTED config ---------------
+// Rule 4 above catches `/Users/<name>/.claude` in skills, but only there and only for
+// home-config paths. The same class hides in files that are *executed as written*:
+// `scripts/tui-*.tape` shipped to npm with `cd /Users/jonathanborduas/code/QGSD`
+// hardcoded, and benchmark-sync.yml once broke CI the same way. These formats have no
+// comment-vs-code distinction to reason about and no reason to name anyone's home
+// directory — a repo-relative path or `$PWD`/`$HOME`/`${VAR:-default}` always works.
+// Scoped to .tape/.sh/.yml/.yaml so illustrative `/Users/foo/...` in JS comments
+// (bin/install.js, bin/call-quorum-slot.cjs) stays legal.
+// Capture the user segment so each occurrence is judged on its own. A trailing slash
+// is NOT required — `/Users/alice` at end of line is just as unrunnable — and a
+// placeholder earlier on a line must not excuse a real path later on the same line.
+const MACHINE_PATH_RE = /\/(?:Users|home)\/([A-Za-z0-9._-]+)(?=\/|$|["'`\s:,;)])/g;
+const MACHINE_PATH_DIRS = ['scripts', '.github/workflows'];
+const MACHINE_PATH_EXTS = /\.(tape|sh|ya?ml)$/;
+// Names that obviously stand in for a real user. `<name>`-style placeholders never
+// match the capture class above, so they need no entry here.
+const MACHINE_PATH_PLACEHOLDERS = new Set([
+  'foo', 'bar', 'baz', 'user', 'username', 'name', 'you', 'me', 'example', 'runner',
+]);
+
+// Recursive: `scripts/internal/deploy.sh` is executed exactly like `scripts/deploy.sh`.
+function collectExecutableFiles(dir, acc = []) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return acc; }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      collectExecutableFiles(full, acc);
+    } else if (entry.isFile() && MACHINE_PATH_EXTS.test(entry.name)) {
+      acc.push(full);
+    }
+  }
+  return acc;
+}
+
+function scanMachinePaths() {
+  for (const dir of MACHINE_PATH_DIRS) {
+    const abs = path.join(ROOT, dir);
+    for (const full of collectExecutableFiles(abs)) {
+      const rel = path.relative(ROOT, full).split(path.sep).join('/');
+      const lines = fs.readFileSync(full, 'utf8').split('\n');
+      lines.forEach((line, i) => {
+        if (line.trim().startsWith('#')) return; // comments
+        MACHINE_PATH_RE.lastIndex = 0;
+        let m;
+        while ((m = MACHINE_PATH_RE.exec(line)) !== null) {
+          if (MACHINE_PATH_PLACEHOLDERS.has(m[1])) continue;
+          violations.push({
+            rule: 'machine-specific-path',
+            message: "Machine-specific absolute path in an executed file — use a repo-relative path or $PWD/$HOME (e.g. `cd \"${NF_REPO:-$PWD}\"`)",
+            file: rel,
+            line: i + 1,
+            text: line.trim(),
+          });
+          return; // one report per line is enough
+        }
+      });
+    }
+  }
+}
+
 function scan(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
@@ -207,6 +270,7 @@ for (const dir of SCAN_DIRS) {
 }
 
 scanProvidersIsolation();
+scanMachinePaths();
 
 if (violations.length === 0) {
   console.log('✓ lint-isolation: all portable-path checks passed');

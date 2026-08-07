@@ -19,34 +19,82 @@ const SLOT_MIGRATION_MAP = {
   'claude-glm':        'claude-6',
 };
 
+// MIGRATE-GUARD-01: `claude-minimax` / `claude-kimi` / `claude-glm` are legacy
+// MODEL-based names above — but they are also exactly the shape `/nf:link-daintree`
+// produces today (`{agentName}-{slug(preset.name)}`), so a live preset-cloned slot can
+// carry a name this map wants to rename. Renaming one silently breaks it: the mcpServers
+// key moves to `claude-2` while providers.json still lists `claude-minimax`, leaving an
+// orphaned provider entry and an MCP tool (`mcp__claude-minimax__…`) that no longer
+// exists. Preset clones are identifiable — link-daintree stamps `daintree_preset_id` —
+// so they are never renamed. See commands/nf/link-daintree.md.
+function loadProviderIndex(providersPath) {
+  // Resolution goes through resolve-providers.cjs (issue #197) so this agrees with the
+  // file the dispatcher actually reads; an explicit path is honored for tests.
+  try {
+    let p = providersPath;
+    let data;
+    if (p) {
+      data = JSON.parse(fs.readFileSync(p, 'utf8'));
+    } else {
+      const { resolveProvidersConfig } = require('./resolve-providers.cjs');
+      const resolved = resolveProvidersConfig({ baseDir: __dirname, quiet: true });
+      if (!resolved) return { path: null, byName: new Map() };
+      p = resolved.path;
+      data = resolved.data;
+    }
+    const list = Array.isArray(data && data.providers) ? data.providers : [];
+    return { path: p, byName: new Map(list.map(e => [e && e.name, e])) };
+  } catch (_) {
+    // Fail-open: no providers.json (fresh/legacy install) means nothing to protect
+    // and nothing to keep in sync — the pre-slot world this migration was written for.
+    return { path: providersPath || null, byName: new Map() };
+  }
+}
+
 /**
  * Migrate ~/.claude.json mcpServers keys from model-based names to slot names.
  * @param {string} claudeJsonPath - Absolute path to ~/.claude.json
  * @param {boolean} dryRun - If true, do not write changes
- * @returns {{ changed: number, renamed: Array<{from: string, to: string}> }}
+ * @param {object} [opts]
+ * @param {string} [opts.providersPath] - providers.json to consult/keep in sync
+ *        (defaults to the canonical ~/.claude/nf-bin/providers.json)
+ * @returns {{changed: number, renamed: Array<{from: string, to: string}>,
+ *            skipped: Array<{name: string, reason: string}>}}
  */
-function migrateClaudeJson(claudeJsonPath, dryRun = false) {
+function migrateClaudeJson(claudeJsonPath, dryRun = false, opts = {}) {
   let raw;
   try {
     raw = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf8'));
   } catch (e) {
     if (e.code === 'ENOENT') {
-      return { changed: 0, renamed: [] };
+      return { changed: 0, renamed: [], skipped: [] };
     }
     throw new Error(`Failed to read ${claudeJsonPath}: ${e.message}`);
   }
 
   const servers = (raw && typeof raw === 'object' && raw.mcpServers) || {};
+  const providers = loadProviderIndex(opts.providersPath);
   let changed = 0;
   const renamed = [];
+  const skipped = [];
+  let providersDirty = false;
 
   for (const [oldName, newName] of Object.entries(SLOT_MIGRATION_MAP)) {
     if (servers[oldName] !== undefined && servers[newName] === undefined) {
+      const entry = providers.byName.get(oldName);
+      if (entry && entry.daintree_preset_id) {
+        // A live preset clone that happens to collide with a legacy model name.
+        skipped.push({ name: oldName, reason: 'daintree preset slot — renaming would orphan it' });
+        continue;
+      }
       // Rename: assign to new key, delete old key
       servers[newName] = servers[oldName];
       delete servers[oldName];
       changed++;
       renamed.push({ from: oldName, to: newName });
+      // Keep providers.json in lockstep. Renaming only the mcpServers key leaves the
+      // provider entry pointing at a slot name that no longer resolves.
+      if (entry) { entry.name = newName; providersDirty = true; }
     }
     // oldName absent + newName present → already migrated (skip, idempotent)
     // both present → skip (safety — don't overwrite)
@@ -58,10 +106,26 @@ function migrateClaudeJson(claudeJsonPath, dryRun = false) {
       const tmpPath = claudeJsonPath + '.tmp';
       fs.writeFileSync(tmpPath, JSON.stringify(raw, null, 2) + '\n', 'utf8');
       fs.renameSync(tmpPath, claudeJsonPath);
+      if (providersDirty) {
+        try {
+          const data = JSON.parse(fs.readFileSync(providers.path, 'utf8'));
+          for (const e of data.providers || []) {
+            const r = renamed.find(x => x.from === e.name);
+            if (r) e.name = r.to;
+          }
+          const tmp = providers.path + '.tmp';
+          fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+          fs.renameSync(tmp, providers.path);
+        } catch (e) {
+          // Non-fatal: the mcpServers rename already landed. Surface it so the user can
+          // fix the pairing by hand rather than discovering a dead slot mid-quorum.
+          process.stderr.write(`[migrate-to-slots] WARN: renamed mcpServers keys but could not update ${providers.path}: ${e.message}\n`);
+        }
+      }
     }
   }
 
-  return { changed, renamed };
+  return { changed, renamed, skipped };
 }
 
 // tool_prefix migration map for nf.json

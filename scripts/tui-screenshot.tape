@@ -17,7 +17,7 @@ Set TypingSpeed 0ms
 Type@500ms "export PATH=$PATH:$(ls -d ~/Library/Application\\ Support/Claude/claude-code/*/ 2>/dev/null | tail -1) && unset CLAUDECODE"
 Enter
 Sleep 500ms
-Type "cd /Users/jonathanborduas/code/QGSD && node bin/nForma.cjs"
+Type `cd "${NF_REPO:-$PWD}" && node bin/nForma.cjs`
 Enter
 Sleep 8s
 
