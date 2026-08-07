@@ -170,3 +170,128 @@ describe('publish.yml — CI-side prerelease rejection', () => {
     assert.doesNotMatch(YML, /mode=prerelease/, 'a prerelease mode was reintroduced');
   });
 });
+
+// ── DIST-TAG-01: the @next alignment must actually authenticate ───────────────
+// The align step used to do nothing but `env: NPM_TOKEN: ${{ secrets.NPM_TOKEN }}`.
+// npm does not read NPM_TOKEN — auth comes from .npmrc (or NODE_AUTH_TOKEN plus a
+// setup-node registry-url). So `npm dist-tag add` ran UNAUTHENTICATED, 401'd, and hit
+// the warning branch on every release while blaming a token that was configured and
+// working. That is the recurring @next drift the alias invariant kept tripping over.
+describe('publish.yml — @next alignment actually authenticates (DIST-TAG-01)', () => {
+  const YML = fs.readFileSync(path.join(REPO, '.github/workflows/publish.yml'), 'utf8');
+  const alignStep = (() => {
+    const start = YML.indexOf('- name: Align @next with @latest');
+    assert.ok(start !== -1, 'publish.yml lost its "Align @next with @latest" step');
+    const rest = YML.slice(start + 1);
+    const end = rest.indexOf('\n      - name:');
+    return rest.slice(0, end === -1 ? undefined : end);
+  })();
+
+  it('writes an .npmrc authToken rather than relying on a bare NPM_TOKEN env var', () => {
+    assert.match(
+      alignStep, /_authToken=\$\{NPM_TOKEN\}/,
+      'the align step must write //registry.npmjs.org/:_authToken=${NPM_TOKEN} into .npmrc — ' +
+      'exporting NPM_TOKEN alone is a no-op and the dist-tag call runs unauthenticated',
+    );
+  });
+
+  it('removes the .npmrc it wrote', () => {
+    assert.match(alignStep, /rm -f \.npmrc/, 'the temporary .npmrc must be cleaned up');
+  });
+
+  it('distinguishes "secret missing" from "token rejected" in its warnings', () => {
+    // The old message asserted the token "may be revoked or expired" in the one case
+    // where that was never the cause. A wrong diagnosis costs the next reader real time.
+    assert.match(alignStep, /NPM_TOKEN secret is not set/, 'must report an absent secret as absent');
+    assert.match(alignStep, /revoked, expired, or lacks publish rights/, 'must report a rejected token distinctly');
+  });
+
+  it('verifies the invariant after aligning, instead of only printing dist-tags', () => {
+    assert.match(YML, /- name: Verify @next == @latest/, 'publish.yml must verify the alias invariant');
+    assert.match(YML, /DIST-TAG DRIFT/, 'a drifted tag must be called out explicitly, not left to be eyeballed');
+  });
+
+  it('keeps the publish step on OIDC — no NODE_AUTH_TOKEN in any non-comment line', () => {
+    // Its presence forces the token path and defeats trusted publishing (CLAUDE.md).
+    // Comments naming it are fine — two of them exist precisely to warn against it —
+    // so strip comment lines before asserting rather than matching the whole file.
+    const code = YML.split('\n').filter(l => !/^\s*#/.test(l)).join('\n');
+    assert.doesNotMatch(code, /NODE_AUTH_TOKEN/, 'NODE_AUTH_TOKEN defeats OIDC trusted publishing');
+  });
+});
+
+// ── The verify step is EXECUTED here, not read ────────────────────────────────
+// Asserting that publish.yml contains the right strings proves nothing about what the
+// shell does with them. This extracts the step's actual script and runs it against a
+// stubbed `npm view`, one run per registry response the step can meet. The case that
+// matters most is the unreadable one: with `|| echo '{}'` upstream, both tags come back
+// empty, compare EQUAL, and a naive check prints "invariant OK — next == latest == "
+// while having verified nothing. A verification that cannot fail is not a verification.
+describe('publish.yml — the @next verification actually discriminates (executed)', () => {
+  const YML = fs.readFileSync(path.join(REPO, '.github/workflows/publish.yml'), 'utf8');
+
+  function verifyScript() {
+    const start = YML.indexOf('- name: Verify @next == @latest');
+    assert.ok(start !== -1, 'publish.yml lost its "Verify @next == @latest" step');
+    const runIdx = YML.indexOf('run: |', start);
+    assert.ok(runIdx !== -1, 'the verify step must use a `run: |` block');
+    const body = YML.slice(YML.indexOf('\n', runIdx) + 1);
+    const lines = [];
+    for (const line of body.split('\n')) {
+      if (line.trim() === '') { lines.push(''); continue; }
+      if (!/^ {10}/.test(line)) break;           // dedent marks the end of the block
+      lines.push(line.slice(10));
+    }
+    return lines.join('\n').replace(/\$\{\{ needs\.context\.outputs\.version \}\}/g, '0.44.3');
+  }
+
+  // Stub `npm view` so no test ever reaches the real registry.
+  function runWith(tagsJson) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-verify-'));
+    const file = path.join(dir, 'verify.sh');
+    fs.writeFileSync(file,
+      `npm() { if [ "$1" = "view" ]; then printf %s '${tagsJson}'; else command npm "$@"; fi; }\n` +
+      verifyScript());
+    const r = spawnSync('bash', [file], { encoding: 'utf8', timeout: 30000 });
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+    return { status: r.status, out: (r.stdout || '') + (r.stderr || '') };
+  }
+
+  it('reports OK only when both tags are present and equal', () => {
+    const r = runWith('{"latest":"0.44.3","next":"0.44.3"}');
+    assert.equal(r.status, 0);
+    assert.match(r.out, /invariant OK — next == latest == 0\.44\.3/);
+  });
+
+  it('reports DRIFT when the tags differ, naming the fix command', () => {
+    const r = runWith('{"latest":"0.44.3","next":"0.44.2"}');
+    assert.match(r.out, /DIST-TAG DRIFT/);
+    assert.match(r.out, /npm dist-tag add @nforma\.ai\/nforma@0\.44\.3 next/);
+    assert.doesNotMatch(r.out, /invariant OK/);
+  });
+
+  it('does NOT report OK when the registry response is unreadable', () => {
+    // The `|| echo '{}'` fallback: two empty strings compare equal.
+    const r = runWith('{}');
+    assert.doesNotMatch(r.out, /invariant OK/, 'an unverifiable state must never read as verified');
+    assert.match(r.out, /NOT verified/);
+  });
+
+  it('does NOT report OK when only one of the two tags exists', () => {
+    const r = runWith('{"latest":"0.44.3"}');
+    assert.doesNotMatch(r.out, /invariant OK/);
+    assert.match(r.out, /NOT verified/);
+  });
+
+  it('does not assert the invariant against a version this run did not publish', () => {
+    const r = runWith('{"latest":"0.44.1","next":"0.44.1"}');
+    assert.doesNotMatch(r.out, /invariant OK/, 'equal-but-wrong tags are not a passing publish');
+    assert.match(r.out, /did not land where expected/);
+  });
+
+  it('never fails the job — the package is already published by this point', () => {
+    for (const tags of ['{"latest":"0.44.3","next":"0.44.3"}', '{"latest":"0.44.3","next":"0.44.2"}', '{}']) {
+      assert.equal(runWith(tags).status, 0, `verify must exit 0 for ${tags}`);
+    }
+  });
+});
