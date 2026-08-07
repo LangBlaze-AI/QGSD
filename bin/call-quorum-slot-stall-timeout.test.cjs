@@ -40,7 +40,7 @@ describe('resolveTtfbTimeout — the only window that may fast-fail', () => {
   });
 
   it('falls back to the default for garbage / non-numeric values', () => {
-    for (const bad of [0, -5, 'nope', null, true, {}, Infinity === 0]) {
+    for (const bad of [0, -5, 'nope', null, true, {}, NaN, -Infinity]) {
       assert.equal(resolveTtfbTimeout({ ttfb_timeout_ms: bad }).ms, 30000, `bad=${JSON.stringify(bad)}`);
     }
   });
@@ -282,5 +282,60 @@ describe('ADVERSARIAL: parseVerdictLine edge cases', () => {
     // must re-anchor after \n and a trailing \r must not corrupt the captured keyword
     // (a \r immediately after APPROVE is non-word, so \b still holds).
     assert.equal(parseVerdictLine('reasoning here\r\nverdict: APPROVE\r\nnext line'), 'APPROVE');
+  });
+});
+
+// ─── Review round: stream discipline and budget caps ─────────────────────────
+
+// Emits a few stderr banner lines, then goes silent and never answers on stdout.
+const FAKE_STDERR_ONLY = `
+'use strict';
+let n = 0;
+const t = setInterval(() => { process.stderr.write('progress...\\n'); if (++n >= 3) clearInterval(t); }, 100);
+setTimeout(() => process.exit(0), 20000);
+`;
+
+describe('stream discipline: stderr proves liveness, not answer progress', () => {
+  it('stderr banners do NOT promote a slot to the wide inter-chunk window', async () => {
+    // The original rearm() treated stderr like stdout, so banner lines moved the slot to
+    // the ceiling and a CLI that never answered lived until the hard timeout. stderr may
+    // rearm the TTFB window — it does prove the process is alive — but it must not buy
+    // the wide window. Here: 3 banner lines, then silence, ttfb=1200 vs ceiling=30000.
+    // Death at ~TTFB proves stderr never promoted it; survival to 20s would prove it had.
+    const { cli } = makeFakeSlotDir(FAKE_STDERR_ONLY);
+    const started = Date.now();
+    await assert.rejects(
+      () => runSubprocess(fakeProvider(cli), 'q', 30000, 40000, null, {}, { ttfb: 1200, interChunk: 30000 }),
+      /STALL: no output at all for 1200ms/,
+    );
+    assert.ok(Date.now() - started < 10000, 'must die on the TTFB window, not the 30s ceiling');
+  });
+
+  it('stdout still promotes the slot to the inter-chunk ceiling', async () => {
+    const { cli } = makeFakeSlotDir();
+    const provider = { ...fakeProvider(cli), env: { NF_FAKE_PAUSE_MS: '4000' } };
+    const out = await runSubprocess(provider, 'q', 20000, 30000, null, {}, { ttfb: 1500, interChunk: 12000 });
+    assert.match(out, /verdict: APPROVE/);
+  });
+});
+
+describe('the per-slot ceiling cannot bypass the operator budget', () => {
+  it('caps the inter-chunk ceiling at the hard/latency budget and says so', () => {
+    const { dir, cli } = makeFakeSlotDir();
+    const providersPath = path.join(dir, 'providers.json');
+    fs.writeFileSync(providersPath, JSON.stringify({ providers: [{
+      name: 'fake-slot', type: 'subprocess', mainTool: 'node', cli: 'node',
+      args_template: [cli, '{prompt}'],
+      inter_chunk_ceiling_ms: 660000,   // slot wants 11 minutes
+      latency_budget_ms: 5000,          // operator says no
+    }] }), 'utf8');
+    const res = spawnSync(process.execPath, [
+      path.join(__dirname, 'call-quorum-slot.cjs'), '--slot', 'fake-slot', '--cwd', dir,
+    ], { cwd: dir, input: 'q\n', encoding: 'utf8', timeout: 30000,
+         env: { ...process.env, UNIFIED_PROVIDERS_CONFIG: providersPath, NF_FAKE_PAUSE_MS: '100' } });
+    const err = res.stderr || '';
+    assert.match(err, /inter-chunk ceiling 660000ms capped to 5000ms/,
+      'a slot must not out-declare the operator budget');
+    assert.doesNotMatch(err, /inter-chunk=660000ms/);
   });
 });

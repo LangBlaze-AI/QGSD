@@ -715,17 +715,29 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
       timedOut = true; timeoutType = 'STALL'; killGroup();
     }, TTFB_MS);
 
-    // Every chunk rearms the inter-chunk timer. Byte COUNT is deliberately not consulted:
-    // a slot mid-generation is alive whether it has emitted 200 bytes or 200KB.
-    const rearm = () => {
+    // Byte COUNT is deliberately not consulted: a slot mid-generation is alive whether it
+    // has emitted 200 bytes or 200KB. But WHICH stream matters. Only stdout is answer
+    // progress; several CLIs here (gemini among them) write banners and progress lines to
+    // stderr, and letting those promote the slot to the wide inter-chunk window would let
+    // a CLI that never answers escape the fast TTFB fail entirely. So stderr rearms TTFB
+    // — it proves the process is alive, not that an answer is coming — and only stdout
+    // switches to the ceiling. Once stdout has been seen, stderr rearms the ceiling too,
+    // since by then the slot is demonstrably answering.
+    const rearmStdout = () => {
       firstByteSeen = true;
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => { timedOut = true; timeoutType = 'IDLE'; killGroup(); }, INTER_CHUNK_MS);
     };
+    const rearmStderr = () => {
+      clearTimeout(idleTimer);
+      idleTimer = firstByteSeen
+        ? setTimeout(() => { timedOut = true; timeoutType = 'IDLE'; killGroup(); }, INTER_CHUNK_MS)
+        : setTimeout(() => { timedOut = true; timeoutType = 'STALL'; killGroup(); }, TTFB_MS);
+    };
 
     child.stdout.on('data', d => {
       totalBytesReceived += d.length;
-      rearm();
+      rearmStdout();
       const chunk = d.toString();
       l1OriginalSize += chunk.length;
       if (stdout.length < MAX_BUF) {
@@ -751,7 +763,7 @@ function runSubprocess(provider, prompt, idleTimeoutMs, hardTimeoutMs, allowedTo
     });
     child.stderr.on('data', d => {
       totalBytesReceived += d.length;
-      rearm();
+      rearmStderr();
       const chunk = d.toString().slice(0, 4096);
       stderr += chunk;
       // Check stderr for rate-limit patterns too (gemini logs to stderr)
@@ -1105,12 +1117,17 @@ async function main() {
   // configured idle tolerance and capped by the idle budget actually in force.
   const ttfb  = resolveTtfbTimeout(provider);
   const chunk = resolveInterChunkCeiling(provider, effectiveIdleTimeout);
-  const timers = { ttfb: ttfb.ms, interChunk: chunk.ms };
-  // The hard cap must still cover the widest window a dispatch can legitimately use,
-  // or a slot with a long inter-chunk ceiling is killed by the hard timer instead.
-  effectiveHardTimeout = Math.max(effectiveHardTimeout, chunk.ms);
+  // A per-slot ceiling may exceed the CALLER's idle budget (that is its purpose) but must
+  // never exceed the OPERATOR's caps — effectiveHardTimeout already folds in
+  // quorum_timeout_ms and latency_budget_ms. Raising the hard timer to meet the ceiling
+  // instead would silently undo a `latency_budget_ms: 120000` an operator had set.
+  const boundedChunk = Math.min(chunk.ms, effectiveHardTimeout);
+  if (boundedChunk !== chunk.ms) {
+    process.stderr.write(`[call-quorum-slot] inter-chunk ceiling ${chunk.ms}ms capped to ${boundedChunk}ms by the hard/latency budget for slot ${slot}\n`);
+  }
+  const timers = { ttfb: Math.min(ttfb.ms, effectiveHardTimeout), interChunk: boundedChunk };
 
-  process.stderr.write(`[call-quorum-slot] Timeouts: idle=${effectiveIdleTimeout}ms hard=${effectiveHardTimeout}ms ttfb=${ttfb.ms}ms (${ttfb.source}) inter-chunk=${chunk.ms}ms (${chunk.source}) for slot ${slot}\n`);
+  process.stderr.write(`[call-quorum-slot] Timeouts: idle=${effectiveIdleTimeout}ms hard=${effectiveHardTimeout}ms ttfb=${ttfb.ms}ms (${ttfb.source}) inter-chunk=${boundedChunk}ms (${chunk.source}) for slot ${slot}\n`);
 
   const startMs = Date.now();
 
