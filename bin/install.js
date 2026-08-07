@@ -603,11 +603,20 @@ function ensureMcpSlotsFromProviders() {
           const patchedProvidersPathNfBin = path.join(os.homedir(), '.claude', PATCHES_DIR_NAME, 'nf-bin', 'providers.json');
           const patchedProvidersPathLegacy = path.join(os.homedir(), '.claude', PATCHES_DIR_NAME, 'nf', 'bin', 'providers.json');
           const legacyProvidersPath = path.join(os.homedir(), '.claude', 'nf', 'bin', 'providers.json');
+          // FIRST writer wins, so the freshness order above is actually honoured. This
+          // loop used to `set()` unconditionally, which made the LAST (stalest) candidate
+          // win — the exact inversion of the documented intent. A 3-month-old
+          // nf-local-patches backup therefore overwrote the live entry for every slot it
+          // happened to contain, silently reverting per-slot tuning (ttfb_timeout_ms,
+          // inter_chunk_ceiling_ms, idle_timeout_ms, model, env) on EVERY install. The
+          // backups exist to recover slots the live file has LOST, never to override it.
           for (const candidatePath of [globalProvidersJson, patchedProvidersPathNfBin, patchedProvidersPathLegacy, legacyProvidersPath]) {
             try {
               if (fs.existsSync(candidatePath)) {
                 const existing = JSON.parse(fs.readFileSync(candidatePath, 'utf8'));
-                for (const p of existing.providers || []) existingByName.set(p.name, p);
+                for (const p of existing.providers || []) {
+                  if (p && p.name && !existingByName.has(p.name)) existingByName.set(p.name, p);
+                }
               }
             } catch (_) { /* skip unreadable / malformed */ }
           }
