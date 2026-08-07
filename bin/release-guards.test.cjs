@@ -170,3 +170,52 @@ describe('publish.yml — CI-side prerelease rejection', () => {
     assert.doesNotMatch(YML, /mode=prerelease/, 'a prerelease mode was reintroduced');
   });
 });
+
+// ── DIST-TAG-01: the @next alignment must actually authenticate ───────────────
+// The align step used to do nothing but `env: NPM_TOKEN: ${{ secrets.NPM_TOKEN }}`.
+// npm does not read NPM_TOKEN — auth comes from .npmrc (or NODE_AUTH_TOKEN plus a
+// setup-node registry-url). So `npm dist-tag add` ran UNAUTHENTICATED, 401'd, and hit
+// the warning branch on every release while blaming a token that was configured and
+// working. That is the recurring @next drift the alias invariant kept tripping over.
+describe('publish.yml — @next alignment actually authenticates (DIST-TAG-01)', () => {
+  const YML = fs.readFileSync(path.join(REPO, '.github/workflows/publish.yml'), 'utf8');
+  const alignStep = (() => {
+    const start = YML.indexOf('- name: Align @next with @latest');
+    assert.ok(start !== -1, 'publish.yml lost its "Align @next with @latest" step');
+    const rest = YML.slice(start + 1);
+    const end = rest.indexOf('\n      - name:');
+    return rest.slice(0, end === -1 ? undefined : end);
+  })();
+
+  it('writes an .npmrc authToken rather than relying on a bare NPM_TOKEN env var', () => {
+    assert.match(
+      alignStep, /_authToken=\$\{NPM_TOKEN\}/,
+      'the align step must write //registry.npmjs.org/:_authToken=${NPM_TOKEN} into .npmrc — ' +
+      'exporting NPM_TOKEN alone is a no-op and the dist-tag call runs unauthenticated',
+    );
+  });
+
+  it('removes the .npmrc it wrote', () => {
+    assert.match(alignStep, /rm -f \.npmrc/, 'the temporary .npmrc must be cleaned up');
+  });
+
+  it('distinguishes "secret missing" from "token rejected" in its warnings', () => {
+    // The old message asserted the token "may be revoked or expired" in the one case
+    // where that was never the cause. A wrong diagnosis costs the next reader real time.
+    assert.match(alignStep, /NPM_TOKEN secret is not set/, 'must report an absent secret as absent');
+    assert.match(alignStep, /revoked, expired, or lacks publish rights/, 'must report a rejected token distinctly');
+  });
+
+  it('verifies the invariant after aligning, instead of only printing dist-tags', () => {
+    assert.match(YML, /- name: Verify @next == @latest/, 'publish.yml must verify the alias invariant');
+    assert.match(YML, /DIST-TAG DRIFT/, 'a drifted tag must be called out explicitly, not left to be eyeballed');
+  });
+
+  it('keeps the publish step on OIDC — no NODE_AUTH_TOKEN in any non-comment line', () => {
+    // Its presence forces the token path and defeats trusted publishing (CLAUDE.md).
+    // Comments naming it are fine — two of them exist precisely to warn against it —
+    // so strip comment lines before asserting rather than matching the whole file.
+    const code = YML.split('\n').filter(l => !/^\s*#/.test(l)).join('\n');
+    assert.doesNotMatch(code, /NODE_AUTH_TOKEN/, 'NODE_AUTH_TOKEN defeats OIDC trusted publishing');
+  });
+});

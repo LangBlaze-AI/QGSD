@@ -121,20 +121,49 @@ jobs:
       - name: Publish via OIDC trusted publisher
         run: npm publish --access public --tag "${{ needs.context.outputs.dist_tag }}"
       - name: Align @next with @latest
-        # OIDC trusted publishing authorizes `npm publish` but NOT `npm dist-tag add`.
-        # Use the legacy NPM_TOKEN (GitHub repo secret) for dist-tag operations only —
-        # publish keeps using OIDC. `@next` and `@latest` must show the same version
-        # after every release (see CLAUDE.md invariant).
+        # OIDC trusted publishing authorizes `npm publish` but NOT `npm dist-tag add`,
+        # so this step needs token auth. `@next` and `@latest` must show the same
+        # version after every release (see CLAUDE.md invariant).
+        #
+        # DIST-TAG-01: this used to export NPM_TOKEN as a bare env var and nothing else.
+        # npm does NOT read NPM_TOKEN — auth comes from .npmrc (or NODE_AUTH_TOKEN with
+        # a setup-node registry-url). So the dist-tag call ran UNAUTHENTICATED, 401'd,
+        # and fell into the warning branch on every single release, blaming a token that
+        # was configured and fine. That is the recurring @next drift. Writing the
+        # .npmrc HERE is safe: it runs after the OIDC publish, so it cannot push publish
+        # onto the token path. The file holds the literal `${NPM_TOKEN}` reference (npm
+        # expands it at read time), not the secret itself, and is removed on exit.
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if npm dist-tag add "@nforma.ai/nforma@${{ needs.context.outputs.version }}" next; then
-            echo "Aligned @next → ${{ needs.context.outputs.version }}"
-          else
-            echo "::warning::Could not align @next via NPM_TOKEN (token may be revoked or expired). Run: npm dist-tag add @nforma.ai/nforma@${{ needs.context.outputs.version }} next"
+          VERSION="${{ needs.context.outputs.version }}"
+          MANUAL="npm dist-tag add @nforma.ai/nforma@${VERSION} next"
+          if [ -z "${NPM_TOKEN}" ]; then
+            echo "::warning::NPM_TOKEN secret is not set, so @next cannot be aligned from CI. Run: ${MANUAL}"
+            exit 0
           fi
-      - name: Show dist-tags
-        run: npm dist-tag ls @nforma.ai/nforma || true
+          printf '//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n' > .npmrc
+          trap 'rm -f .npmrc' EXIT
+          if npm dist-tag add "@nforma.ai/nforma@${VERSION}" next; then
+            echo "Aligned @next → ${VERSION}"
+          else
+            echo "::warning::npm dist-tag add failed with a configured NPM_TOKEN — the token is likely revoked, expired, or lacks publish rights on the package. Run: ${MANUAL}"
+          fi
+      # Verify the invariant instead of merely printing it: a silent warning above is
+      # how @next drifted release after release. Never fails the job — the package is
+      # already published by this point, and a red job would misreport that.
+      - name: Verify @next == @latest
+        run: |
+          VERSION="${{ needs.context.outputs.version }}"
+          TAGS=$(npm view @nforma.ai/nforma dist-tags --json 2>/dev/null || echo '{}')
+          echo "$TAGS"
+          LATEST=$(printf '%s' "$TAGS" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).latest || ''")
+          NEXT=$(printf '%s' "$TAGS" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).next || ''")
+          if [ "$LATEST" = "$NEXT" ]; then
+            echo "invariant OK — next == latest == ${LATEST}"
+          else
+            echo "::warning::DIST-TAG DRIFT — latest=${LATEST} next=${NEXT}. Anyone installing @next gets the older build. Fix: npm dist-tag add @nforma.ai/nforma@${VERSION} next"
+          fi
 
   # ── Git tag + GitHub Release (after a successful publish) ──
   # Recovery note: if publish succeeds but this job fails transiently, a re-run finds
