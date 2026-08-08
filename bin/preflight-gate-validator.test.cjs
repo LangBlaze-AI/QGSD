@@ -21,7 +21,7 @@ const { validateProviders, computeQuorumGate } = require('./quorum-preflight.cjs
 test('PGV-1: a well-formed roster is clean', () => {
   const r = validateProviders([
     { name: 'codex-1', type: 'subprocess', mainTool: 'codex', args_template: ['exec', '{prompt}'] },
-    { name: 'api-1', type: 'http', baseUrl: 'https://x/v1', apiKeyEnv: 'X_KEY' },
+    { name: 'api-1', type: 'http', baseUrl: 'https://x/v1', apiKeyEnv: 'X_KEY' },  // pragma: allowlist secret
   ]);
   assert.deepStrictEqual(r.errors, []);
   assert.strictEqual(r.valid, true);
@@ -48,11 +48,11 @@ test('PGV-3: duplicate names are an error, not last-wins', () => {
 });
 
 test('PGV-4: http slots need a base URL and some auth', () => {
-  assert.match(validateProviders([{ name: 'h', type: 'http', apiKeyEnv: 'K' }]).errors.join(' '), /missing 'baseUrl'/);
+  assert.match(validateProviders([{ name: 'h', type: 'http', apiKeyEnv: 'K' }]).errors.join(' '), /missing 'baseUrl'/);  // pragma: allowlist secret
   assert.match(validateProviders([{ name: 'h', type: 'http', baseUrl: 'https://x' }]).errors.join(' '), /no 'apiKeyEnv'/);
   // An inline token in env counts as auth.
   assert.deepStrictEqual(
-    validateProviders([{ name: 'h', type: 'http', baseUrl: 'https://x', env: { ANTHROPIC_AUTH_TOKEN: 't' } }]).errors, []);
+    validateProviders([{ name: 'h', type: 'http', baseUrl: 'https://x', env: { ANTHROPIC_AUTH_TOKEN: 't' } }]).errors, []);  // pragma: allowlist secret
 });
 
 test('PGV-5: garbage timeouts WARN rather than error — they are ignored, not fatal', () => {
@@ -112,4 +112,45 @@ test('PGV-11: garbage inputs fall back to safe defaults instead of NaN', () => {
   assert.strictEqual(g.max_quorum_size, 3);
   assert.strictEqual(g.min_live_voters, 2);
   assert.strictEqual(g.blocked, true, 'zero available must block, not NaN-compare to false');
+});
+
+// ── Wiring: the two orderings that made these functions look correct in isolation
+//    while being wrong in the pipeline. Both were review findings on the first version.
+
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+
+const TMP = [];
+process.on('exit', () => { for (const d of TMP) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} } });
+
+function runPreflight(providers, argv = []) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-pf-'));
+  TMP.push(dir);
+  const pj = path.join(dir, 'providers.json');
+  fs.writeFileSync(pj, JSON.stringify({ providers }), 'utf8');
+  const res = spawnSync(process.execPath, [
+    path.join(__dirname, 'quorum-preflight.cjs'), '--all', '--no-probe', ...argv,
+  ], { cwd: dir, encoding: 'utf8', timeout: 60000,
+       env: { ...process.env, UNIFIED_PROVIDERS_CONFIG: pj } });
+  let json = null;
+  try { json = JSON.parse((res.stdout || '').split('\n').filter(Boolean).pop()); } catch (_) {}
+  return { json, stderr: res.stderr || '' };
+}
+
+test('PGV-12: a corrupt roster entry reaches the validator, not just the filter', () => {
+  // findProviders() strips null/nameless entries so the rest of preflight degrades
+  // gracefully — which meant the validator never saw them and reported valid:true on
+  // a roster it had never actually inspected.
+  const { json, stderr } = runPreflight([null, { name: 'ok', type: 'subprocess', mainTool: 'x', args_template: ['{prompt}'] }]);
+  assert.ok(json, 'preflight produced no JSON');
+  assert.strictEqual(json.validation.valid, false, 'a [null] entry must be reported, not silently filtered');
+  assert.match(stderr, /CONFIG ERROR/);
+});
+
+test('PGV-13: a corrupt entry does not wedge the preflight (still fail-open)', () => {
+  // The validator reports; it must never block. The rest of the output must survive.
+  const { json } = runPreflight([null, { name: 'ok', type: 'subprocess', mainTool: 'x', args_template: ['{prompt}'] }]);
+  assert.ok(json.team, 'team output must still be produced alongside the diagnostic');
 });

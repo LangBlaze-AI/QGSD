@@ -649,7 +649,14 @@ async function main() {
 
     // P5: non-fatal diagnostics — surfaced on every --all so a malformed slot is seen
     // before it fails opaquely mid-quorum, never by blocking the preflight itself.
-    const validation = validateProviders(providers);
+    // Validate the RAW roster, not findProviders()' output: that function strips
+    // null/non-object/nameless entries so the rest of preflight degrades gracefully,
+    // which means the validator would never see the entries it exists to report. A
+    // corrupt `[null]` roster reported valid:true and said nothing.
+    const rawProviders = (() => {
+      try { return loadProviders({ baseDir: __dirname }) || []; } catch (_) { return providers; }
+    })();
+    const validation = validateProviders(rawProviders);
     for (const e of validation.errors)   process.stderr.write(`[quorum-preflight] CONFIG ERROR: ${e}\n`);
     for (const w of validation.warnings) process.stderr.write(`[quorum-preflight] config warning: ${w}\n`);
 
@@ -704,16 +711,6 @@ async function main() {
         }
       }
 
-      // P3: emit the gate as a decided field rather than leaving the orchestrator to
-      // re-derive "available < max_quorum_size -> BLOCK unless --force-quorum" from
-      // prose. `blocked: true` means no dispatch without a recorded waiver.
-      output.gate = computeQuorumGate({
-        availableCount: output.available_slots.length,
-        maxQuorumSize: maxSize,
-        minLiveVoters: (cfg.quorum && cfg.quorum.min_live_voters) || 2,
-        forceQuorum: process.argv.includes('--force-quorum'),
-      });
-      process.stderr.write(`[quorum-preflight] gate: ${output.gate.blocked ? 'BLOCKED' : output.gate.degraded ? 'DEGRADED' : 'OK'} — ${output.gate.gate_reason}\n`);
 
       // NOTE: nf-prompt.js also tiers slots independently via auth_type in its
       // quorum injection logic. This sort covers the quorum.md direct-read path
@@ -739,6 +736,22 @@ async function main() {
       }
       output.available_slots = deduped;
       output.deduped_slots = dedupedOut;
+
+      // P3: emit the gate as a decided field rather than leaving the orchestrator to
+      // re-derive "available < max_quorum_size -> BLOCK unless --force-quorum" from
+      // prose. `blocked: true` means no dispatch without a recorded waiver.
+      //
+      // Computed AFTER dedup deliberately: dedup removes duplicate (model, provider)
+      // identities from available_slots, so counting before it would report a roster
+      // that meets the voter floor while the actually-dispatchable list does not —
+      // a gate that passes on slots that will never be dispatched.
+      output.gate = computeQuorumGate({
+        availableCount: output.available_slots.length,
+        maxQuorumSize: maxSize,
+        minLiveVoters: (cfg.quorum && cfg.quorum.min_live_voters) || 2,
+        forceQuorum: process.argv.includes('--force-quorum'),
+      });
+      process.stderr.write(`[quorum-preflight] gate: ${output.gate.blocked ? 'BLOCKED' : output.gate.degraded ? 'DEGRADED' : 'OK'} — ${output.gate.gate_reason}\n`);
 
       // Add transparency fields
       output.primary_slots = output.available_slots.filter(s => typeMap.get(s) !== 'http');
