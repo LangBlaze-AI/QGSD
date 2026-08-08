@@ -25,7 +25,10 @@ const { resolveArgsTemplate } = require('./provider-arg-templates.cjs');
 // ─── Error pattern classification ────────────────────────────────────────────
 
 const ERROR_PATTERNS = [
-  { status: 'QUOTA_EXCEEDED', patterns: ['quota exceeded', 'rate_limit', 'credit limit exceeded', 'too many requests', 'resource_exhausted', '429'] },
+  // 'quota reached' / 'limit exhausted' / 'limit reached' added 2026-08-08 from live
+  // output: antigravity says "Individual quota reached", which 'quota exceeded' misses
+  // entirely — the slot was reported healthy while it had 74h of cooldown left.
+  { status: 'QUOTA_EXCEEDED', patterns: ['quota exceeded', 'quota reached', 'limit exhausted', 'limit reached', 'rate_limit', 'credit limit exceeded', 'too many requests', 'resource_exhausted', '429'] },
   { status: 'AUTH_ERROR',     patterns: ['unauthorized', 'refresh_token_reused', 'token_expired', 'invalid api key', 'invalid_api_key', '401', '403', 'please try signing in again'] },
   { status: 'FORMAT_ERROR',   patterns: ['invalid_request_error', 'request validation error', '400'] },
   { status: 'NO_CREDITS',    patterns: ['credit limit', '402', 'payment required'] },
@@ -323,7 +326,16 @@ async function main() {
   }
 }
 
-main().catch(err => {
+// Guard main() so require()ing this module for its classifier does not run the whole
+// probe sweep — the #198 class the no-side-effects-on-require gate exists for.
+if (require.main === module) {
+  main().catch(err => {
   process.stderr.write(`[provider-status] ${err.message}\n`);
   process.exit(1);
 });
+}
+
+// Exported so bin/quorum-preflight.cjs can classify deep-probe output with the SAME
+// pattern list. A second copy would drift, and these patterns decide whether a slot is
+// declared dead — the one place a stale duplicate is least affordable.
+module.exports = { ERROR_PATTERNS, classifyOutput };

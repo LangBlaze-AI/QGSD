@@ -33,6 +33,11 @@ const https           = require('https');
 const http            = require('http');
 const { resolveSpawnTarget } = require('./resolve-cli.cjs');
 const { loadProviders } = require('./resolve-providers.cjs');
+// Shared with bin/provider-status.cjs so the auth/quota pattern list has ONE definition —
+// these patterns decide whether a slot is declared dead, which is the worst place for a
+// stale duplicate. Requiring it is side-effect-free (its main() is require.main-guarded).
+const { classifyOutput } = require('./provider-status.cjs');
+const { resolveArgsTemplate } = require('./provider-arg-templates.cjs');
 
 // Probe is ON by default for --all; --no-probe to skip, --probe still accepted for compat
 const NO_PROBE = process.argv.includes('--no-probe');
@@ -519,6 +524,76 @@ function ensureServices(providers) {
   }
 }
 
+// ─── P1: deep-probe gate ────────────────────────────────────────────────────
+// L1 (`--version`) proves a binary exists. L2 (`/models`) treats 401/403 as *reachable*.
+// Neither can tell a quota-dead slot from a healthy one — demonstrated live on
+// 2026-08-08, when preflight reported 7/7 available while `claude-z-ai` (429, weekly
+// limit) and `antigravity-1` (quota, 74h to reset) could not answer at all. A panel
+// that says "full quorum" and then produces two UNAVAILs mid-round is worse than one
+// that admits it does not know.
+//
+// The dangerous direction is the SAME false-kill this codebase already paid for in
+// STALL-TIMEOUT-01..03: declaring a slow-but-alive slot dead. So the rule is
+// deliberately lopsided —
+//
+//   downgrade ONLY on a fast, EXPLICIT auth/quota signal from the slot's own output.
+//   A timeout, a spawn error, an empty response, or anything unrecognised is
+//   INCONCLUSIVE and never downgrades.
+//
+// A deep probe can therefore only ever mark MORE slots unavailable, and only when the
+// provider itself said why.
+const DOWNGRADE_STATUSES = new Set(['QUOTA_EXCEEDED', 'AUTH_ERROR', 'NO_CREDITS']);
+
+async function deepProbeSlot(provider, timeoutMs) {
+  const probe = provider.deep_probe;
+  if (!probe) return { probed: false, reason: 'no deep_probe configured' };
+
+  const spawnTarget = resolveSpawnTarget(provider);
+  const argsTemplate = resolveArgsTemplate(provider);
+  if (!spawnTarget || !Array.isArray(argsTemplate)) {
+    return { probed: false, reason: 'no spawn target or args_template' };
+  }
+  const prompt = probe.prompt || 'respond with: PROBE_OK';
+  const args = argsTemplate.map(a =>
+    (typeof a === 'string' && a.includes('{prompt}')) ? a.split('{prompt}').join(prompt) : a);
+  const budget = Math.max(1000, Math.min(timeoutMs, probe.timeout_ms || 45000));
+
+  const out = await new Promise((resolve) => {
+    let stdout = '', stderr = '', done = false;
+    let child;
+    try {
+      child = spawn(spawnTarget, args, {
+        env: { ...process.env, ...(provider.env || {}) }, stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (e) { return resolve({ error: e.message }); }
+    const timer = setTimeout(() => {
+      done = true;
+      try { child.kill('SIGKILL'); } catch (_) {}
+      resolve({ timedOut: true, text: stdout + stderr });
+    }, budget);
+    child.stdout.on('data', d => { stdout += d.toString().slice(0, 4096); });
+    child.stderr.on('data', d => { stderr += d.toString().slice(0, 4096); });
+    child.on('close', () => { if (!done) { clearTimeout(timer); resolve({ text: stdout + stderr }); } });
+    child.on('error', (e) => { if (!done) { clearTimeout(timer); resolve({ error: e.message }); } });
+  });
+
+  // Inconclusive: could not run it, or it never answered. Says nothing about health.
+  if (out.error)    return { probed: true, downgrade: false, status: 'INCONCLUSIVE', reason: `spawn error: ${out.error}` };
+  if (out.timedOut) return { probed: true, downgrade: false, status: 'INCONCLUSIVE', reason: `no answer in ${budget}ms — slow is not dead` };
+
+  const cls = classifyOutput(out.text || '');
+  if (cls && DOWNGRADE_STATUSES.has(cls)) {
+    // Report the line that actually MATCHED, not the last line of output. CLIs emit
+    // trailing noise (a SessionEnd hook message, a shutdown notice), and quoting that
+    // as the downgrade reason misattributes the cause — the first live run blamed
+    // "SessionEnd hook failed" for what was a 429.
+    const lines = (out.text || '').split('\n').map(l => l.trim()).filter(Boolean);
+    const matched = lines.find(l => classifyOutput(l) === cls) || lines[lines.length - 1] || '';
+    return { probed: true, downgrade: true, status: cls, reason: matched.slice(0, 200) };
+  }
+  return { probed: true, downgrade: false, status: cls || 'OK', reason: cls ? `non-fatal: ${cls}` : 'answered' };
+}
+
 // ─── P5: providers.json schema validation ───────────────────────────────────
 // A malformed slot does not announce itself — it fails at dispatch, mid-quorum, as an
 // opaque UNAVAIL. This repo has shipped that failure repeatedly: a missing
@@ -737,6 +812,46 @@ async function main() {
       output.available_slots = deduped;
       output.deduped_slots = dedupedOut;
 
+      // P1: run the deep probe only when the panel is DEGRADED and an explicit
+      // --budget-ms covers it. Both conditions matter:
+      //   • degraded-only — a full panel has nothing to gain and every probe is a real
+      //     model call with real latency and real cost.
+      //   • explicit budget — a naive auto-enable on the budget-less `--all --probe`
+      //     liveness path blew the <8s budget with spawnSync ETIMEDOUT (recorded in
+      //     #293). The cheap path must stay cheap.
+      const preGate = computeQuorumGate({
+        availableCount: output.available_slots.length,
+        maxQuorumSize: maxSize,
+        minLiveVoters: (cfg.quorum && cfg.quorum.min_live_voters) || 2,
+        forceQuorum: process.argv.includes('--force-quorum'),
+      });
+      const wantDeep = process.argv.includes('--deep-probe')
+        || (preGate.degraded && BUDGET_MS !== null && BUDGET_MS >= 20000);
+      if (wantDeep) {
+        // Probes run CONCURRENTLY (Promise.all), so each slot gets the whole budget
+        // minus a little headroom — not budget/N. Dividing is sequential thinking, and
+        // it made every slot time out at 12.8s and report INCONCLUSIVE: safe, but
+        // useless. Reserve 5s so the job still finishes inside the caller's budget.
+        const perSlot = Math.max(3000, (BUDGET_MS || 45000) - 5000);
+        const candidates = output.available_slots
+          .map(name => activeProviders.find(p => p.name === name))
+          .filter(p => p && p.deep_probe);
+        const results = await Promise.all(candidates.map(p => deepProbeSlot(p, perSlot)));
+        output.deep_probe = {};
+        for (const [i, p] of candidates.entries()) {
+          const r = results[i];
+          output.deep_probe[p.name] = r;
+          if (r.downgrade) {
+            process.stderr.write(`[quorum-preflight] deep probe DOWNGRADE ${p.name}: ${r.status} — ${r.reason}\n`);
+            output.available_slots = output.available_slots.filter(n => n !== p.name);
+            output.unavailable_slots.push({ name: p.name, reason: `deep probe: ${r.status} — ${r.reason}` });
+          } else if (r.probed && r.status === 'INCONCLUSIVE') {
+            // Explicitly NOT a downgrade. Recorded so the reader knows it was tried.
+            process.stderr.write(`[quorum-preflight] deep probe inconclusive for ${p.name} (kept available): ${r.reason}\n`);
+          }
+        }
+      }
+
       // P3: emit the gate as a decided field rather than leaving the orchestrator to
       // re-derive "available < max_quorum_size -> BLOCK unless --force-quorum" from
       // prose. `blocked: true` means no dispatch without a recorded waiver.
@@ -775,4 +890,4 @@ if (require.main === module) {
   main().catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { dedupBySlotIdentity, probeHealth, findProviders, validateProviders, computeQuorumGate };
+module.exports = { dedupBySlotIdentity, probeHealth, findProviders, validateProviders, computeQuorumGate, deepProbeSlot, DOWNGRADE_STATUSES };
