@@ -1,0 +1,105 @@
+name: Align dist-tags
+
+# Manual remedy for the `@next == @latest` alias invariant (CLAUDE.md).
+#
+# publish.yml aligns @next automatically after every publish (DIST-TAG-01, #391). This
+# workflow exists for the cases that path cannot cover: a release published BEFORE that
+# fix landed, or an alignment that failed transiently. Doing it by hand needs
+# `npm dist-tag add`, which on a 2FA-protected account prompts EOTP for a one-time
+# password — so it cannot be scripted, and in practice it does not get done.
+#
+# The NPM_TOKEN secret is 2FA-exempt (that is what automation tokens are for), so CI can
+# do what an interactive human cannot do unattended.
+#
+# Scope is deliberately narrow: this moves a dist-tag and nothing else. It cannot publish.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to point @next at (default: whatever @latest currently is)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  align:
+    name: Point @next at @latest
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    timeout-minutes: 5
+    steps:
+      - name: Resolve target version
+        id: target
+        # `inputs.version` is attacker-controlled on a workflow_dispatch. GitHub expands
+        # ${{ }} BEFORE bash parses the script, so interpolating it inline would let a
+        # crafted input close the quote and run arbitrary commands. Passing it through
+        # `env:` keeps it a shell VALUE that is never parsed as script.
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          LATEST=$(npm view @nforma.ai/nforma dist-tags.latest 2>/dev/null || echo '')
+          TARGET="${INPUT_VERSION}"
+          [ -z "$TARGET" ] && TARGET="$LATEST"
+          if [ -z "$TARGET" ]; then
+            echo "::error::could not resolve a target version (npm view returned nothing and no input was given)"
+            exit 1
+          fi
+          # Whitelist the shape as well as escaping it: only a bare stable semver may
+          # reach `npm dist-tag`. This rejects anything with shell metacharacters
+          # outright rather than relying on quoting alone, and doubles as the
+          # prerelease refusal — under the alias policy @next == @latest, a prerelease
+          # holding @next would silently install for every user.
+          # Whole-string check, not line-wise: `grep` is line-oriented, so a value like
+          # $'0.0.1\ntouch x' passes an anchored pattern on its FIRST line while still
+          # carrying a newline — which then injects extra keys into $GITHUB_OUTPUT.
+          # Stripping the legal alphabet and requiring nothing remains catches that.
+          if [ -n "${TARGET//[0-9.]/}" ] || ! printf '%s' "$TARGET" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::refusing target '${TARGET}' — expected a bare stable semver (x.y.z); prereleases and any other shape are rejected"
+            exit 1
+          fi
+          echo "target=${TARGET}" >> "$GITHUB_OUTPUT"
+          echo "latest=${LATEST}" >> "$GITHUB_OUTPUT"
+          echo "Target: ${TARGET} (current @latest: ${LATEST:-unknown})"
+
+      - name: Align @next
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TARGET: ${{ steps.target.outputs.target }}
+        run: |
+          if [ -z "${NPM_TOKEN}" ]; then
+            echo "::error::NPM_TOKEN secret is not set — this workflow cannot authenticate"
+            exit 1
+          fi
+          # npm does NOT read a bare NPM_TOKEN env var; auth comes from .npmrc. That exact
+          # mistake is what made every release's alignment silently 401 (DIST-TAG-01).
+          printf '//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n' > .npmrc
+          trap 'rm -f .npmrc' EXIT
+          npm dist-tag add "@nforma.ai/nforma@${TARGET}" next
+
+      - name: Verify the invariant holds
+        env:
+          TARGET: ${{ steps.target.outputs.target }}
+        run: |
+          TAGS=$(npm view @nforma.ai/nforma dist-tags --json 2>/dev/null || echo '{}')
+          echo "$TAGS"
+          LATEST=$(printf '%s' "$TAGS" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).latest || ''")
+          NEXT=$(printf '%s' "$TAGS" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).next || ''")
+          # Unlike publish.yml's verify — which must never fail a job whose package is
+          # already published — a manual alignment that did not align is a failure. A
+          # green run that changed nothing is the outcome worth preventing here.
+          if [ -z "$LATEST" ] || [ -z "$NEXT" ]; then
+            echo "::error::could not read dist-tags back — alignment unverified"
+            exit 1
+          fi
+          if [ "$NEXT" != "$TARGET" ]; then
+            echo "::error::@next is ${NEXT}, expected ${TARGET} — alignment did not take"
+            exit 1
+          fi
+          if [ "$LATEST" != "$NEXT" ]; then
+            echo "::error::invariant still broken — latest=${LATEST} next=${NEXT}"
+            exit 1
+          fi
+          echo "invariant OK — next == latest == ${LATEST}"
