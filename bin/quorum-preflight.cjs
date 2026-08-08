@@ -519,6 +519,105 @@ function ensureServices(providers) {
   }
 }
 
+// ─── P5: providers.json schema validation ───────────────────────────────────
+// A malformed slot does not announce itself — it fails at dispatch, mid-quorum, as an
+// opaque UNAVAIL. This repo has shipped that failure repeatedly: a missing
+// `args_template` crashed every slot on `.map` (ARGS-TEMPLATE-01), and a slot whose
+// `cli`/`mainTool` were both empty handed `null` to spawn() and took the whole quorum
+// offline (#197). Both are visible in the config before anything is dispatched.
+//
+// Errors are things that WILL fail at dispatch. Warnings are things that degrade
+// diagnosis but still run. Validation never throws and never blocks — it reports.
+function validateProviders(providers) {
+  const errors = [];
+  const warnings = [];
+  const list = Array.isArray(providers) ? providers : [];
+
+  const seen = new Map();
+  for (const [i, p] of list.entries()) {
+    const where = (p && p.name) ? `slot '${p.name}'` : `slot #${i}`;
+    if (!p || typeof p !== 'object') { errors.push(`${where}: entry is not an object`); continue; }
+    if (!p.name || typeof p.name !== 'string') { errors.push(`${where}: missing a string 'name'`); continue; }
+
+    // Duplicate names are silently last-wins everywhere downstream, so one slot's
+    // config quietly becomes another's.
+    if (seen.has(p.name)) errors.push(`slot '${p.name}': duplicate name (also at #${seen.get(p.name)})`);
+    else seen.set(p.name, i);
+
+    if (!p.type) { errors.push(`slot '${p.name}': missing 'type' (expected 'subprocess' or 'http')`); continue; }
+
+    if (p.type === 'subprocess') {
+      // resolveSpawnTarget falls back cli -> mainTool; with neither, spawn() gets null.
+      if (!p.cli && !p.mainTool) errors.push(`slot '${p.name}': subprocess slot has neither 'cli' nor 'mainTool' — spawn would receive null`);
+      // args_template may be absent IF the family has a canonical default (#275).
+      if (p.args_template !== undefined && !Array.isArray(p.args_template)) {
+        errors.push(`slot '${p.name}': 'args_template' must be an array`);
+      } else if (Array.isArray(p.args_template) &&
+                 !p.args_template.some(a => typeof a === 'string' && a.includes('{prompt}'))) {
+        errors.push(`slot '${p.name}': 'args_template' has no {prompt} placeholder — the prompt would be silently dropped`);
+      }
+    } else if (p.type === 'http') {
+      if (!p.baseUrl) errors.push(`slot '${p.name}': http slot missing 'baseUrl'`);
+      if (!p.apiKeyEnv && !(p.env && (p.env.ANTHROPIC_AUTH_TOKEN || p.env.ANTHROPIC_API_KEY))) {
+        errors.push(`slot '${p.name}': http slot has no 'apiKeyEnv' and no auth token in 'env'`);
+      }
+    } else {
+      errors.push(`slot '${p.name}': unknown type '${p.type}'`);
+    }
+
+    // Warnings — degraded diagnosis, still dispatchable.
+    for (const field of ['idle_timeout_ms', 'hard_timeout_ms', 'quorum_timeout_ms', 'ttfb_timeout_ms', 'inter_chunk_ceiling_ms']) {
+      const v = p[field];
+      if (v === undefined) continue;
+      if (typeof v !== 'number' || !(v > 0) || !Number.isFinite(v)) {
+        warnings.push(`slot '${p.name}': '${field}' is not a positive number (${JSON.stringify(v)}) — it will be ignored`);
+      }
+    }
+    if (p.type === 'subprocess' && p.env && p.env.ANTHROPIC_BASE_URL && !p.deep_probe) {
+      warnings.push(`slot '${p.name}': routed to a third-party base URL with no 'deep_probe' — a quota/auth-dead slot cannot be told from a healthy one before dispatch`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors, warnings };
+}
+
+// ─── P3: the degraded-panel gate as a machine field ─────────────────────────
+// "available < max_quorum_size -> BLOCK unless --force-quorum" was prose in
+// commands/nf/quorum.md for an LLM to interpret. A gate that depends on a model
+// reading a paragraph correctly is not a gate. This computes it, so the orchestrator
+// reads a decision instead of making one.
+//
+// The invariant it encodes: when `blocked` is true, no dispatch may proceed without a
+// recorded waiver. `min_live_voters` is the floor BELOW max_quorum_size — a roster can
+// satisfy the floor while still being degraded, and those are different states.
+function computeQuorumGate({ availableCount, maxQuorumSize, minLiveVoters = 2, forceQuorum = false }) {
+  const available = Number.isFinite(availableCount) ? availableCount : 0;
+  const max = Number.isFinite(maxQuorumSize) && maxQuorumSize >= 1 ? maxQuorumSize : 3;
+  const floor = Number.isFinite(minLiveVoters) && minLiveVoters >= 1 ? minLiveVoters : 2;
+
+  const quorum_met = available >= max;
+  const meets_floor = available >= floor;
+  const degraded = !quorum_met && meets_floor;
+  const wouldBlock = !meets_floor;
+
+  let gate_reason;
+  if (quorum_met) gate_reason = `${available} available >= max_quorum_size ${max}`;
+  else if (wouldBlock) gate_reason = `${available} available < min_live_voters ${floor} — below the floor`;
+  else gate_reason = `${available} available < max_quorum_size ${max} but >= min_live_voters ${floor} — degraded`;
+
+  return {
+    available_count: available,
+    max_quorum_size: max,
+    min_live_voters: floor,
+    quorum_met,
+    degraded,
+    blocked: wouldBlock && !forceQuorum,
+    waiver_required: wouldBlock,
+    waiver_used: wouldBlock && forceQuorum,
+    gate_reason,
+  };
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 async function main() {
   const mode = process.argv[2] || '--all';
@@ -548,7 +647,13 @@ async function main() {
     const team         = buildTeam(providers, active);
     const maxSize      = cfg.max_quorum_size ?? 3;
 
-    const output = { quorum_active: active, max_quorum_size: maxSize, team };
+    // P5: non-fatal diagnostics — surfaced on every --all so a malformed slot is seen
+    // before it fails opaquely mid-quorum, never by blocking the preflight itself.
+    const validation = validateProviders(providers);
+    for (const e of validation.errors)   process.stderr.write(`[quorum-preflight] CONFIG ERROR: ${e}\n`);
+    for (const w of validation.warnings) process.stderr.write(`[quorum-preflight] config warning: ${w}\n`);
+
+    const output = { quorum_active: active, max_quorum_size: maxSize, team, validation };
 
     if (PROBE) {
       // Filter providers to only active ones
@@ -599,6 +704,17 @@ async function main() {
         }
       }
 
+      // P3: emit the gate as a decided field rather than leaving the orchestrator to
+      // re-derive "available < max_quorum_size -> BLOCK unless --force-quorum" from
+      // prose. `blocked: true` means no dispatch without a recorded waiver.
+      output.gate = computeQuorumGate({
+        availableCount: output.available_slots.length,
+        maxQuorumSize: maxSize,
+        minLiveVoters: (cfg.quorum && cfg.quorum.min_live_voters) || 2,
+        forceQuorum: process.argv.includes('--force-quorum'),
+      });
+      process.stderr.write(`[quorum-preflight] gate: ${output.gate.blocked ? 'BLOCKED' : output.gate.degraded ? 'DEGRADED' : 'OK'} — ${output.gate.gate_reason}\n`);
+
       // NOTE: nf-prompt.js also tiers slots independently via auth_type in its
       // quorum injection logic. This sort covers the quorum.md direct-read path
       // (workflows that consume preflight JSON output directly).
@@ -646,4 +762,4 @@ if (require.main === module) {
   main().catch(e => { console.error(e); process.exit(1); });
 }
 
-module.exports = { dedupBySlotIdentity, probeHealth, findProviders };
+module.exports = { dedupBySlotIdentity, probeHealth, findProviders, validateProviders, computeQuorumGate };
