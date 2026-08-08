@@ -33,19 +33,33 @@ jobs:
     steps:
       - name: Resolve target version
         id: target
+        # `inputs.version` is attacker-controlled on a workflow_dispatch. GitHub expands
+        # ${{ }} BEFORE bash parses the script, so interpolating it inline would let a
+        # crafted input close the quote and run arbitrary commands. Passing it through
+        # `env:` keeps it a shell VALUE that is never parsed as script.
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           LATEST=$(npm view @nforma.ai/nforma dist-tags.latest 2>/dev/null || echo '')
-          TARGET="${{ inputs.version }}"
+          TARGET="${INPUT_VERSION}"
           [ -z "$TARGET" ] && TARGET="$LATEST"
           if [ -z "$TARGET" ]; then
             echo "::error::could not resolve a target version (npm view returned nothing and no input was given)"
             exit 1
           fi
-          # A prerelease must never hold a dist-tag under the alias policy — @next == @latest
-          # means anyone on @next would silently install it.
-          case "$TARGET" in
-            *-*) echo "::error::refusing to tag prerelease version ${TARGET} (alias policy: @next == @latest)"; exit 1 ;;
-          esac
+          # Whitelist the shape as well as escaping it: only a bare stable semver may
+          # reach `npm dist-tag`. This rejects anything with shell metacharacters
+          # outright rather than relying on quoting alone, and doubles as the
+          # prerelease refusal — under the alias policy @next == @latest, a prerelease
+          # holding @next would silently install for every user.
+          # Whole-string check, not line-wise: `grep` is line-oriented, so a value like
+          # $'0.0.1\ntouch x' passes an anchored pattern on its FIRST line while still
+          # carrying a newline — which then injects extra keys into $GITHUB_OUTPUT.
+          # Stripping the legal alphabet and requiring nothing remains catches that.
+          if [ -n "${TARGET//[0-9.]/}" ] || ! printf '%s' "$TARGET" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::refusing target '${TARGET}' — expected a bare stable semver (x.y.z); prereleases and any other shape are rejected"
+            exit 1
+          fi
           echo "target=${TARGET}" >> "$GITHUB_OUTPUT"
           echo "latest=${LATEST}" >> "$GITHUB_OUTPUT"
           echo "Target: ${TARGET} (current @latest: ${LATEST:-unknown})"
@@ -53,8 +67,8 @@ jobs:
       - name: Align @next
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TARGET: ${{ steps.target.outputs.target }}
         run: |
-          TARGET="${{ steps.target.outputs.target }}"
           if [ -z "${NPM_TOKEN}" ]; then
             echo "::error::NPM_TOKEN secret is not set — this workflow cannot authenticate"
             exit 1
@@ -66,8 +80,9 @@ jobs:
           npm dist-tag add "@nforma.ai/nforma@${TARGET}" next
 
       - name: Verify the invariant holds
+        env:
+          TARGET: ${{ steps.target.outputs.target }}
         run: |
-          TARGET="${{ steps.target.outputs.target }}"
           TAGS=$(npm view @nforma.ai/nforma dist-tags --json 2>/dev/null || echo '{}')
           echo "$TAGS"
           LATEST=$(printf '%s' "$TAGS" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).latest || ''")
