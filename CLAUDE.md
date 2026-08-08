@@ -13,7 +13,7 @@ Dist-tag mapping:
 - `latest` — stable versions (0.40.1)
 - `next` — alias for `latest` (always points to the same version; see invariant below)
 
-**Invariant: `next` is an alias for `latest`** — both dist-tags point to the same tarball at all times; there is no separate prerelease channel. When `@latest` is updated, `@next` must be moved to the same version. This is automated in `publish.yml` (best-effort under OIDC; see caveat below). Verify after every release:
+**Invariant: `next` is an alias for `latest`** — both dist-tags point to the same tarball at all times; there is no separate prerelease channel. When `@latest` is updated, `@next` must be moved to the same version. This is automated in `publish.yml`, but the automation is currently blocked on an expired `NPM_TOKEN` secret, so alignment is a manual step for now — see "Aligning `@next`" below. Verify after every release:
 ```bash
 npm view @nforma.ai/nforma dist-tags --json
 # latest and next must show the same version
@@ -101,11 +101,24 @@ Quick check: `node -p "require('./package-lock.json').version"` should match `no
 
 ## Publishing (npm OIDC trusted publisher)
 
-The single `publish.yml` workflow publishes the single `@latest` channel via **GitHub OIDC — there is no `NPM_TOKEN` secret**:
+The single `publish.yml` workflow publishes the single `@latest` channel via **GitHub OIDC**. The *publish* itself uses no token; the `@next` alignment step is the one place that uses token auth, via a temporary `.npmrc` (see "Aligning `@next`" below for why):
 - **@latest** — push to main with a non-prerelease `package.json` version (runs tests → publish → tag → GitHub Release → align `@next` to match `@latest` per the alias invariant).
 
 npm's trusted publisher (npmjs.com → package Settings) must match this file exactly:
 `Org=nForma-AI · Repo=nForma · Workflow filename=publish.yml · Environment=npm-publish · Allowed=npm publish`.
 Requirements baked into the workflow: Node ≥ 22.14.0 and npm ≥ 11.5.1 (`npm i -g npm@latest`), `permissions: id-token: write`, **no** `NODE_AUTH_TOKEN` (its presence forces the token path and defeats OIDC).
 
-**Caveat — dist-tag under OIDC:** trusted publishing authorizes `npm publish`, not necessarily `npm dist-tag add`. The `@next` alignment step is therefore best-effort (non-fatal): if it can't move the tag under OIDC, the publish still succeeds and CI emits a warning — align manually with `npm dist-tag add @nforma.ai/nforma@{VERSION} next`. Always verify the invariant after a release: `npm view @nforma.ai/nforma dist-tags` (must show `next == latest`).
+**Aligning `@next` — current state (2026-08-08).** The long-standing explanation ("OIDC authorizes `npm publish` but not `npm dist-tag add`") is **incomplete, and was not the operative cause** of the drift everyone kept chasing. It may well be true — it has never been tested here, because the step never got far enough to find out. What was actually happening, in order:
+
+1. **Wiring bug (fixed, #391).** The align step exported `NPM_TOKEN` as a bare `env:` var. npm does not read `NPM_TOKEN` — auth comes from `.npmrc` — so `dist-tag add` ran *unauthenticated* and 401'd every release, while the warning text blamed a token that was configured and healthy. The step now writes `//registry.npmjs.org/:_authToken=${NPM_TOKEN}` for its own duration (safe: it runs after the OIDC publish, so it cannot force publish onto the token path). Whether OIDC alone would suffice is still unverified — the step uses a token, so the question stays open and costs nothing.
+2. **The `NPM_TOKEN` secret is currently expired** (created 2026-02-21; CI returns `E401 — authentication token seems to be invalid`). Until it is replaced, **alignment is a manual step after every release** — an accepted trade-off, not an unknown.
+
+**Manual alignment.** Run it yourself in an interactive terminal:
+```bash
+npm dist-tag add @nforma.ai/nforma@{VERSION} next
+```
+It prints an `npmjs.com/auth/cli/...` URL; approve in the browser and it completes. Note `--otp=<code>` only works if your npm 2FA is an authenticator app — with a **security key / passkey** there is no 6-digit code and the browser flow is the only path. This also cannot be run unattended by an agent, which is why it needs a human.
+
+**To make it automatic again:** create a Granular Access Token on npmjs.com scoped to `@nforma.ai/nforma` with **Read and write** (automation tokens are 2FA-exempt), then `gh secret set NPM_TOKEN --repo nForma-AI/nForma`. Verify without waiting for a release: `gh workflow run "Align dist-tags"` — a dispatchable, idempotent workflow (#396) that repairs drift and fails loudly if the tag did not move.
+
+**Always verify after a release:** `npm view @nforma.ai/nforma dist-tags --json` must show `next == latest`. CI's `Verify @next == @latest` step also reports drift explicitly with the fix command.
