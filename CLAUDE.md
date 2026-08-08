@@ -101,16 +101,16 @@ Quick check: `node -p "require('./package-lock.json').version"` should match `no
 
 ## Publishing (npm OIDC trusted publisher)
 
-The single `publish.yml` workflow publishes the single `@latest` channel via **GitHub OIDC**. The *publish* itself uses no token — but an `NPM_TOKEN` secret **does** exist and is used by the `@next` alignment step alone, because OIDC does not cover `npm dist-tag add`:
+The single `publish.yml` workflow publishes the single `@latest` channel via **GitHub OIDC**. The *publish* itself uses no token; the `@next` alignment step is the one place that uses token auth, via a temporary `.npmrc` (see "Aligning `@next`" below for why):
 - **@latest** — push to main with a non-prerelease `package.json` version (runs tests → publish → tag → GitHub Release → align `@next` to match `@latest` per the alias invariant).
 
 npm's trusted publisher (npmjs.com → package Settings) must match this file exactly:
 `Org=nForma-AI · Repo=nForma · Workflow filename=publish.yml · Environment=npm-publish · Allowed=npm publish`.
 Requirements baked into the workflow: Node ≥ 22.14.0 and npm ≥ 11.5.1 (`npm i -g npm@latest`), `permissions: id-token: write`, **no** `NODE_AUTH_TOKEN` (its presence forces the token path and defeats OIDC).
 
-**Aligning `@next` — current state (2026-08-08).** The long-standing explanation ("OIDC authorizes `npm publish` but not `npm dist-tag add`") was **wrong** and cost real time. Two separate causes, in order:
+**Aligning `@next` — current state (2026-08-08).** The long-standing explanation ("OIDC authorizes `npm publish` but not `npm dist-tag add`") is **incomplete, and was not the operative cause** of the drift everyone kept chasing. It may well be true — it has never been tested here, because the step never got far enough to find out. What was actually happening, in order:
 
-1. **Wiring bug (fixed, #391).** The align step exported `NPM_TOKEN` as a bare `env:` var. npm does not read `NPM_TOKEN` — auth comes from `.npmrc` — so `dist-tag add` ran *unauthenticated* and 401'd every release while the warning blamed a token that was fine. It now writes `//registry.npmjs.org/:_authToken=${NPM_TOKEN}` for that step only (safe: it runs after the OIDC publish, so it cannot force publish onto the token path).
+1. **Wiring bug (fixed, #391).** The align step exported `NPM_TOKEN` as a bare `env:` var. npm does not read `NPM_TOKEN` — auth comes from `.npmrc` — so `dist-tag add` ran *unauthenticated* and 401'd every release, while the warning text blamed a token that was configured and healthy. The step now writes `//registry.npmjs.org/:_authToken=${NPM_TOKEN}` for its own duration (safe: it runs after the OIDC publish, so it cannot force publish onto the token path). Whether OIDC alone would suffice is still unverified — the step uses a token, so the question stays open and costs nothing.
 2. **The `NPM_TOKEN` secret is currently expired** (created 2026-02-21; CI returns `E401 — authentication token seems to be invalid`). Until it is replaced, **alignment is a manual step after every release** — an accepted trade-off, not an unknown.
 
 **Manual alignment.** Run it yourself in an interactive terminal:
