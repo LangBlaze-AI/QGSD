@@ -7,7 +7,7 @@ nForma uses milestone-based semver (no separate prerelease channel — see dist-
 - `0.{milestone}` — milestone release (e.g., 0.40 = 40th milestone)
 - `0.{milestone}.{patch}` — quick task release within a milestone (e.g., 0.40.1, 0.40.2)
 
-Versions with a prerelease suffix (e.g. `0.40.2-rc.1`) **cannot ship** under the `@next == @latest` alias policy — a prerelease semver string published to `@latest` would silently install `0.40.2-rc.1` for every user doing `npm install @nforma.ai/nforma@latest`. `publish.yml` rejects any version with a `-` suffix.
+Versions with a prerelease suffix (e.g. `0.40.2-rc.1`) **cannot ship** — there is only one channel, so a prerelease semver published to `@latest` would silently install `0.40.2-rc.1` for every user doing `npm install @nforma.ai/nforma@latest`. `publish.yml` rejects any version with a `-` suffix.
 
 Dist-tag mapping:
 - `latest` — stable versions (0.44.3). **The only channel.**
@@ -103,7 +103,7 @@ Quick check: `node -p "require('./package-lock.json').version"` should match `no
 - CHANGELOG gate: requires `## [{VERSION}]` in CHANGELOG.md
 - Asset staleness: `npm run check:assets` — regenerate with `npm run generate-terminal`
 - Lint isolation: `npm run lint:isolation` — require paths must use `$HOME/.claude/nf-bin/` with CWD fallback
-- **No prerelease versions**: `package.json` version must NOT contain a `-` suffix; `publish.yml` rejects prerelease semver (the alias policy means there's no separate prerelease channel to ship them on)
+- **No prerelease versions**: `package.json` version must NOT contain a `-` suffix; `publish.yml` rejects prerelease semver (there is no separate prerelease channel to ship them on)
 
 ### Troubleshooting CI failures
 
@@ -138,7 +138,7 @@ Quick check: `node -p "require('./package-lock.json').version"` should match `no
 ## Publishing (npm OIDC trusted publisher)
 
 The single `publish.yml` workflow publishes the single `@latest` channel via **GitHub OIDC**. The *publish* itself uses no token; the `@next` alignment step is the one place that uses token auth, via a temporary `.npmrc` (see "Aligning `@next`" below for why):
-- **@latest** — push to main with a non-prerelease `package.json` version (runs tests → publish → tag → GitHub Release → align `@next` to match `@latest` per the alias invariant).
+- **@latest** — push to main with a non-prerelease `package.json` version (runs tests → publish → tag → GitHub Release). A final step *attempts* to align the deprecated `@next` alias, but it is inert while `NPM_TOKEN` is expired and, per the deprecation above, is not required for the release to be correct.
 
 npm's trusted publisher (npmjs.com → package Settings) must match this file exactly:
 `Org=nForma-AI · Repo=nForma · Workflow filename=publish.yml · Environment=npm-publish · Allowed=npm publish`.
@@ -151,14 +151,15 @@ Requirements baked into the workflow: Node ≥ 22.14.0 and npm ≥ 11.5.1 (`npm 
 **Fact 2 — the drift everyone kept chasing was a wiring bug, not the OIDC limit.** In order:
 
 1. **Wiring bug (fixed, #391).** The align step exported `NPM_TOKEN` as a bare `env:` var. npm does not read `NPM_TOKEN` — auth comes from `.npmrc` — so `dist-tag add` ran *unauthenticated* and 401'd every release, while the warning text blamed a token that was configured and healthy. The step now writes `//registry.npmjs.org/:_authToken=${NPM_TOKEN}` for its own duration (safe: it runs after the OIDC publish, so it cannot force publish onto the token path).
-2. **The `NPM_TOKEN` secret is currently expired** (created 2026-02-21; CI returns `E401 — authentication token seems to be invalid`). Until it is replaced, **alignment is a manual step after every release** — an accepted trade-off, not an unknown.
+2. **The `NPM_TOKEN` secret is expired** (created 2026-02-21; CI returns `E401 — authentication token seems to be invalid`), so the automated step is inert. Given the deprecation above this is **not worth fixing**: alignment is optional, and replacing the secret would mean adopting a credential class npm retires in ~Jan 2027.
 
-**Manual alignment.** Run it yourself in an interactive terminal:
+**Manual alignment (optional — `@next` is deprecated, so this never gates a release).**
+Run it yourself in an interactive terminal:
 ```bash
 npm dist-tag add @nforma.ai/nforma@{VERSION} next
 ```
 It prints an `npmjs.com/auth/cli/...` URL; approve in the browser and it completes. Note `--otp=<code>` only works if your npm 2FA is an authenticator app — with a **security key / passkey** there is no 6-digit code and the browser flow is the only path. This also cannot be run unattended by an agent, which is why it needs a human.
 
-**To make it automatic again:** create a Granular Access Token on npmjs.com scoped to `@nforma.ai/nforma` with **Read and write** (automation tokens are 2FA-exempt), then `gh secret set NPM_TOKEN --repo nForma-AI/nForma`. Verify without waiting for a release: `gh workflow run "Align dist-tags"` — a dispatchable, idempotent workflow (#396) that repairs drift and fails loudly if the tag did not move.
+**Making it automatic again — deliberately NOT recommended.** It is possible: a Granular Access Token scoped to `@nforma.ai/nforma` with Read and write, then `gh secret set NPM_TOKEN --repo nForma-AI/nForma`, verified with `gh workflow run "Align dist-tags"` (#396, dispatchable and idempotent). Don't, unless something changes: 2FA-bypass tokens lose direct publishing on a targeted January 2027, they expire silently in the meantime, and it would put a long-lived publish-capable credential back into a pipeline that is otherwise entirely OIDC. The tag being aligned is deprecated; the credential would be real.
 
-**Always verify after a release:** `npm view @nforma.ai/nforma dist-tags --json` must show `next == latest`. CI's `Verify @next == @latest` step also reports drift explicitly with the fix command.
+**Checking:** `npm view @nforma.ai/nforma dist-tags --json`. `latest` is authoritative; `next` may lag and that is expected, not a failure. CI's `Verify @next == @latest` step reports drift as a `::notice::` with the fix command, for anyone who wants to align opportunistically.
