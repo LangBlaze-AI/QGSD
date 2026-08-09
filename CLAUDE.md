@@ -7,7 +7,7 @@ nForma uses milestone-based semver (no separate prerelease channel — see dist-
 - `0.{milestone}` — milestone release (e.g., 0.40 = 40th milestone)
 - `0.{milestone}.{patch}` — quick task release within a milestone (e.g., 0.40.1, 0.40.2)
 
-Versions with a prerelease suffix (e.g. `0.40.2-rc.1`) **cannot ship** under the `@next == @latest` alias policy — a prerelease semver string published to `@latest` would silently install `0.40.2-rc.1` for every user doing `npm install @nforma.ai/nforma@latest`. `publish.yml` rejects any version with a `-` suffix.
+Versions with a prerelease suffix (e.g. `0.40.2-rc.1`) **cannot ship** — there is only one channel, so a prerelease semver published to `@latest` would silently install `0.40.2-rc.1` for every user doing `npm install @nforma.ai/nforma@latest`. `publish.yml` rejects any version with a `-` suffix.
 
 Dist-tag mapping:
 - `latest` — stable versions (0.44.3). **The only channel.**
@@ -103,7 +103,7 @@ Quick check: `node -p "require('./package-lock.json').version"` should match `no
 - CHANGELOG gate: requires `## [{VERSION}]` in CHANGELOG.md
 - Asset staleness: `npm run check:assets` — regenerate with `npm run generate-terminal`
 - Lint isolation: `npm run lint:isolation` — require paths must use `$HOME/.claude/nf-bin/` with CWD fallback
-- **No prerelease versions**: `package.json` version must NOT contain a `-` suffix; `publish.yml` rejects prerelease semver (the alias policy means there's no separate prerelease channel to ship them on)
+- **No prerelease versions**: `package.json` version must NOT contain a `-` suffix; `publish.yml` rejects prerelease semver (there is no separate prerelease channel to ship them on)
 
 ### Troubleshooting CI failures
 
@@ -138,7 +138,7 @@ Quick check: `node -p "require('./package-lock.json').version"` should match `no
 ## Publishing (npm OIDC trusted publisher)
 
 The single `publish.yml` workflow publishes the single `@latest` channel via **GitHub OIDC**. The *publish* itself uses no token; the `@next` alignment step is the one place that uses token auth, via a temporary `.npmrc` (see "Aligning `@next`" below for why):
-- **@latest** — push to main with a non-prerelease `package.json` version (runs tests → publish → tag → GitHub Release → align `@next` to match `@latest` per the alias invariant).
+- **@latest** — push to main with a non-prerelease `package.json` version (runs tests → publish → tag → GitHub Release). A final step *attempts* to align the deprecated `@next` alias, but it is inert while `NPM_TOKEN` is expired and, per the deprecation above, is not required for the release to be correct.
 
 npm's trusted publisher (npmjs.com → package Settings) must match this file exactly:
 `Org=nForma-AI · Repo=nForma · Workflow filename=publish.yml · Environment=npm-publish · Allowed=npm publish`.
