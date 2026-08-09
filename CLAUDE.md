@@ -16,7 +16,9 @@ Dist-tag mapping:
 **`@next` is deprecated (decided 2026-08-09).** It was the prerelease channel; #366/#367
 retired that flow, leaving a tag that by policy always equals `@latest` — it therefore
 carries **zero information** while costing a manual step after every release. Keeping it
-in sync is not automatable: OIDC does not cover `npm dist-tag` (see "Aligning `@next`"),
+in sync *can* be automated — `.github/workflows/align-dist-tags.yml` does exactly that —
+but only on a credential class npm is retiring. OIDC does not cover `npm dist-tag` (see
+"Aligning `@next`"),
 so the only automated option is a long-lived publish-capable token in CI — precisely what
 adopting trusted publishing was meant to eliminate, and it expires silently on a timer
 (the current secret died exactly that way).
@@ -42,7 +44,7 @@ thing still needing a credential.
 - `@latest` is the supported channel. All docs, install instructions and support should
   say `@latest` or nothing at all.
 
-**Retirement plan.** Do NOT `npm dist-tag rm next` yet. The package sees ~1.2k
+**Retirement plan.** Do NOT run `npm dist-tag rm @nforma.ai/nforma next` yet. The package sees ~1.2k
 downloads/month and someone may be pinned to `@next`; removing a tag makes
 `npm i @nforma.ai/nforma@next` fail outright. Leave it pointing at a real version, revisit
 after two or three releases, and remove it only if nothing appears to install from it.
