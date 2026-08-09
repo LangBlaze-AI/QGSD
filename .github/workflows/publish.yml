@@ -170,7 +170,13 @@ jobs:
           elif [ "$LATEST" = "$NEXT" ]; then
             echo "invariant OK — next == latest == ${LATEST}"
           else
-            echo "::warning::DIST-TAG DRIFT — latest=${LATEST} next=${NEXT}. Anyone installing @next gets the older build. Fix: npm dist-tag add @nforma.ai/nforma@${VERSION} next"
+            # @next is a DEPRECATED alias (CLAUDE.md, 2026-08-09) and cannot be kept in
+            # sync automatically — OIDC does not cover `npm dist-tag`. Drift is therefore
+            # EXPECTED, so this is a notice, not a defect report. Wording matters: a
+            # warning that fires every release and means nothing trains the reader to
+            # ignore warnings, which is how the false "unrecognized dispatch flag" alarm
+            # cost real debugging time (#385).
+            echo "::notice::DIST-TAG DRIFT (expected) — latest=${LATEST} next=${NEXT}. @next is a deprecated alias and may lag; @latest is authoritative. To align anyway: npm dist-tag add @nforma.ai/nforma@${VERSION} next"
           fi
 
   # ── Git tag + GitHub Release (after a successful publish) ──
