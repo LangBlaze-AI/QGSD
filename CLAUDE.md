@@ -10,16 +10,52 @@ nForma uses milestone-based semver (no separate prerelease channel — see dist-
 Versions with a prerelease suffix (e.g. `0.40.2-rc.1`) **cannot ship** under the `@next == @latest` alias policy — a prerelease semver string published to `@latest` would silently install `0.40.2-rc.1` for every user doing `npm install @nforma.ai/nforma@latest`. `publish.yml` rejects any version with a `-` suffix.
 
 Dist-tag mapping:
-- `latest` — stable versions (0.40.1)
-- `next` — alias for `latest` (always points to the same version; see invariant below)
+- `latest` — stable versions (0.44.3). **The only channel.**
+- `next` — **DEPRECATED alias, scheduled for retirement.** Best-effort mirror of `latest`; may lag.
 
-**Invariant: `next` is an alias for `latest`** — both dist-tags point to the same tarball at all times; there is no separate prerelease channel. When `@latest` is updated, `@next` must be moved to the same version. This is automated in `publish.yml`, but the automation is currently blocked on an expired `NPM_TOKEN` secret, so alignment is a manual step for now — see "Aligning `@next`" below. Verify after every release:
+**`@next` is deprecated (decided 2026-08-09).** It was the prerelease channel; #366/#367
+retired that flow, leaving a tag that by policy always equals `@latest` — it therefore
+carries **zero information** while costing a manual step after every release. Keeping it
+in sync *can* be automated — `.github/workflows/align-dist-tags.yml` does exactly that —
+but only on a credential class npm is retiring. OIDC does not cover `npm dist-tag` (see
+"Aligning `@next`"),
+so the only automated option is a long-lived publish-capable token in CI — precisely what
+adopting trusted publishing was meant to eliminate, and it expires silently on a timer
+(the current secret died exactly that way).
+
+**npm is actively retiring that option.** Per
+[GitHub's 2026-07-31 changelog](https://github.blog/changelog/2026-07-31-restricting-npm-bypass-2fa-granular-access-tokens/),
+granular access tokens configured to bypass 2FA already cannot create/delete tokens or
+change package access without an interactive 2FA challenge (this is why `npm token create`
+now hangs on an OTP prompt in a non-interactive shell), and **from a targeted January 2027
+they lose direct publishing capability altogether** — reduced to reading private packages
+and staging a publish that a maintainer approves with 2FA. The recommended paths are
+trusted publishing (OIDC) and staged publishing.
+
+So the token route is not merely inconvenient: it is a mechanism npm is retiring, on a
+published timeline. Deprecating `@next` removes the **last token dependency** from this
+repo's release pipeline — publish is already OIDC, and the dist-tag step was the only
+thing still needing a credential.
+
+**Consequences, in force now:**
+- Drift is **expected**, not a bug. Do not treat a stale `@next` as an incident.
+- Align it opportunistically when convenient — see "Aligning `@next`" — or run the
+  `Align dist-tags` workflow. Neither is required for a release to be correct.
+- `@latest` is the supported channel. All docs, install instructions and support should
+  say `@latest` or nothing at all.
+
+**Retirement plan.** Do NOT run `npm dist-tag rm @nforma.ai/nforma next` yet. The package sees ~1.2k
+downloads/month and someone may be pinned to `@next`; removing a tag makes
+`npm i @nforma.ai/nforma@next` fail outright. Leave it pointing at a real version, revisit
+after two or three releases, and remove it only if nothing appears to install from it.
+Until then it is harmless — a slightly stale pointer to a real, published tarball.
+
 ```bash
 npm view @nforma.ai/nforma dist-tags --json
-# latest and next must show the same version
+# `latest` is authoritative; `next` may lag and that is expected
 ```
 
-When asked for a "new release", there is now only **one** channel — `@latest` (`@next` mirrors it). Confirm the target version string, then check `npm view @nforma.ai/nforma dist-tags --json` to determine the next version number.
+When asked for a "new release", there is only **one** channel — `@latest` (`@next` is a deprecated alias that may lag; it does not gate a release). Confirm the target version string, then check `npm view @nforma.ai/nforma dist-tags --json` to determine the next version number.
 
 ### Release process
 

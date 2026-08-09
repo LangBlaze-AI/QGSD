@@ -208,7 +208,11 @@ describe('publish.yml — @next alignment actually authenticates (DIST-TAG-01)',
 
   it('verifies the invariant after aligning, instead of only printing dist-tags', () => {
     assert.match(YML, /- name: Verify @next == @latest/, 'publish.yml must verify the alias invariant');
-    assert.match(YML, /DIST-TAG DRIFT/, 'a drifted tag must be called out explicitly, not left to be eyeballed');
+    // Still reported — but as a ::notice::, because @next is a deprecated alias whose
+    // drift is expected. An every-release ::warning:: that means nothing is how readers
+    // learn to ignore warnings (#385's false alarm cost real debugging time).
+    assert.match(YML, /DIST-TAG DRIFT \(expected\)/, 'drift must still be reported, just not as a defect');
+    assert.match(YML, /::notice::DIST-TAG DRIFT/, 'drift of a deprecated alias is a notice, not a warning');
   });
 
   it('keeps the publish step on OIDC — no NODE_AUTH_TOKEN in any non-comment line', () => {
@@ -265,7 +269,7 @@ describe('publish.yml — the @next verification actually discriminates (execute
 
   it('reports DRIFT when the tags differ, naming the fix command', () => {
     const r = runWith('{"latest":"0.44.3","next":"0.44.2"}');
-    assert.match(r.out, /DIST-TAG DRIFT/);
+    assert.match(r.out, /DIST-TAG DRIFT \(expected\)/);
     assert.match(r.out, /npm dist-tag add @nforma\.ai\/nforma@0\.44\.3 next/);
     assert.doesNotMatch(r.out, /invariant OK/);
   });
